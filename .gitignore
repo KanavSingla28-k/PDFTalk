@@ -1,0 +1,25 @@
+# Secrets — NEVER commit these
+.env
+.env.*
+!.env.example
+backend/.env
+frontend/.env.local
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+htmlcov/
+.mypy_cache/
+
+# Node
+node_modules/
+.next/
+out/
+
+# Docker
+*.tar.gz
+
+# OS
+.DS_Store
