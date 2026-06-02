@@ -1,0 +1,84 @@
+services:
+
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: pdftalk-postgres
+
+    environment:
+      POSTGRES_DB: pdftalk
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    container_name: pdftalk-redis
+
+    ports:
+      - "6379:6379"
+
+    networks:
+      - internal
+
+  api:
+    build:
+      context: ./backend
+
+    env_file:
+      - ./backend/.env
+
+    volumes:
+      - ./backend:/app
+
+    command: >
+      uv run uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --reload
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+    networks:
+      - internal
+
+  nginx:
+    image: nginx:alpine
+
+    volumes:
+      - ./infra/nginx/nginx.dev.conf:/etc/nginx/nginx.conf:ro
+
+    ports:
+      - "80:80"
+
+    depends_on:
+      - api
+
+    networks:
+      - internal
+      - external
+
+volumes:
+  postgres_data:
+
+networks:
+  internal:
+    driver: bridge
+
+  external:
+    driver: bridge
