@@ -9,4 +9,8 @@ dependencies = [
     "uvicorn>=0.48.0",
     "pydantic-settings",
     "python-dotenv",
+    "alembic>=1.18.4",
+    "pgvector>=0.4.2",
+    "sqlalchemy==2.0.50",
+    "psycopg2-binary>=2.9.12",
 ]
