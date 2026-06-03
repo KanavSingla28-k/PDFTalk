@@ -2,12 +2,12 @@
 # Base must be imported first, then all models so SQLAlchemy can resolve
 # the string-based relationship references (e.g. "Document" in User.documents).
 
-from models.base import Base
-from models.user import User
-from models.document import Document, DocumentStatus
-from models.chunk import Chunk, EMBEDDING_DIMENSIONS
-from models.auth import RefreshToken, EmailVerification
-from models.job_log import JobLog
+from app.models.base import Base
+from app.models.user import User
+from app.models.document import Document, DocumentStatus
+from app.models.chunk import Chunk, EMBEDDING_DIMENSIONS
+from app.models.auth import RefreshToken, EmailVerification
+from app.models.job_log import JobLog
 
 __all__ = [
     "Base",

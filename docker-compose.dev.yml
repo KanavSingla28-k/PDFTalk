@@ -39,7 +39,7 @@ services:
       context: ./backend
 
     env_file:
-      - ./backend/.env
+      - ./backend/.env.docker
 
     volumes:
       - ./backend:/app

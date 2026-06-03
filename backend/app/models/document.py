@@ -6,7 +6,11 @@ from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, Index, T
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from models.base import Base
+from app.models.base import Base
+from app.models.user import User
+from app.models.chunk import Chunk
+from app.models.job_log import JobLog
+
 
 
 class DocumentStatus(str, enum.Enum):

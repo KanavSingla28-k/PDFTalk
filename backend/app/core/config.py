@@ -24,6 +24,6 @@ class Settings(BaseSettings):
     MAX_DAILY_TOKENS_PER_USER: int = 100000
 
     class Config:
-        env_file = ".env"
+        env_file = ".env.local"
 
 settings = Settings()
