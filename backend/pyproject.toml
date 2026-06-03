@@ -1,17 +1,56 @@
 [project]
-name = "backend"
+name = "pdftalk-backend"
 version = "0.1.0"
-description = "Add your description here"
-readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.136.3",
-    "uvicorn>=0.48.0",
+    "fastapi>=0.111",
+    "uvicorn[standard]",
+    "sqlalchemy[asyncio]",
+    "asyncpg",
+    "alembic",
     "pydantic-settings",
-    "python-dotenv",
-    "alembic>=1.18.4",
-    "pgvector>=0.4.2",
-    "sqlalchemy==2.0.50",
-    "psycopg2-binary>=2.9.12",
-    "asyncpg>=0.31.0",
+    "passlib[bcrypt]",
+    "python-jose[cryptography]",
+    "redis>=5.0.0",
+    "rq",
+    "boto3",
+    "openai",
+    "pymupdf",
+    "tiktoken",
+    "structlog",
+    "python-multipart",
+    "python-magic",
+    "httpx",
+    "email-validator",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "fakeredis",
+    "moto[s3]",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[dependency-groups]
+dev = [
+    "moto>=5.2.1",
 ]

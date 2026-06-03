@@ -1,17 +1,39 @@
 from app.core.config import settings
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.db.session import check_db_connection, engine
+from app.utils.redis_client import get_pool, get_redis
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- startup ---
     await check_db_connection()
+    
+    r = get_redis()          # get the shared client
+    await r.ping()           # raises ConnectionError if Redis is unreachable
+    
     yield
+    
     # --- shutdown ---
-    await engine.dispose()  # Cleanly close all pooled connections
+    await engine.dispose()
+    await get_pool().aclose()  # close Redis pool cleanly
 
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(
+    title="PDFTalk API",
+    version="0.1.0",
+    docs_url="/docs" if settings.APP_URL.startswith("http://localhost") else None,
+    lifespan=lifespan
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[settings.APP_URL],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
+    max_age=600,
+)
 
 @app.get("/health")
 def health():
