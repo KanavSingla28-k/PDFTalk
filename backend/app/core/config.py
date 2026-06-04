@@ -6,23 +6,26 @@ env_file = os.getenv("ENV_FILE", ".env.local")
 
 class Settings(BaseSettings):
     DATABASE_URL: str
-    REDIS_URL: str = Optional[str]
+    REDIS_URL: str
 
-    JWT_SECRET: str = Optional[str]
+    JWT_SECRET_KEY: str
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
-    OPENAI_API_KEY: str = Optional[str]
+    OPENAI_API_KEY: Optional[str] = None
 
     AWS_ACCESS_KEY_ID: str
     AWS_SECRET_ACCESS_KEY: str
     AWS_REGION: str = "ap-south-1"
     S3_BUCKET_NAME: str
 
-    SMTP_HOST: str = Optional[str]
-    SMTP_PORT: int = Optional[int]
-    SMTP_USER: str = Optional[str]
-    SMTP_PASSWORD: str = Optional[str]
+    SMTP_HOST: Optional[str] = None
+    SMTP_PORT: Optional[int] = None
+    SMTP_USER:Optional[str] = None
+    SMTP_PASSWORD: Optional[str] = None
 
-    APP_URL: str = Optional[str]
+    APP_URL: Optional[str] = None
 
     MAX_DOCS_PER_USER: int = 20
     MAX_DAILY_TOKENS_PER_USER: int = 100000
