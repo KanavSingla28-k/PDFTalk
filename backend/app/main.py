@@ -3,7 +3,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.db.session import check_db_connection, engine
+from app.exceptions import register_exception_handlers
 from app.utils.redis_client import get_pool, get_redis
+from app.routers.auth import router as auth_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,6 +27,9 @@ app = FastAPI(
     docs_url="/docs" if settings.APP_URL.startswith("http://localhost") else None,
     lifespan=lifespan
 )
+
+register_exception_handlers(app)
+app.include_router(auth_router)
 
 app.add_middleware(
     CORSMiddleware,

@@ -9,7 +9,8 @@ dependencies = [
     "asyncpg",
     "alembic",
     "pydantic-settings",
-    "passlib[bcrypt]",
+    "passlib[bcrypt]>=1.7.4",
+    "bcrypt==4.0.1",
     "python-jose[cryptography]",
     "redis>=5.0.0",
     "rq",
@@ -22,6 +23,9 @@ dependencies = [
     "python-magic",
     "httpx",
     "email-validator",
+    "resend>=2.30.1",
+    "pgvector>=0.4.2",
+    "aiosqlite>=0.22.1",
 ]
 
 [project.optional-dependencies]

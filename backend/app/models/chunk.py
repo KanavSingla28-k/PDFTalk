@@ -5,9 +5,8 @@ from sqlalchemy import ForeignKey, Index, Integer, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base
-from app.models.user import User
-from app.models.document import Document
+from app.db.base import Base
+
 # Dimensions must match your embedding model's output.
 # OpenAI text-embedding-3-small = 1536.
 # If you ever change models, you must drop + recreate this column and re-embed everything.

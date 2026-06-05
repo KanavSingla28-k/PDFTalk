@@ -1,4 +1,3 @@
-# backend/utils/s3_client.py
 import boto3
 from botocore.exceptions import ClientError
 from typing import BinaryIO

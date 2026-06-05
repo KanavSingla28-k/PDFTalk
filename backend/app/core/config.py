@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
 
+    RESEND_API_KEY: Optional[str] = None
+    FROM_EMAIL: str
+
     OPENAI_API_KEY: Optional[str] = None
 
     AWS_ACCESS_KEY_ID: str
@@ -25,7 +28,7 @@ class Settings(BaseSettings):
     SMTP_USER:Optional[str] = None
     SMTP_PASSWORD: Optional[str] = None
 
-    APP_URL: Optional[str] = None
+    APP_URL: str
 
     MAX_DOCS_PER_USER: int = 20
     MAX_DAILY_TOKENS_PER_USER: int = 100000

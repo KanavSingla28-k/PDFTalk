@@ -5,9 +5,7 @@ from sqlalchemy import Boolean, DateTime, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from app.models.base import Base
-from app.models.document import Document
-from app.models.auth import RefreshToken, EmailVerification
+from app.db.base import Base
 
 
 class User(Base):

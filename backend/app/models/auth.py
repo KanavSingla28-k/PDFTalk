@@ -4,9 +4,10 @@ from datetime import datetime
 from sqlalchemy import DateTime, ForeignKey, Index, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from pydantic import BaseModel, EmailStr, field_validator
+import re
 
-from app.models.base import Base
-from app.models.user import User
+from app.db.base import Base
 
 
 class RefreshToken(Base):
@@ -59,3 +60,95 @@ class EmailVerification(Base):
     )
 
     user: Mapped["User"] = relationship(back_populates="email_verifications")
+
+
+class RegisterRequest(BaseModel):
+    email: EmailStr
+    password: str
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain at least one lowercase letter")
+        if not re.search(r"[!@#$%^&*()_+\-=\[\]{};':\"\\|,.<>/?]", v):
+            raise ValueError("Password must contain at least one special character")
+        if not re.search(r"\d", v):
+            raise ValueError("Password must contain at least one number")
+        return v
+
+
+class RegisterResponse(BaseModel):
+    message: str
+
+
+class LoginRequest(BaseModel):
+    """
+    POST /auth/login request body.
+
+    email is normalised to lowercase in the service layer, not here —
+    keeping the schema clean and the normalisation logic in one place.
+    """
+    email: EmailStr
+    password: str
+
+
+class LoginResponse(BaseModel):
+    """
+    POST /auth/login success response body.
+
+    Security note on access_token placement
+    ----------------------------------------
+    The access token is returned in the JSON body (not a cookie) per the
+    OAuth 2.0 Bearer Token spec. This is correct and intentional.
+
+    The XSS exposure is real but mitigated by architecture, not by this
+    endpoint:
+      - The token has a 15-minute TTL — short enough to limit blast radius.
+      - The frontend MUST store it in React memory (Context/state), never
+        in localStorage or sessionStorage, which are readable by any JS.
+      - The refresh token travels in an httpOnly cookie and is therefore
+        completely inaccessible to JavaScript — including XSS payloads.
+      - An XSS attacker who steals the in-memory access token gets at most
+        15 minutes of access with no way to renew it.
+
+    See T-47 for the frontend storage contract.
+
+    user field
+    ----------
+    Included to save the frontend a round-trip to /auth/me immediately
+    after login. Contains only safe, non-sensitive fields.
+    """
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int   # seconds until access token expiry
+    user: "UserInfo"
+
+
+class UserInfo(BaseModel):
+    """Minimal user payload safe to include in the login response body."""
+    id: str
+    email: str
+
+    class Config:
+        from_attributes = True  # allows construction from a SQLAlchemy User model
+
+
+class RefreshResponse(BaseModel):
+    """
+    Returned by POST /auth/refresh.
+ 
+    Mirrors the token fields of LoginResponse without the user object —
+    the caller only needs new tokens, not a repeated user lookup.
+    """
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int  # seconds until the new access token expires
+ 
+ 
+# Resolve forward reference
+LoginResponse.model_rebuild()
