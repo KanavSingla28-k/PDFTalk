@@ -120,7 +120,7 @@ class RateLimiter:
         Depends(). The return value is None — it's a guard, not a provider.
         """
         identifier = self._identifier_fn(request)
-        redis = await get_redis()
+        redis = get_redis()
 
         redis_key = f"ratelimit:{self.key_prefix}:{identifier}"
         now_ms = int(time.time() * 1000)

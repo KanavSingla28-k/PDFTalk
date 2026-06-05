@@ -18,6 +18,9 @@ from app.exceptions import (
     InvalidCredentialsError,
     UnverifiedEmailError
 )
+from sqlalchemy import select
+from app.models.user import User
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # ---------------------------------------------------------------------------
@@ -93,7 +96,12 @@ async def verify_email(
       - token_expired  — found but past its 24-hour window
     """
     try:
-        await verify_token(raw_token=token, db=db)
+        user_id = await verify_token(raw_token=token, db=db)
+        import uuid as _uuid
+        result = await db.execute(select(User).where(User.id == _uuid.UUID(user_id)))
+        user = result.scalar_one_or_none()
+        if user:
+            user.is_verified = True
         await db.commit()
     except ValueError as exc:
         msg = str(exc).lower()
@@ -150,16 +158,18 @@ async def login(
     (wrong email, wrong password, inactive account, locked account) to deny
     an attacker any signal about which check failed.
     """
-    try:
-        access_token, raw_refresh_token, expires_in = await login_user(
-            db=db,
-            email=payload.email,
-            password=payload.password,
-        )
-    except UnverifiedEmailError:
-        raise 
-    except InvalidCredentialsError:
-        raise
+
+    access_token, raw_refresh_token, expires_in = await login_user(
+        db=db,
+        email=payload.email,
+        password=payload.password,
+    )
+
+    # Fetch user info for the response body (user already validated by login_user).
+    result = await db.execute(
+        select(User).where(User.email_lower == payload.email.lower().strip())
+    )
+    user = result.scalar_one()
 
     # ------------------------------------------------------------------
     # Set the refresh token as an httpOnly cookie.
@@ -174,30 +184,17 @@ async def login(
         key="refresh_token",
         value=raw_refresh_token,
         httponly=True,
-        secure=False,        # TODO: change to true in after domain cert certification
+        secure=False,        # TODO: change to true after domain cert certification
         samesite="strict",
         max_age=60 * 60 * 24 * 7,  # 7 days — matches REFRESH_TOKEN_EXPIRE_DAYS
         path="/auth",
     )
 
-    # Fetch the user record to populate UserInfo in the response.
-    # The login service already validated the user exists and is active,
-    # so this select cannot return None — it's safe to assert.
-    from sqlalchemy import select
-    from app.models.user import User
-
-    result = await db.execute(
-        select(User.id, User.email).where(
-            User.email_lower == payload.email.lower().strip()
-        )
-    )
-    row = result.one()
-
     return LoginResponse(
         access_token=access_token,
         token_type="bearer",
         expires_in=expires_in,
-        user=UserInfo(id=str(row.id), email=row.email),
+        user=UserInfo(id=str(user.id), email=user.email),
     )
 
 # ---------------------------------------------------------------------------
@@ -252,7 +249,12 @@ async def refresh(
     except TokenInvalidError as exc:
         # Token not found, already used, or expired.
         # Clear the stale cookie so the browser doesn't keep replaying it.
-        response.delete_cookie(key="refresh_token", path="/auth")
+        response.delete_cookie(
+            key="refresh_token", 
+            path="/auth",
+            secure=False,    #TODO: change to true once domain cert certification is done
+            samesite="lax",
+            )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),

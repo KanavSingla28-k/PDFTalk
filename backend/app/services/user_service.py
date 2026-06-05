@@ -61,7 +61,7 @@ async def register(db: AsyncSession, email: str, password: str) -> None:
             # Re-send: delete the stale verification row first so we don't
             # accumulate orphaned tokens, then issue a fresh one.
             await _delete_pending_verification(db, existing.id)
-            await send_verification_email_for_user(db, existing)
+            await send_verification_email_for_user(str(existing.id), existing.email, db)
             await db.commit()
         # If already verified: silent no-op — do not reveal account existence.
         return
@@ -77,16 +77,16 @@ async def register(db: AsyncSession, email: str, password: str) -> None:
     db.add(user)
     await db.flush()  # Populate user.id before passing to email service.
 
-    await send_verification_email_for_user(db, user)
+    await send_verification_email_for_user(str(user.id), user.email, db)
     await db.commit()
 
 
 async def _delete_pending_verification(db: AsyncSession, user_id) -> None:
     """
     Remove any existing email_verifications rows for this user.
-    Called before issuing a fresh token to avoid stale duplicates.
+    Called before issuing a fresh token toapp.models.auth
     """
-    from models.email_verification import EmailVerification
+    from app.models.auth import EmailVerification
     from sqlalchemy import delete
 
     await db.execute(
@@ -234,5 +234,4 @@ async def login(
         extra={"user_id": str(user.id)},
     )
  
-    return access_token, raw_refresh_token, expires_in
- 
+    return access_token, raw_refresh_token, expires_in  

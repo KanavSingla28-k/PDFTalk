@@ -28,7 +28,7 @@ resend.api_key = settings.RESEND_API_KEY
 # ── Sender identity ───────────────────────────────────────────────────────────
 # Must match a verified domain in your Resend dashboard.
 # For local dev you can use Resend's sandbox: onboarding@resend.dev
-SENDER = "PDFTalk <noreply@pdftalk.com>"
+SENDER = settings.FROM_EMAIL        #TODO: @gmail.com not allowed switch after domain creation "PDFTalk [EMAIL_ADDRESS]"
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

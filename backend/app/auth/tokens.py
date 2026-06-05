@@ -172,7 +172,7 @@ async def store_refresh_token(user_id: str, db: AsyncSession) -> str:
 
     db.add(
         RefreshToken(
-            user_id=user_id,
+            user_id=uuid.UUID(user_id) if isinstance(user_id, str) else user_id,
             token_hash=token_hash,
             expires_at=expires_at,
         )
@@ -215,7 +215,10 @@ async def validate_and_rotate_refresh_token(
         logger.warning("Refresh token not found — possible replay attack")
         raise TokenInvalidError("Refresh token is invalid or has already been used")
 
-    if stored.expires_at < _now_utc():
+    expires_at = stored.expires_at
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if expires_at < _now_utc():
         # Clean up the stale row while we're here
         await db.delete(stored)
         await db.commit()

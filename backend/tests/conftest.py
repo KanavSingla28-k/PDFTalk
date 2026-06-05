@@ -32,6 +32,31 @@ os.environ.setdefault("S3_BUCKET_NAME", "pdftalk-test-bucket")
 
 os.environ.setdefault("APP_URL", "http://localhost")
 
+
+TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
+
+import fakeredis.aioredis
+
+@pytest.fixture(autouse=True)
+def mock_redis(monkeypatch):
+    fake_redis = fakeredis.aioredis.FakeRedis()
+
+    def fake_get_redis():
+        return fake_redis
+
+    monkeypatch.setattr(
+        "app.auth.rate_limit.get_redis",
+        fake_get_redis,
+    )
+
+@pytest_asyncio.fixture(autouse=True)
+def mock_email(monkeypatch):
+    async def fake_send_email(*args, **kwargs):
+        pass
+    monkeypatch.setattr("app.services.email_verification.send_verification_email", fake_send_email)
+    monkeypatch.setattr("app.utils.email.send_verification_email", fake_send_email)
+
+
 # ---------------------------------------------------------------------------
 # Shared async engine + session factory
 # ---------------------------------------------------------------------------
