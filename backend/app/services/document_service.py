@@ -278,8 +278,35 @@ async def upload_document(
         status=DocumentStatus.PENDING,
     )
     db.add(document)
-    await db.commit()
-    await db.refresh(document)
+
+    try:
+        await db.commit()
+        await db.refresh(document)
+        logger.info(
+            "document_db_created",
+            user_id=str(current_user.id),
+            document_id=str(document_id),
+            status=document.status,
+        )
+    except Exception:
+        logger.error(
+            "document_db_insert_failed_cleaning_s3",
+            user_id=str(current_user.id),
+            document_id=str(document_id),
+            s3_key=s3_key,
+        )
+        try:
+            s3_client.delete_object(s3_key=s3_key)
+        except Exception:
+            # S3 cleanup also failed — log for manual remediation.
+            # A periodic S3 orphan sweep (T-62 territory) can catch this.
+            logger.critical(
+                "document_s3_orphan_unrecoverable",
+                user_id=str(current_user.id),
+                document_id=str(document_id),
+                s3_key=s3_key,
+            )
+        raise
  
     logger.info(
         "document_db_created",

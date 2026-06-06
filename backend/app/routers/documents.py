@@ -2,9 +2,10 @@ import math
 import uuid
 from rq import Retry
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
+import structlog
 
 from app.auth.dependencies import get_verified_user
 from app.db.session import get_db
@@ -32,6 +33,7 @@ router = APIRouter(prefix="/documents", tags=["documents"])
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
+logger = structlog.get_logger()
 
 @router.post(
     "/upload",
@@ -49,13 +51,29 @@ async def upload_document_endpoint(
     """
     document = await upload_document(current_user=current_user, file=file, db=db)
 
-    ingest_queue.enqueue(
-        "app.workers.ingest.run_ingest",   # string path — worker imports this lazily
-        kwargs={"document_id": str(document.id)},
-        retry=Retry(max=3, interval=RETRY_DELAYS),
-        on_failure=handle_ingest_failure,
-        job_timeout=600,
-    )
+    try:
+        ingest_queue.enqueue(
+            "app.workers.ingest.run_ingest",
+            kwargs={"document_id": str(document.id)},
+            retry=Retry(max=3, interval=RETRY_DELAYS),
+            on_failure=handle_ingest_failure,
+            job_timeout=600,
+        )
+    except Exception:
+        # RQ enqueue failed — roll back the document so the user can retry
+        logger.error(
+            "ingest_enqueue_failed",
+            document_id=str(document.id),
+        )
+        await delete_document(
+            db=db,
+            document_id=document.id,
+            user_id=current_user.id,
+        )
+        raise HTTPException(
+            status_code=503,
+            detail="Processing queue unavailable. Please try again shortly.",
+        )
     return DocumentUploadResponse(
         document_id=document.id,
         status=document.status,

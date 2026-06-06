@@ -36,7 +36,7 @@ dependencies = [
     "redis",
     "pytesseract",
     "pillow",
-    
+    "python-magic-bin>=0.4.14",
 ]
 
 [tool.setuptools.packages.find]
@@ -55,6 +55,9 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: marks tests as integration tests requiring real PG + OpenAI",
+]
 
 [dependency-groups]
 dev = [

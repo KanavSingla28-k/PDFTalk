@@ -9,7 +9,9 @@ from app.models.document import Document, DocumentStatus
 from app.models.chunk import Chunk
 from app.services.extraction import extract_text          # T-29
 from app.services.chunking import chunk_text             # T-30
-from app.services.embedding import embed_texts           # T-33 stub
+from app.services.embedding import embed_texts           # T-33
+from app.utils.openai_client import check_and_increment_token_usage
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +72,13 @@ def _run(db: Session, document_id: uuid.UUID) -> None:
     # ------------------------------------------------------------------ #
     total_tokens = sum(c.token_count for c in chunks_data)
     _check_token_budget(total_tokens)
+
+    # Per-user daily quota — checked here because we have both user_id and
+    # total_tokens available, and openai_client.create_embeddings() explicitly
+    # delegates this responsibility to the caller.
+    asyncio.run(
+        check_and_increment_token_usage(str(doc.user_id), total_tokens)
+    )
 
     # ------------------------------------------------------------------ #
     # 5. Embed                                                            #

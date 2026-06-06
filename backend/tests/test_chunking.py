@@ -3,10 +3,9 @@ from app.services.chunking import chunk_text, CHUNK_SIZE, CHUNK_OVERLAP, CHUNK_S
 import tiktoken
 
 def _make_text(approx_tokens: int) -> str:
-    # "hello " is reliably 1 token in cl100k_base
-    return "hello " * approx_tokens
-
-
+    enc = tiktoken.get_encoding("cl100k_base")
+    token = enc.encode("hello")[0]
+    return enc.decode([token] * approx_tokens)
 
 
 class TestChunkText:
@@ -55,20 +54,11 @@ class TestChunkText:
         assert tokens_0[-CHUNK_OVERLAP:] == tokens_1[:CHUNK_OVERLAP]
 
     def test_text_exactly_one_chunk_size(self):
-        # text = _make_text(CHUNK_SIZE)
-        # chunks = chunk_text(text)
-        # assert len(chunks) == 1
-        enc = tiktoken.get_encoding("cl100k_base")
-
         text = _make_text(CHUNK_SIZE)
-        print(len(enc.encode(text)))
-
-        text = _make_text(CHUNK_STEP + 1)
-        print(len(enc.encode(text)))
-
+        chunks = chunk_text(text)
+        assert len(chunks) == 1
 
     def test_text_exactly_chunk_step_plus_one(self):
-        # Should produce exactly 2 chunks
-        text = _make_text(CHUNK_STEP + 1)
+        text = _make_text(CHUNK_SIZE + 1)
         chunks = chunk_text(text)
         assert len(chunks) == 2

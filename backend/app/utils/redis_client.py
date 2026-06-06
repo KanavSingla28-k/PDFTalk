@@ -1,8 +1,7 @@
 import hashlib
 from datetime import date
-
+from typing import cast
 import redis.asyncio as aioredis
-
 from app.core.config import settings
 
 # Single connection pool — shared across the app lifetime
@@ -30,7 +29,7 @@ async def set_with_ttl(key: str, value: str, ttl_seconds: int) -> None:
 
 async def get(key: str) -> str | None:
     r = get_redis()
-    return await r.get(key)
+    return cast(str | None, await r.get(key))
 
 
 async def delete(key: str) -> None:
@@ -65,3 +64,20 @@ def key_daily_token_quota(user_id: str) -> str:
 
 def key_email_verify(token_hash: str) -> str:
     return f"emailverify:{token_hash}"
+
+async def increment_counter_by(key: str, amount: int, ttl_seconds: int | None = None) -> int:
+    """Like increment_counter but adds `amount` instead of 1. Used for token quota tracking."""
+    r = get_redis()
+    count = await r.incrby(key, amount)
+    if count == amount and ttl_seconds:
+        # First write — set TTL. Same logic as increment_counter.
+        await r.expire(key, ttl_seconds)
+    return count
+
+
+# Circuit breaker key builders
+def key_circuit_breaker_failures() -> str:
+    return "cb:openai:failures"
+
+def key_circuit_breaker_open_until() -> str:
+    return "cb:openai:open_until"
