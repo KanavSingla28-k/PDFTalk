@@ -6,6 +6,8 @@ These are dummy values — no real services are contacted in unit tests.
 """
 
 import os
+import uuid
+
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
@@ -107,3 +109,47 @@ async def async_client(db: AsyncSession) -> AsyncClient:
 
     # Clean up the override after the test so it doesn't bleed into others.
     app.dependency_overrides.pop(get_db, None)
+
+
+# ---------------------------------------------------------------------------
+# Auth fixtures
+# ---------------------------------------------------------------------------
+
+@pytest_asyncio.fixture
+async def verified_user(db: AsyncSession):
+    """
+    Insert a verified, active User row and return the ORM object.
+
+    Imports are deferred so model registration order doesn't bite us
+    during collection — the DB schema is created before this runs.
+    """
+    from app.auth.password import hash_password
+    from app.models.user import User  # adjust path if your User lives elsewhere
+
+    user = User(
+        id=uuid.uuid4(),
+        email="testuser@example.com",
+        email_lower="testuser@example.com",
+        password_hash=hash_password("TestPassword1"),
+        is_verified=True,
+        is_active=True,
+    )
+    db.add(user)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def auth_headers(verified_user) -> dict:
+    """
+    Return an Authorization header dict carrying a valid access token
+    for the verified_user fixture.
+
+    Uses create_access_token directly — no HTTP round-trip needed,
+    and avoids coupling these fixtures to the login endpoint.
+    """
+    from app.auth.tokens import create_access_token  # adjust path if needed
+
+    token = create_access_token(user_id=str(verified_user.id))
+    return {"Authorization": f"Bearer {token}"}

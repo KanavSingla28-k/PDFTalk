@@ -2300,9 +2300,9 @@ The deletion is critical. If an attacker intercepts the refresh token cookie (e.
 
 ### Database & Async Questions
 
-**Q: Why use `asyncpg` instead of `psycopg2` for this project?**
+**Q: Why use `asyncpg` instead of `psycopg` for this project?**
 
-A: "FastAPI runs on asyncio. `psycopg2` is synchronous — calling it from an async route handler blocks the event loop. When one request is waiting for a Postgres query, no other requests can be handled. `asyncpg` is a natively async Postgres driver — it yields control to the event loop during I/O. Under load with 50 concurrent users, `asyncpg` handles all 50 queries concurrently. `psycopg2` handles them sequentially. The difference becomes 50× latency under contention. Additionally, `asyncpg` is one of the fastest Python-to-Postgres drivers benchmarked — it uses Postgres binary protocol and avoids Python object allocation overhead."
+A: "FastAPI runs on asyncio. `psycopg` is synchronous — calling it from an async route handler blocks the event loop. When one request is waiting for a Postgres query, no other requests can be handled. `asyncpg` is a natively async Postgres driver — it yields control to the event loop during I/O. Under load with 50 concurrent users, `asyncpg` handles all 50 queries concurrently. `psycopg` handles them sequentially. The difference becomes 50× latency under contention. Additionally, `asyncpg` is one of the fastest Python-to-Postgres drivers benchmarked — it uses Postgres binary protocol and avoids Python object allocation overhead."
 
 ---
 

@@ -4,7 +4,7 @@ from datetime import datetime
 from sqlalchemy import DateTime, ForeignKey, Index, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
 import re
 
 from app.db.base import Base
@@ -134,8 +134,7 @@ class UserInfo(BaseModel):
     id: str
     email: str
 
-    class Config:
-        from_attributes = True  # allows construction from a SQLAlchemy User model
+    model_config = ConfigDict(from_attributes=True)  # allows construction from a SQLAlchemy User model
 
 
 class RefreshResponse(BaseModel):

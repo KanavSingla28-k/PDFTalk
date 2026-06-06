@@ -3,6 +3,7 @@ from botocore.exceptions import ClientError
 from typing import BinaryIO
 from app.core.config import settings
 import structlog
+from pathlib import Path
 
 logger = structlog.get_logger()
 

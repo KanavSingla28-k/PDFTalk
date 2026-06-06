@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # Alembic compares Base.metadata against the live DB to generate diffs.
 # If a model isn't imported here, Alembic won't know the table exists
 # and will generate a DROP TABLE migration for it.
-from app.db import Base  # noqa: F401 — side-effect import populates metadata
+from app.db.base import Base  # noqa: F401 — side-effect import populates metadata
 from app.models import User, Chunk, Document, JobLog, RefreshToken, EmailVerification
 
 # --- Alembic config object ---
@@ -29,14 +29,14 @@ target_metadata = Base.metadata
 # --- DB URL: prefer environment variable over alembic.ini ---
 # In production/CI, set DATABASE_URL in the environment.
 # In local dev, it falls back to alembic.ini's sqlalchemy.url.
-# Use the synchronous psycopg2 URL here — Alembic doesn't use asyncpg.
+# Use the synchronous psycopg URL here — Alembic doesn't use asyncpg.
 # asyncpg URL format:  postgresql+asyncpg://user:pass@host/db
-# Alembic URL format:  postgresql+psycopg2://user:pass@host/db  (or just postgresql://)
+# Alembic URL format:  postgresql+psycopg://user:pass@host/db  (or just postgresql://)
 def get_url() -> str:
     url = settings.DATABASE_URL
     if url.startswith("postgresql+asyncpg://"):
         # Alembic needs a synchronous driver; swap the driver prefix
-        url = url.replace("postgresql+asyncpg://", "postgresql+psycopg2://", 1)
+        url = url.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
     return url or config.get_main_option("sqlalchemy.url", "")
 
 

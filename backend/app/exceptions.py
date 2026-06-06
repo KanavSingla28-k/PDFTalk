@@ -83,28 +83,63 @@ class UserNotFoundError(AuthError):
     """
 
 
+
 class InvalidCredentialsError(Exception):
     """
     Raised for ANY login failure that should surface as 401.
- 
+
     Intentionally generic — callers must NOT leak which specific check failed.
     A consistent error message prevents user enumeration (an attacker cannot
     tell whether the email exists, the password is wrong, or the account is
     locked by observing the error text).
     """
- 
- 
+
+
 class UnverifiedEmailError(Exception):
     """
     Raised when the account exists but email is not yet verified.
- 
+
     Surfaced as 403 (not 401) so the frontend can show a distinct
     "resend verification email" prompt rather than a generic login failure.
     This is an acceptable enumeration trade-off: the user has already
     proved they can receive email at that address (they registered), so
     confirming the account exists here leaks nothing new.
     """
- 
+
+
+# ---------------------------------------------------------------------------
+# File validation exceptions
+# ---------------------------------------------------------------------------
+
+
+class QuotaExceededError(Exception):
+    """
+    Raised by document_service.upload_document() when the user’s document
+    quota (per plan) has been reached.
+
+    Maps to 429     Too Many Requests.
+        """
+
+
+class FileValidationError(PDFTalkError):
+    """
+    Raised by services/file_validation.py when an uploaded file fails any
+    validation check. The reason field is a stable machine-readable code
+    suitable for logging and frontend display logic.
+
+    Maps to 422 Unprocessable Entity.
+
+    Reasons:
+        file_too_large       — exceeds MAX_FILE_SIZE_BYTES (50 MB)
+        unsupported_mime     — MIME type not in the allow-list
+        invalid_magic_bytes  — magic bytes contradict the declared MIME type
+                               (e.g. file claimed to be PDF but header is not %PDF)
+    """
+
+    def __init__(self, reason: str, message: str) -> None:
+        self.reason = reason
+        super().__init__(message)
+
 # ---------------------------------------------------------------------------
 # Registration handlers
 # ---------------------------------------------------------------------------
@@ -222,3 +257,16 @@ def register_exception_handlers(app: FastAPI) -> None:
             headers={"Retry-After": str(exc.retry_after)},
         )
 
+    @app.exception_handler(FileValidationError)
+    async def file_validation_handler(
+        request: Request,
+        exc: FileValidationError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": "FILE_VALIDATION_FAILED",
+                "reason": exc.reason,
+                "message": str(exc),
+            },
+        )

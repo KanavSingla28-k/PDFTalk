@@ -26,15 +26,17 @@ dependencies = [
     "resend>=2.30.1",
     "pgvector>=0.4.2",
     "aiosqlite>=0.22.1",
-]
-
-[project.optional-dependencies]
-test = [
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
     "fakeredis",
     "moto[s3]",
+    "psycopg[binary]",
+    "rq",
+    "redis",
+    "pytesseract",
+    "pillow",
+    
 ]
 
 [tool.setuptools.packages.find]
