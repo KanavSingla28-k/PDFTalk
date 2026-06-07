@@ -5,9 +5,9 @@ Usage
 -----
 Instantiate with a limit and window, then include as a dependency on any route:
 
-    from app.auth.rate_limit import RateLimiter
+    from app.utils.rate_limit import RateLimiter
 
-    login_limiter = RateLimiter(limit=10, window_seconds=60)
+    login_limiter = RateLimiter(limit=10, window_seconds=60, key_prefix="login")
 
     @router.post("/login")
     async def login(
@@ -51,11 +51,12 @@ The response includes a Retry-After header (seconds until the oldest request
 falls out of the window) so well-behaved clients know when to retry.
 """
 
+from openai.types.beta.realtime import conversation_item_input_audio_transcription_completed_event
 import time
 import logging
 from typing import Callable
-
-from fastapi import Depends, Request, status
+import uuid
+from fastapi import Request
 
 from app.exceptions import RateLimitExceededError
 from app.utils.redis_client import get_redis
@@ -87,12 +88,12 @@ class RateLimiter:
     # Per-IP limit for unauthenticated routes:
     login_limiter = RateLimiter(limit=10, window_seconds=60, key_prefix="login")
 
-    # Per-user limit for authenticated routes (user_id injected by caller):
+    # Per-user limit for authenticated routes:
     upload_limiter = RateLimiter(
         limit=5,
         window_seconds=60,
         key_prefix="upload",
-        identifier_fn=lambda req: req.state.user_id,  # set by auth middleware
+        identifier_fn=user_id_from_request,
     )
     """
 
@@ -114,7 +115,7 @@ class RateLimiter:
 
     async def __call__(self, request: Request) -> None:
         """
-        Check the rate limit. Raises HTTP 429 if exceeded.
+        Check the rate limit. Raises RateLimitExceededError (HTTP 429) if exceeded.
 
         FastAPI calls this automatically when the limiter is used as a
         Depends(). The return value is None — it's a guard, not a provider.
@@ -133,7 +134,7 @@ class RateLimiter:
             # 2. Count remaining entries in the window
             pipe.zcard(redis_key)
             # 3. Add current timestamp (score = member = now_ms for uniqueness)
-            pipe.zadd(redis_key, {str(now_ms): now_ms})
+            pipe.zadd(redis_key, {uuid.uuid4().hex: now_ms})
             # 4. Refresh TTL so the key doesn't linger after activity stops
             pipe.expire(redis_key, self.window_seconds)
             results = await pipe.execute()
@@ -184,3 +185,33 @@ class RateLimiter:
             # "1.2.3.4, 10.0.0.1" → "1.2.3.4"  (first = original client)
             return forwarded_for.split(",")[0].strip()
         return request.client.host if request.client else "unknown"
+
+
+# ------------------------------------------------------------------
+# Identifier function for authenticated (user-scoped) rate limits
+# ------------------------------------------------------------------
+
+def user_id_from_request(request: Request) -> str:
+    """
+    Extract the user_id from a Bearer access token in the Authorization header.
+
+    Used as `identifier_fn` for rate limiters on authenticated endpoints
+    (upload, query) so the limit is per-user rather than per-IP. This
+    prevents a user on a shared IP (e.g. office NAT) from being penalised
+    for another user's traffic — and prevents a single user from evading
+    the limit by rotating IPs.
+
+    Decodes the token without hitting the database — the JWT is self-contained.
+    Raises TokenInvalidError / TokenExpiredError (both map to HTTP 401 via the
+    global exception handler) if the token is absent or malformed. In practice
+    this path is only reached after get_current_user already validated the token,
+    so a failure here means the token became invalid between the two calls —
+    an edge case that correctly results in a 401, not a 429.
+    """
+    from app.auth.tokens import decode_access_token  # local import to avoid circular
+
+    auth_header = request.headers.get("Authorization", "")
+    token = auth_header.removeprefix("Bearer ").strip()
+    # decode_access_token raises TokenInvalidError/TokenExpiredError on failure;
+    # both are caught by the global exception handler and returned as 401.
+    return decode_access_token(token)

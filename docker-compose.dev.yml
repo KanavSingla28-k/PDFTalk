@@ -37,6 +37,9 @@ services:
     build:
       context: ./backend
 
+    ports:
+      - "8000:8000"
+
     environment:
       ENV_FILE: .env.docker   # tells config.py which file to load
     env_file:

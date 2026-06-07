@@ -2,7 +2,7 @@ import math
 import uuid
 from rq import Retry
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status, Request
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
@@ -25,6 +25,7 @@ from app.services.document_service import (
     get_user_documents,
     upload_document,
 )
+from app.utils.rate_limit import RateLimiter, user_id_from_request
 from app.workers.queues import ingest_queue
 from app.workers.failure_handler import handle_ingest_failure
 from app.workers.worker import RETRY_DELAYS
@@ -35,15 +36,31 @@ _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 
 logger = structlog.get_logger()
 
+# ---------------------------------------------------------------------------
+# Rate limiter — defined once at module level, reused per request.
+# 5 uploads per user per minute (T-42 spec).
+# Uses user_id_from_request so each user has an independent counter;
+# a shared office IP won't cause colleagues to hit each other's limits.
+# ---------------------------------------------------------------------------
+
+_upload_limiter = RateLimiter(
+    limit=5,
+    window_seconds=60,
+    key_prefix="upload",
+    identifier_fn=user_id_from_request,
+)
+
 @router.post(
     "/upload",
     status_code=status.HTTP_202_ACCEPTED,
     response_model=DocumentUploadResponse,
 )
 async def upload_document_endpoint(
+    request: Request,
     file: UploadFile = File(...),
     current_user: User = Depends(get_verified_user),
     db: AsyncSession = Depends(get_db),
+    _rate: None = Depends(_upload_limiter), 
 ) -> DocumentUploadResponse:
     """
     Upload a document for RAG ingestion.

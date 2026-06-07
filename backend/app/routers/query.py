@@ -41,7 +41,7 @@ import json
 import logging
 from typing import AsyncIterator
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from openai import APITimeoutError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -60,11 +60,21 @@ from app.utils.openai_client import (
     DailyQuotaExceededError,
     OpenAIRetryExhaustedError,
 )
-
+from app.utils.rate_limit import RateLimiter, user_id_from_request
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/query", tags=["query"])
 
+# ---------------------------------------------------------------------------
+# Rate limiter — 20 queries per user per minute (T-42 spec).
+# ---------------------------------------------------------------------------
+
+_query_limiter = RateLimiter(
+    limit=20,
+    window_seconds=60,
+    key_prefix="query",
+    identifier_fn=user_id_from_request,
+)
 
 # ---------------------------------------------------------------------------
 # SSE helpers
@@ -81,9 +91,11 @@ def _error_event(code: str, message: str) -> str:
 
 @router.post("/ask")
 async def ask(
+    request: Request,
     body: QueryRequest,
     current_user: User = Depends(get_verified_user),
     db: AsyncSession = Depends(get_db),
+    _rate: None = Depends(_query_limiter), 
 ) -> StreamingResponse:
     """
     Stream a RAG-grounded answer to the user's question.

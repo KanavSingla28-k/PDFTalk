@@ -62,6 +62,10 @@ def key_daily_token_quota(user_id: str) -> str:
     today = date.today().strftime("%Y%m%d")
     return f"quota:tokens:{user_id}:{today}"
 
+def key_daily_query_quota(user_id: str) -> str:
+    today = date.today().strftime("%Y%m%d")
+    return f"quota:queries:{user_id}:{today}"
+    
 def key_email_verify(token_hash: str) -> str:
     return f"emailverify:{token_hash}"
 

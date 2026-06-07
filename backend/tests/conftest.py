@@ -47,7 +47,7 @@ def mock_redis(monkeypatch):
         return fake_redis
 
     monkeypatch.setattr(
-        "app.auth.rate_limit.get_redis",
+        "app.utils.rate_limit.get_redis",
         fake_get_redis,
     )
 

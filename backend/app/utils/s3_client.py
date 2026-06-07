@@ -50,6 +50,11 @@ class S3Client:
             logger.error("s3_delete_failed", key=s3_key, error=str(e))
             raise
 
+    def check_connectivity(self) -> None:
+        """Ping S3 by calling HeadBucket. Raises on any error."""
+        self._client.head_bucket(Bucket=self.bucket)
+        
+
     def generate_presigned_download_url(self, s3_key: str, expires_in: int = 3600) -> str:
         """Generate a time-limited URL for direct client download."""
         return self._client.generate_presigned_url(

@@ -25,6 +25,7 @@ from app.utils.openai_client import (
     CircuitBreakerOpenError,
     DailyQuotaExceededError,
     OpenAIRetryExhaustedError,
+    DailyQueryQuotaExceededError,
 )
 
 
@@ -42,7 +43,7 @@ class PDFTalkError(Exception):
 class RateLimitExceededError(PDFTalkError):
     def __init__(self, retry_after: int):
         self.retry_after = retry_after
-        super().__init__("Too many requests. Please wait before retrying.")
+        super().__init__(retry_after)
 
 # ---------------------------------------------------------------------------
 # Auth exceptions
@@ -361,6 +362,19 @@ def register_exception_handlers(app: FastAPI) -> None:
             status_code=429,
             content={
                 "error": "DAILY_QUOTA_EXCEEDED",
+                "message": str(exc),
+            },
+        )
+
+    @app.exception_handler(DailyQueryQuotaExceededError)
+    async def daily_query_quota_handler(
+        request: Request,
+        exc: DailyQueryQuotaExceededError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": "DAILY_QUERY_QUOTA_EXCEEDED",
                 "message": str(exc),
             },
         )

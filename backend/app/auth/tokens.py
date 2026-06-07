@@ -67,6 +67,29 @@ def _hash_token(raw: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _decode_token_unverified(token: str) -> str | None:
+    """
+    Decode a JWT without verifying the signature or expiry.
+ 
+    Returns the 'sub' claim (user_id) if present, otherwise None.
+    Never raises — any failure returns None.
+ 
+    IMPORTANT: This is for LOGGING ONLY. Never use for auth decisions.
+    """
+    try:
+        payload = jwt.decode(
+            token,
+            key="",                         # ignored when verify_signature=False
+            algorithms=["HS256"],
+            options={
+                "verify_signature": False,
+                "verify_exp": False,
+                "verify_aud": False,
+            },
+        )
+        return payload.get("sub")
+    except Exception:
+        return None
 # ---------------------------------------------------------------------------
 # Response schema
 # ---------------------------------------------------------------------------

@@ -137,6 +137,31 @@ async def check_and_increment_token_usage(user_id: str, tokens: int) -> None:
             f"Daily token limit of {settings.MAX_DAILY_TOKENS_PER_USER:,} reached."
         )
 
+class DailyQueryQuotaExceededError(Exception):
+    """Raised when a user has consumed their daily query allowance."""
+
+
+async def check_and_increment_query_usage(user_id: str) -> None:
+    """
+    Atomically increment the user's daily query counter and raise
+    DailyQueryQuotaExceededError if the result exceeds MAX_DAILY_QUERIES_PER_USER.
+
+    Each call to /query/ask counts as 1 query regardless of token cost.
+    TTL mirrors the token quota: 25 h to handle midnight rollovers.
+    """
+    key = rc.key_daily_query_quota(user_id)
+    new_total = await rc.increment_counter_by(key, 1, ttl_seconds=90_000)
+
+    if new_total > settings.MAX_DAILY_QUERIES_PER_USER:
+        logger.warning(
+            "Daily query quota exceeded for user %s: %d / %d",
+            user_id,
+            new_total,
+            settings.MAX_DAILY_QUERIES_PER_USER,
+        )
+        raise DailyQueryQuotaExceededError(
+            f"Daily query limit of {settings.MAX_DAILY_QUERIES_PER_USER:,} reached."
+        )
 
 # ---------------------------------------------------------------------------
 # Internal guarded call wrapper

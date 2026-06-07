@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.auth.rate_limit import RateLimiter
+from app.utils.rate_limit import RateLimiter
 from app.auth.tokens import (
     TokenInvalidError,
     revoke_refresh_token,

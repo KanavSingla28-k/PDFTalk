@@ -1,6 +1,7 @@
-from typing import Optional
+from typing import Literal, Optional
 from pydantic_settings import BaseSettings
 import os
+
 
 env_file = os.getenv("ENV_FILE", ".env.local")
 
@@ -34,6 +35,9 @@ class Settings(BaseSettings):
     MAX_DAILY_TOKENS_PER_USER: int = 100000
     RETRIEVAL_TOP_K: int = 5
     STREAM_CHUNK_TIMEOUT: int = 30
+    LOG_FORMAT: Optional[Literal["json", "pretty"]] = None
+    MAX_DAILY_QUERIES_PER_USER: int = 500
+    SLACK_WEBHOOK_URL: Optional[str] = None
 
     model_config = {"env_file": env_file}
 
