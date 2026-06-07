@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     MAX_DOCS_PER_USER: int = 20
     MAX_DAILY_TOKENS_PER_USER: int = 100000
     RETRIEVAL_TOP_K: int = 5
+    STREAM_CHUNK_TIMEOUT: int = 30
 
     model_config = {"env_file": env_file}
 

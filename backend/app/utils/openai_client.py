@@ -142,15 +142,15 @@ async def check_and_increment_token_usage(user_id: str, tokens: int) -> None:
 # Internal guarded call wrapper
 # ---------------------------------------------------------------------------
 
-_RETRY_ATTEMPTS = 3
-_RETRY_BASE_DELAY = 5.0   # seconds; doubles each attempt
+_RETRY_ATTEMPTS = 3         # total attempts (1 initial + 2 retries)
+_RETRY_BASE_DELAY = 5.0     # seconds; doubles each retry: 5 s → 10 s
 
 
 async def _guarded_call(coro_factory):
     """
     Execute an async coroutine with:
       1. Circuit breaker pre-check (raises CircuitBreakerOpenError if open)
-      2. Retry loop on RateLimitError (up to _RETRY_ATTEMPTS)
+      2. Retry loop on RateLimitError (up to _RETRY_ATTEMPTS total)
       3. Circuit breaker failure recording on 5xx APIStatusError
       4. Circuit breaker success reset on clean response
 
@@ -164,7 +164,7 @@ async def _guarded_call(coro_factory):
 
     last_exc: Exception | None = None
 
-    for attempt in range(1, _RETRY_ATTEMPTS + 1):
+    for attempt in range(1, _RETRY_ATTEMPTS + 1):   # 1, 2, 3
         try:
             result = await coro_factory()
             await _record_success()
@@ -174,7 +174,7 @@ async def _guarded_call(coro_factory):
             last_exc = exc
             if attempt == _RETRY_ATTEMPTS:
                 break
-            delay = _RETRY_BASE_DELAY * (2 ** (attempt - 1))   # 5 s → 10 s → 20 s
+            delay = _RETRY_BASE_DELAY * (2 ** (attempt - 1))   # 5 s → 10 s
             logger.warning(
                 "OpenAI RateLimitError on attempt %d/%d. Retrying in %.0f s.",
                 attempt,
@@ -234,9 +234,8 @@ async def chat_complete(
 
     stream=False  → awaits the full response and returns the content string.
     stream=True   → returns an async generator yielding token strings.
-                    The circuit breaker / retry wraps only the initial
-                    connection; streaming errors mid-response propagate
-                    directly to the caller (T-38 handles those).
+                    The circuit breaker + retry wrap only the initial
+                    connection; mid-stream errors propagate to the caller.
     """
     if stream:
         return _stream_chat(messages, model=model, max_tokens=max_tokens)
@@ -262,32 +261,53 @@ async def _stream_chat(
 ) -> AsyncIterator[str]:
     """
     Internal async generator for streaming chat.
-    The circuit breaker guards the connection setup; individual chunk
-    errors inside the stream are yielded as-is to the caller.
+
+    Retries the *connection* up to _RETRY_ATTEMPTS total on RateLimitError
+    with exponential backoff (5 s → 10 s). The circuit breaker guards the
+    connection phase. Mid-stream errors propagate directly to the caller
+    (retrying mid-stream is not safe).
     """
     if await _is_circuit_open():
         raise CircuitBreakerOpenError(
             "OpenAI circuit breaker is open. Try again shortly."
         )
 
-    try:
-        stream = await get_client().chat.completions.create(
-            model=model,
-            messages=messages,
-            max_tokens=max_tokens,
-            stream=True,
-        )
-        await _record_success()
-    except RateLimitError as exc:
-        # Streaming connections aren't retried — surface immediately
-        raise OpenAIRetryExhaustedError(
-            "OpenAI rate limited on stream connection."
-        ) from exc
-    except APIStatusError as exc:
-        if exc.status_code >= 500:
-            await _record_failure()
-        raise
+    last_exc: Exception | None = None
+    stream = None
 
+    for attempt in range(1, _RETRY_ATTEMPTS + 1):   # 1, 2, 3
+        try:
+            stream = await get_client().chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens,
+                stream=True,
+            )
+            await _record_success()
+            break   # connection established — exit retry loop
+
+        except RateLimitError as exc:
+            last_exc = exc
+            if attempt == _RETRY_ATTEMPTS:
+                raise OpenAIRetryExhaustedError(
+                    f"OpenAI rate limit persisted after {_RETRY_ATTEMPTS} attempts on stream connection."
+                ) from exc
+            delay = _RETRY_BASE_DELAY * (2 ** (attempt - 1))   # 5 s → 10 s
+            logger.warning(
+                "OpenAI RateLimitError on stream attempt %d/%d. Retrying in %.0f s.",
+                attempt,
+                _RETRY_ATTEMPTS,
+                delay,
+            )
+            await asyncio.sleep(delay)
+
+        except APIStatusError as exc:
+            if exc.status_code >= 500:
+                await _record_failure()
+            raise   # 5xx and 4xx both propagate immediately (no retry)
+
+    # Stream the response — mid-stream errors are not retried
+    assert stream is not None
     async for chunk in stream:
         delta = chunk.choices[0].delta.content
         if delta:

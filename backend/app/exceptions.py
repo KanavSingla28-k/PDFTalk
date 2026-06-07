@@ -20,6 +20,12 @@ Response shape (all errors):
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+import uuid
+from app.utils.openai_client import (
+    CircuitBreakerOpenError,
+    DailyQuotaExceededError,
+    OpenAIRetryExhaustedError,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -121,6 +127,25 @@ class QuotaExceededError(Exception):
         """
 
 
+# ---------------------------------------------------------------------------
+# Document-related exceptions
+# ---------------------------------------------------------------------------
+
+class DocumentNotFoundError(Exception):
+    def __init__(self, document_id: uuid.UUID):
+        self.document_id = document_id
+
+
+class DocumentNotReadyError(Exception):
+    def __init__(self, document_id: uuid.UUID, status: str):
+        self.document_id = document_id
+        self.status = status
+
+
+# ---------------------------------------------------------------------------
+# File validation exceptions
+# ---------------------------------------------------------------------------
+
 class FileValidationError(PDFTalkError):
     """
     Raised by services/file_validation.py when an uploaded file fails any
@@ -139,6 +164,7 @@ class FileValidationError(PDFTalkError):
     def __init__(self, reason: str, message: str) -> None:
         self.reason = reason
         super().__init__(message)
+
 
 # ---------------------------------------------------------------------------
 # Registration handlers
@@ -267,6 +293,74 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "error": "FILE_VALIDATION_FAILED",
                 "reason": exc.reason,
+                "message": str(exc),
+            },
+        )
+
+    @app.exception_handler(DocumentNotFoundError)
+    async def document_not_found_handler(
+        request: Request,
+        exc: DocumentNotFoundError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "DOCUMENT_NOT_FOUND",
+                "message": f"Document {exc.document_id} not found",
+            },
+        )
+
+    @app.exception_handler(DocumentNotReadyError)
+    async def document_not_ready_handler(
+        request: Request,
+        exc: DocumentNotReadyError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "DOCUMENT_NOT_READY",
+                "message": (
+                    f"Document {exc.document_id} is not ready for querying "
+                    f"(current status: {exc.status})"
+                ),
+            },
+        )
+
+    @app.exception_handler(CircuitBreakerOpenError)
+    async def circuit_breaker_handler(
+        request: Request,
+        exc: CircuitBreakerOpenError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "AI_SERVICE_UNAVAILABLE",
+                "message": "The AI service is temporarily unavailable. Please try again shortly.",
+            },
+        )
+
+    @app.exception_handler(OpenAIRetryExhaustedError)
+    async def openai_retry_exhausted_handler(
+        request: Request,
+        exc: OpenAIRetryExhaustedError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "AI_SERVICE_UNAVAILABLE",
+                "message": "The AI service is temporarily unavailable. Please try again shortly.",
+            },
+        )
+
+    @app.exception_handler(DailyQuotaExceededError)
+    async def daily_quota_handler(
+        request: Request,
+        exc: DailyQuotaExceededError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=429,
+            content={
+                "error": "DAILY_QUOTA_EXCEEDED",
                 "message": str(exc),
             },
         )

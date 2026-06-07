@@ -8,6 +8,7 @@ from app.models.document import Document, DocumentStatus
 from app.models.chunk import Chunk, EMBEDDING_DIMENSIONS
 from app.models.auth import RefreshToken, EmailVerification
 from app.models.job_log import JobLog
+from app.models.query import QueryRequest
 
 __all__ = [
     "Base",
@@ -19,4 +20,5 @@ __all__ = [
     "RefreshToken",
     "EmailVerification",
     "JobLog",
+    "QueryRequest",
 ]

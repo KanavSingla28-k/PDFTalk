@@ -7,6 +7,7 @@ from app.exceptions import register_exception_handlers
 from app.utils.redis_client import get_pool, get_redis
 from app.routers.auth import router as auth_router
 from app.routers.documents import router as document_router
+from app.routers.query import router as query_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -32,6 +33,7 @@ app = FastAPI(
 register_exception_handlers(app)
 app.include_router(auth_router)
 app.include_router(document_router)
+app.include_router(query_router)
 
 app.add_middleware(
     CORSMiddleware,

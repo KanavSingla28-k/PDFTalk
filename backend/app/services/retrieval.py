@@ -45,14 +45,12 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class RetrievedChunk:
-    """A single chunk returned by the similarity search."""
     chunk_id: uuid.UUID
     document_id: uuid.UUID
     chunk_index: int
     text: str
-    # Cosine distance from the query vector (lower = more similar).
-    # Range: [0.0, 2.0] for normalised vectors. Not exposed to the end user,
-    # but useful for debug logging and future re-ranking.
+    token_count: int     # needed by prompt builder for budget accounting
+    filename: str        # joined from documents.filename — used for citations
     distance: float
 
 
@@ -182,15 +180,18 @@ async def _run_similarity_search(
     result = await db.execute(
         text("""
             SELECT
-                id,
-                document_id,
-                chunk_index,
-                text,
-                embedding <=> CAST(:query_vec AS vector) AS distance
-            FROM chunks
-            WHERE user_id   = :user_id
-              AND document_id = ANY(CAST(:doc_ids AS uuid[]))
-              AND embedding IS NOT NULL
+                c.id,
+                c.document_id,
+                c.chunk_index,
+                c.text,
+                c.token_count,
+                d.filename,
+                c.embedding <=> CAST(:query_vec AS vector) AS distance
+            FROM chunks c
+            JOIN documents d ON d.id = c.document_id
+            WHERE c.user_id   = :user_id
+            AND c.document_id = ANY(CAST(:doc_ids AS uuid[]))
+            AND c.embedding IS NOT NULL
             ORDER BY distance ASC
             LIMIT :k
         """),
@@ -209,6 +210,8 @@ async def _run_similarity_search(
             document_id=uuid.UUID(str(row.document_id)),
             chunk_index=row.chunk_index,
             text=row.text,
+            token_count=row.token_count,
+            filename=row.filename,
             distance=float(row.distance),
         )
         for row in rows
