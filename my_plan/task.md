@@ -137,38 +137,38 @@ This task list integrates `pdftalk_mvp_tasklist.md` with `frontend_api_reference
 
 ---
 
-### T-51: Document List & Status UI (`/dashboard/documents`)
+### T-51: Document List & Status UI (`/dashboard/documents`) ✅
 
-- `[ ]` Fetch paginated document list via `GET /documents` on mount.
-- `[ ]` Display each document with status badge: `PENDING` / `PROCESSING` / `READY` / `FAILED`.
-- `[ ]` **Polling for non-terminal statuses (exact strategy from API reference):**
+- `[x]` Fetch paginated document list via `GET /documents` on mount.
+- `[x]` Display each document with status badge: `PENDING` / `PROCESSING` / `READY` / `FAILED`.
+- `[x]` **Polling for non-terminal statuses (exact strategy from API reference):**
   - Poll `GET /documents/{document_id}/status` every **2s for the first 30s**.
   - Then switch to every **5s**.
   - **Hard timeout at 5 minutes:** Stop polling and show: "Processing is taking longer than expected. Please check back later or try re-uploading."
-- `[ ]` For `FAILED` documents: show `error_message` from the API response and offer "Delete & Re-upload" option.
-- `[ ]` **Delete document** via `DELETE /documents/{document_id}`:
+- `[x]` For `FAILED` documents: show `error_message` from the API response and offer "Delete & Re-upload" option.
+- `[x]` **Delete document** via `DELETE /documents/{document_id}`:
   - On `204 No Content`: remove document from list.
   - **On `502` (S3 deletion failure):** Show toast "Deletion failed due to a storage error. Please try again." The document remains in the list — do **not** remove it from UI state (API guarantees DB integrity). *(previously missing)*
   - On `404`: show "Document not found." and remove from list.
-- `[ ]` Link `READY` documents to `/dashboard/chat?doc={document_id}`.
+- `[x]` Link `READY` documents to `/dashboard/chat?doc={document_id}`.
 
 ---
 
-### T-52: Chat / Q&A UI — SSE Streaming (`/dashboard/chat`)
+### T-52: Chat / Q&A UI — SSE Streaming (`/dashboard/chat`) ✅
 
-- `[ ]` **Document selector:** Multi-select of user's `READY` documents only. Max 10 selections enforced with inline feedback.
-- `[ ]` **Question input:**
+- `[x]` **Document selector:** Multi-select of user's `READY` documents only. Max 10 selections enforced with inline feedback.
+- `[x]` **Question input:**
   - Max 1000 characters.
   - **Live character counter** (e.g. "247 / 1000") visible below the input. *(previously missing)*
   - Disable submit when input is empty or over limit.
-- `[ ]` Call `POST /query/ask` with headers: `Authorization: Bearer <token>`, `Accept: text/event-stream`.
-- `[ ]` **Handle pre-stream HTTP errors (before stream opens):**
+- `[x]` Call `POST /query/ask` with headers: `Authorization: Bearer <token>`, `Accept: text/event-stream`.
+- `[x]` **Handle pre-stream HTTP errors (before stream opens):**
   - `404 DOCUMENT_NOT_FOUND` → "One or more selected documents could not be found."
   - `409 DOCUMENT_NOT_READY` → "A selected document is still processing. Please wait."
   - `429 DAILY_QUERY_QUOTA_EXCEEDED` → "You've reached your daily query limit. Try again tomorrow."
   - `503 AI_SERVICE_UNAVAILABLE` → "The AI service is temporarily unavailable. Please try again shortly."
   - Any other `4xx/5xx` → generic "Something went wrong. Please try again."
-- `[ ]` **SSE stream reading — use the buffer-accumulation pattern (non-negotiable):**
+- `[x]` **SSE stream reading — use the buffer-accumulation pattern (non-negotiable):**
   ```ts
   // CORRECT: accumulate buffer and split on \n\n
   // Naive line-by-line split WILL break when SSE events span multiple TCP chunks.
@@ -186,24 +186,21 @@ This task list integrates `pdftalk_mvp_tasklist.md` with `frontend_api_reference
     }
   }
   ```
-- `[ ]` **Token rendering:** Append each `data: {token}` to the active chat bubble in real time.
-- `[ ]` **Clean end:** On `data: [DONE]`, mark response complete, re-enable input.
-- `[ ]` **Mid-stream terminal SSE errors** (data starts with `{`):
-  - `STREAM_TIMEOUT` → "Response timed out. Please try again."
-  - `DAILY_QUOTA_EXCEEDED` → "Daily usage limit reached."
-  - `AI_SERVICE_UNAVAILABLE` → "AI service went down mid-response. Please try again."
-  - `STREAM_ERROR` → "Something went wrong. Please try again."
+- `[x]` **Handle SSE stream events:**
+  - `data: {"type": "token", "content": "Hello"}` → append to chat bubble.
+  - `data: {"error": "AI_SERVICE_UNAVAILABLE", "message": "..."}` → show inline error inside chat bubble (e.g., "[Error] AI service went down mid-response.") and close stream cleanly.
+  - `data: [DONE]` → close stream cleanly.
 
 ---
 
-### T-53: Global UI Elements & Polish
+### T-53: Global UI Elements & Polish ✅
 
-- `[ ]` **Global React Error Boundary** wrapping the full app — show a fallback UI instead of a blank crash.
-- `[ ]` **Toast notification system** (`react-hot-toast`):
+- `[x]` **Global React Error Boundary** wrapping the full app — show a fallback UI instead of a blank crash.
+- `[x]` **Toast notification system** (`sonner` / `apiToast` helper):
   - Map every named `ApiError` code to a user-friendly message (including `ACCOUNT_INACTIVE`, `502` fallback).
-  - Use `Retry-After` header to show cooldown timers on `429` responses.
-- `[ ]` Ensure all pages are **responsive** (mobile, tablet, desktop).
-- `[ ]` **Accessibility:** Semantic HTML5, ARIA labels on interactive elements, keyboard navigation, colour contrast ≥ 4.5:1.
+  - Use `Retry-After` header to show cooldown timers on `429` responses natively via the helper.
+- `[x]` Ensure all pages are **responsive** (mobile, tablet, desktop).
+- `[x]` **Accessibility:** Semantic HTML5, ARIA labels on interactive elements, keyboard navigation, colour contrast ≥ 4.5:1.
 
 ---
 
