@@ -3,6 +3,7 @@ import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
+from sqlalchemy import delete
 
 from app.db.sync_session import SessionLocal
 from app.models.document import Document, DocumentStatus
@@ -11,9 +12,33 @@ from app.services.extraction import extract_text          # T-29
 from app.services.chunking import chunk_text             # T-30
 from app.services.embedding import embed_texts           # T-33
 from app.utils.openai_client import check_and_increment_token_usage
-import asyncio
 
 logger = logging.getLogger(__name__)
+
+
+def _run_async(coro):
+    """
+    Run an async coroutine from a synchronous RQ worker context.
+
+    Uses a fresh event loop per call instead of asyncio.run() to avoid the
+    "cannot run event loop while another is running" error that occurs when
+    asyncio.run() is called inside a thread that already has a running loop
+    (e.g., some RQ setups or test frameworks).
+    """
+    import asyncio
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(coro)
+    finally:
+        try:
+            # Cancel any lingering tasks before closing to prevent ResourceWarning
+            pending = asyncio.all_tasks(loop)
+            if pending:
+                for task in pending:
+                    task.cancel()
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+        finally:
+            loop.close()
 
 
 def run_ingest(document_id: str) -> None:
@@ -26,6 +51,13 @@ def run_ingest(document_id: str) -> None:
 
     On failure: status set to FAILED, error written to job_logs.
     RQ handles retries (configured at enqueue time in documents.py).
+
+    Retry safety:
+        On RQ retry, the document may already be in PROCESSING (from the
+        previous failed attempt). _run() handles this gracefully by cleaning
+        up any partial state (existing chunks) before re-processing.
+        If the document is READY (somehow succeeded on a parallel path),
+        the job is skipped.
     """
     doc_uuid = uuid.UUID(document_id)
 
@@ -44,6 +76,26 @@ def _run(db: Session, document_id: uuid.UUID) -> None:
     doc = db.get(Document, document_id)
     if doc is None:
         raise ValueError(f"Document {document_id} not found in DB.")
+
+    # If the document is already READY (e.g., a duplicate job or a race
+    # between the RQ retry and a parallel worker), skip it entirely.
+    if doc.status == DocumentStatus.READY:
+        logger.warning(
+            "ingest.already_ready",
+            extra={"document_id": str(document_id)},
+        )
+        return
+
+    # On retry, the status may already be PROCESSING or FAILED.
+    # Reset to PROCESSING and clean up any partial chunks from the previous attempt.
+    if doc.status in (DocumentStatus.PROCESSING, DocumentStatus.FAILED):
+        logger.info(
+            "ingest.retry_detected_cleaning_partial_state",
+            extra={"document_id": str(document_id), "previous_status": str(doc.status)},
+        )
+        # Delete any chunks that were written in the previous failed attempt
+        # to avoid duplicates on successful re-insert.
+        db.execute(delete(Chunk).where(Chunk.document_id == document_id))
 
     doc.status = DocumentStatus.PROCESSING
     doc.updated_at = datetime.now(timezone.utc)
@@ -73,13 +125,6 @@ def _run(db: Session, document_id: uuid.UUID) -> None:
     total_tokens = sum(c.token_count for c in chunks_data)
     _check_token_budget(total_tokens)
 
-    # Per-user daily quota — checked here because we have both user_id and
-    # total_tokens available, and openai_client.create_embeddings() explicitly
-    # delegates this responsibility to the caller.
-    asyncio.run(
-        check_and_increment_token_usage(str(doc.user_id), total_tokens)
-    )
-
     # ------------------------------------------------------------------ #
     # 5. Embed                                                            #
     # ------------------------------------------------------------------ #
@@ -91,6 +136,17 @@ def _run(db: Session, document_id: uuid.UUID) -> None:
         raise ValueError(
             f"Embedding count mismatch: got {len(embeddings)}, expected {len(chunks_data)}"
         )
+
+    # ------------------------------------------------------------------ #
+    # 5b. Per-user daily token quota — charged AFTER embedding succeeds   #
+    #                                                                     #
+    # Charging BEFORE embedding means retries double-charge users even    #
+    # when embedding fails (e.g., OpenAI timeout). We charge here, after  #
+    # we know the API call succeeded and the tokens were actually used.    #
+    # ------------------------------------------------------------------ #
+    _run_async(
+        check_and_increment_token_usage(str(doc.user_id), total_tokens)
+    )
 
     # ------------------------------------------------------------------ #
     # 6. Bulk-insert chunks + embeddings                                  #
@@ -133,6 +189,9 @@ def _fail(db: Session, document_id: uuid.UUID, exc: Exception) -> None:
     """
     Mark document FAILED and write a job_log row.
     Best-effort — if the DB itself is down, this will also fail (acceptable).
+
+    The original exception is preserved via the implicit exception chain;
+    this function does not re-raise so RQ can observe the original exc.
     """
     import traceback
     from app.models.job_log import JobLog
@@ -160,6 +219,8 @@ def _fail(db: Session, document_id: uuid.UUID, exc: Exception) -> None:
         )
     except Exception as db_exc:
         # If we can't even write the failure, log it and move on.
+        # The original exception (exc) will still propagate to RQ via re-raise
+        # in run_ingest(). This except block must NOT raise.
         logger.critical(
             "ingest.failed_to_write_failure",
             extra={"document_id": str(document_id), "db_error": str(db_exc)},

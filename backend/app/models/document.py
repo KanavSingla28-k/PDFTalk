@@ -1,7 +1,6 @@
 import enum
 import uuid
 from datetime import datetime
-import math
 
 from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, Index, Text, func
 from pydantic import BaseModel, ConfigDict, Field

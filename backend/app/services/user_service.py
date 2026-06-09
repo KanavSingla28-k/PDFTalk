@@ -117,17 +117,19 @@ async def login(
     db: AsyncSession,
     email: str,
     password: str,
-) -> tuple[str, str, int]:
+) -> tuple[str, str, int, "User"]:
     """
     Authenticate a user and issue a token pair.
- 
+
     Returns:
-        (access_token, raw_refresh_token, expires_in_seconds)
- 
+        (access_token, raw_refresh_token, expires_in_seconds, user)
+
     The route handler is responsible for:
       - Placing raw_refresh_token into an httpOnly cookie
       - Returning access_token + expires_in in the JSON body
- 
+      - Using the returned User object for the response UserInfo payload
+        (avoids a second SELECT in the router)
+
     Raises:
         InvalidCredentialsError — any auth failure (email, password, lockout,
                                   inactive account). Always use this for 401.
@@ -234,4 +236,4 @@ async def login(
         extra={"user_id": str(user.id)},
     )
  
-    return access_token, raw_refresh_token, expires_in  
+    return access_token, raw_refresh_token, expires_in, user

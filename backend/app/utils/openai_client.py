@@ -331,9 +331,83 @@ async def _stream_chat(
                 await _record_failure()
             raise   # 5xx and 4xx both propagate immediately (no retry)
 
-    # Stream the response — mid-stream errors are not retried
-    assert stream is not None
+    # Stream connection established — mid-stream errors are not retried
+    if stream is None:
+        raise OpenAIRetryExhaustedError(
+            f"Failed to establish OpenAI stream after {_RETRY_ATTEMPTS} attempts."
+        )
     async for chunk in stream:
         delta = chunk.choices[0].delta.content
         if delta:
             yield delta
+
+
+async def _stream_chat_with_usage(
+    messages: list[ChatCompletionMessageParam],
+    *,
+    model: str,
+    max_tokens: int,
+) -> AsyncIterator[tuple[str | None, object | None]]:
+    """
+    Streaming chat generator that includes API-reported token usage.
+
+    Yields (token_string, None) for each content delta, then on the final
+    usage-only chunk yields (None, chunk.usage) so the caller can record
+    accurate token counts from the API instead of a tiktoken estimate.
+
+    stream_options={"include_usage": True} causes OpenAI to append a final
+    chunk with choices=[] and usage populated. Content chunks have usage=None.
+    """
+    if await _is_circuit_open():
+        raise CircuitBreakerOpenError(
+            "OpenAI circuit breaker is open. Try again shortly."
+        )
+
+    last_exc: Exception | None = None
+    stream = None
+
+    for attempt in range(1, _RETRY_ATTEMPTS + 1):   # 1, 2, 3
+        try:
+            stream = await get_client().chat.completions.create(
+                model=model,
+                messages=messages,
+                max_tokens=max_tokens,
+                stream=True,
+                stream_options={"include_usage": True},
+            )
+            await _record_success()
+            break   # connection established — exit retry loop
+
+        except RateLimitError as exc:
+            last_exc = exc
+            if attempt == _RETRY_ATTEMPTS:
+                raise OpenAIRetryExhaustedError(
+                    f"OpenAI rate limit persisted after {_RETRY_ATTEMPTS} attempts on stream connection."
+                ) from exc
+            delay = _RETRY_BASE_DELAY * (2 ** (attempt - 1))   # 5 s → 10 s
+            logger.warning(
+                "OpenAI RateLimitError on stream attempt %d/%d. Retrying in %.0f s.",
+                attempt,
+                _RETRY_ATTEMPTS,
+                delay,
+            )
+            await asyncio.sleep(delay)
+
+        except APIStatusError as exc:
+            if exc.status_code >= 500:
+                await _record_failure()
+            raise   # 5xx and 4xx both propagate immediately (no retry)
+
+    if stream is None:
+        raise OpenAIRetryExhaustedError(
+            f"Failed to establish OpenAI stream after {_RETRY_ATTEMPTS} attempts."
+        )
+
+    async for chunk in stream:
+        # Final usage chunk: choices is empty, usage is populated.
+        if not chunk.choices:
+            yield None, chunk.usage
+            continue
+        delta = chunk.choices[0].delta.content
+        if delta:
+            yield delta, None

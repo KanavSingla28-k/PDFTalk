@@ -17,8 +17,8 @@ from app.models.document import (
     DocumentUploadResponse,
 )
 from app.models.user import User
+from app.exceptions import DocumentNotFoundError
 from app.services.document_service import (
-    DocumentNotFoundError,
     count_user_documents,
     delete_document,
     get_document_for_user,
@@ -64,7 +64,6 @@ async def upload_document_endpoint(
 ) -> DocumentUploadResponse:
     """
     Upload a document for RAG ingestion.
-    # TODO T-42 — apply rate limit dependency: 5/min/user
     """
     document = await upload_document(current_user=current_user, file=file, db=db)
 
@@ -157,7 +156,7 @@ async def list_documents(
         total=total,
         limit=limit,
         offset=offset,
-        pages=math.ceil(total / limit) if limit else 0,
+        pages=math.ceil(total / limit),  # limit >= 1 validated by Query(ge=1)
     )
 
 
@@ -210,10 +209,15 @@ async def _list_with_count(
     limit: int,
     offset: int,
 ) -> tuple[list, int]:
-    """Run the paginated query and its COUNT sibling concurrently."""
-    import asyncio
-    items, total = await asyncio.gather(
-        get_user_documents(db=db, user_id=user_id, status=status, limit=limit, offset=offset),
-        count_user_documents(db=db, user_id=user_id, status=status),
+    """
+    Run the paginated query then the COUNT query sequentially on the same session.
+
+    asyncio.gather() on a shared AsyncSession is NOT safe — SQLAlchemy's async
+    session is not designed for concurrent use from multiple coroutines.
+    Sequential awaits are the correct pattern here.
+    """
+    items = await get_user_documents(
+        db=db, user_id=user_id, status=status, limit=limit, offset=offset
     )
+    total = await count_user_documents(db=db, user_id=user_id, status=status)
     return items, total

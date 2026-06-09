@@ -1,5 +1,5 @@
 """
-Unit tests for services/email_verification.py.
+Unit + endpoint tests for services/email_verification.py.
 
 What's tested:
   - Token generation produces a raw token and stores a hash (not the raw token).
@@ -9,15 +9,25 @@ What's tested:
   - Tokens are one-time-use: second call to verify_token raises ValueError.
   - Old tokens are deleted when a new one is generated for the same user.
   - `purge_expired_tokens` deletes only expired rows.
+  - `send_verification_email_for_user` enqueues a job on the RQ default queue
+    with the correct to_email and a verification URL (not the raw user_id).
+  - If the RQ queue raises, the exception propagates (coverage for queue-down path).
 
-Email sending is fully mocked — no real Resend calls.
+Email sending is fully mocked — no real Resend calls, no real Redis.
 DB uses an in-memory SQLite via SQLAlchemy (swap for async Postgres in CI).
+
+NOTE ON PATCHING:
+  email_verification.send_verification_email_for_user() does NOT call a
+  local `send_verification_email` helper.  It calls:
+      default_queue.enqueue("app.utils.email.send_verification_email_sync", ...)
+  Therefore all mocks target `app.services.email_verification.default_queue`,
+  which is the object actually used at the call site.
 """
 
 import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import MagicMock, patch, call
 
 import pytest
 import pytest_asyncio
@@ -73,6 +83,7 @@ async def test_generate_returns_raw_token(db):
 
 @pytest.mark.asyncio
 async def test_stored_hash_is_not_raw_token(db):
+    """The DB must store SHA-256(raw_token), never the raw token itself."""
     raw = await generate_and_store_verification_token(USER_ID, db)
     await db.commit()
 
@@ -80,7 +91,6 @@ async def test_stored_hash_is_not_raw_token(db):
     result = await db.execute(select(EmailVerification))
     record = result.scalar_one()
 
-    # The DB must store the hash, never the raw token.
     assert record.token_hash != raw
     assert record.token_hash == _sha256(raw)
 
@@ -117,20 +127,20 @@ async def test_verify_valid_token(db):
 
 @pytest.mark.asyncio
 async def test_verify_consumes_token(db):
-    """Token must be one-time-use."""
+    """Token must be one-time-use: second call raises ValueError."""
     raw = await generate_and_store_verification_token(USER_ID, db)
     await db.commit()
 
     await verify_token(raw, db)
     await db.commit()
 
-    with pytest.raises(ValueError, match="Invalid" or "Expired"):
+    with pytest.raises(ValueError, match="Invalid"):
         await verify_token(raw, db)
 
 
 @pytest.mark.asyncio
 async def test_verify_unknown_token_raises(db):
-    with pytest.raises(ValueError, match="Invalid" or "Expired"):
+    with pytest.raises(ValueError, match="Invalid"):
         await verify_token("completely-unknown-token", db)
 
 
@@ -140,7 +150,7 @@ async def test_verify_expired_token_raises(db):
     await db.commit()
 
     # Manually back-date the token so it's expired.
-    from sqlalchemy import select, update
+    from sqlalchemy import update
     import uuid as _uuid
     await db.execute(
         update(EmailVerification)
@@ -154,27 +164,94 @@ async def test_verify_expired_token_raises(db):
 
 
 # ── Tests: send_verification_email_for_user ───────────────────────────────────
+#
+# IMPORTANT: email_verification.py calls `default_queue.enqueue(...)`, NOT a
+# local `send_verification_email` function.  We therefore patch
+# `app.services.email_verification.default_queue` — the queue object that is
+# imported at module level and used at the call site.
 
 
 @pytest.mark.asyncio
-@patch("app.services.email_verification.send_verification_email", new_callable=AsyncMock)
-async def test_send_calls_email_util(mock_send, db):
-    await send_verification_email_for_user(USER_ID, EMAIL, db)
-    await db.commit()
+async def test_send_enqueues_job_on_default_queue(db):
+    """Happy path: a job is placed on the RQ default queue with correct args."""
+    fake_queue = MagicMock()
 
-    mock_send.assert_awaited_once()
-    call_kwargs = mock_send.call_args
-    assert call_kwargs.kwargs["to_email"] == EMAIL
-    assert USER_ID not in call_kwargs.kwargs["verification_url"]  # raw token, not user_id
-    assert "verify-email?token=" in call_kwargs.kwargs["verification_url"]
-
-
-@pytest.mark.asyncio
-@patch("app.services.email_verification.send_verification_email", new_callable=AsyncMock)
-async def test_send_failure_propagates(mock_send, db):
-    mock_send.side_effect = RuntimeError("Resend API down")
-    with pytest.raises(RuntimeError, match="Resend API down"):
+    with patch("app.services.email_verification.default_queue", fake_queue):
         await send_verification_email_for_user(USER_ID, EMAIL, db)
+        await db.commit()
+
+    # The queue must have been called exactly once.
+    fake_queue.enqueue.assert_called_once()
+
+    pos_args, kw_args = fake_queue.enqueue.call_args
+
+    # First positional arg is the import-path string of the worker function.
+    assert pos_args[0] == "app.utils.email.send_verification_email_sync"
+
+    # kwargs must carry to_email and a verification_url containing the token.
+    job_kwargs = kw_args.get("kwargs", {})
+    assert job_kwargs["to_email"] == EMAIL
+    assert "verify-email?token=" in job_kwargs["verification_url"]
+    # The raw user_id must NOT appear in the URL — it should be the token.
+    assert USER_ID not in job_kwargs["verification_url"]
+
+
+@pytest.mark.asyncio
+async def test_send_stores_token_hash_in_db(db):
+    """Token row must be persisted in the DB when the job is enqueued."""
+    fake_queue = MagicMock()
+
+    with patch("app.services.email_verification.default_queue", fake_queue):
+        await send_verification_email_for_user(USER_ID, EMAIL, db)
+        await db.commit()
+
+    from sqlalchemy import select
+    import uuid as _uuid
+    result = await db.execute(
+        select(EmailVerification)
+        .where(EmailVerification.user_id == _uuid.UUID(USER_ID))
+    )
+    record = result.scalar_one()
+    assert record is not None
+    assert record.token_hash  # non-empty hash stored
+
+
+@pytest.mark.asyncio
+async def test_send_queue_failure_propagates(db):
+    """
+    If the RQ queue raises (e.g. Redis is down), the exception must propagate
+    so the caller (registration endpoint) can handle it — not silently dropped.
+    """
+    fake_queue = MagicMock()
+    fake_queue.enqueue.side_effect = ConnectionError("Redis is down")
+
+    with patch("app.services.email_verification.default_queue", fake_queue):
+        with pytest.raises(ConnectionError, match="Redis is down"):
+            await send_verification_email_for_user(USER_ID, EMAIL, db)
+
+
+@pytest.mark.asyncio
+async def test_send_does_not_commit(db):
+    """
+    send_verification_email_for_user must NOT commit — that's the caller's job.
+    We verify the token row is only flushed (visible in the same session) but
+    the caller can still roll back if needed.
+    """
+    fake_queue = MagicMock()
+
+    with patch("app.services.email_verification.default_queue", fake_queue):
+        await send_verification_email_for_user(USER_ID, EMAIL, db)
+        # Do NOT commit here — simulate caller aborting after enqueue.
+        await db.rollback()
+
+    # After rollback, no token row should exist.
+    from sqlalchemy import select
+    import uuid as _uuid
+    result = await db.execute(
+        select(EmailVerification)
+        .where(EmailVerification.user_id == _uuid.UUID(USER_ID))
+    )
+    assert result.scalar_one_or_none() is None
 
 
 # ── Tests: purge_expired_tokens ───────────────────────────────────────────────
@@ -287,9 +364,6 @@ async def test_sweep_does_not_touch_other_users_expired_tokens(db):
 # These tests exercise the GET /auth/verify-email route via httpx AsyncClient.
 # They check only the redirect URL shape — DB state is covered by the service
 # tests above.
-#
-# Requires a `async_client` fixture in conftest.py that yields an httpx
-# AsyncClient pointed at the test app (same pattern as T-18 endpoint tests).
 
 
 @pytest.mark.asyncio

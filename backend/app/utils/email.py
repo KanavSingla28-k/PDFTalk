@@ -71,6 +71,24 @@ async def send_verification_email(to_email: str, verification_url: str) -> None:
         raise RuntimeError("Failed to send verification email") from exc
 
 
+def send_verification_email_sync(to_email: str, verification_url: str) -> None:
+    """
+    Synchronous entry point for use in RQ workers.
+
+    RQ runs in a sync context (no running event loop), so we use asyncio.run()
+    which is safe here. This function is referenced by import path string when
+    enqueuing email jobs onto the default queue.
+
+    Args:
+        to_email:         The recipient's email address.
+        verification_url: The fully-qualified verification URL.
+
+    Raises:
+        RuntimeError: If Resend returns an error (same as the async variant).
+    """
+    asyncio.run(send_verification_email(to_email=to_email, verification_url=verification_url))
+
+
 # ── Email templates ───────────────────────────────────────────────────────────
 
 

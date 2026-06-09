@@ -10,10 +10,10 @@ Responsibilities:
 Design notes:
   - The raw token is returned to the caller exactly once (to build the email URL)
     and never persisted server-side.
-  - If the DB or email send fails, the exception bubbles up. The registration
+  - If the DB write fails, the exception bubbles up. The registration
     endpoint (T-18) catches it.
-  - Later (when RQ is wired in T-28) replace `send_verification_email_for_user`
-    with an RQ job enqueue — the DB side stays identical.
+  - Email delivery is offloaded to the RQ "default" queue (T-28) — the HTTP
+    response is not blocked by the Resend API call.
 """
 
 import hashlib
@@ -22,12 +22,12 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import structlog
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.auth import EmailVerification
-from app.utils.email import send_verification_email
+from app.workers.queues import default_queue
 
 log = structlog.get_logger(__name__)
 
@@ -113,14 +113,17 @@ async def send_verification_email_for_user(
     db: AsyncSession,
 ) -> None:
     """
-    Full orchestration: generate token → store hash → send email.
+    Full orchestration: generate token → store hash → enqueue email job.
 
-    Called directly from the registration endpoint (T-18).
+    Called directly from the registration endpoint (T-18). Email delivery is
+    offloaded to the RQ "default" queue (T-28) so the HTTP response is not
+    blocked by the Resend API call.
 
-    TODO (T-28): Replace the `send_verification_email` call with an RQ job
-    enqueue so the HTTP response is not blocked by the Resend API call:
-        from app.workers.tasks import enqueue_verification_email
-        enqueue_verification_email(user_id, email, raw_token)
+    The RQ job calls `app.utils.email.send_verification_email_sync` by import
+    path string, which is safe because:
+      - The worker process has no running event loop (asyncio.run() is safe).
+      - The job carries only primitive values (strings) — no DB session crosses
+        the queue boundary.
 
     Args:
         user_id: UUID string of the newly registered user.
@@ -128,12 +131,14 @@ async def send_verification_email_for_user(
         db:      Active async DB session. Token is flushed within this session.
 
     Raises:
-        RuntimeError: If the email send fails (from utils/email.py).
         SQLAlchemyError: If the DB write fails.
     """
     raw_token = await generate_and_store_verification_token(user_id, db)
     verification_url = _build_verification_url(raw_token)
-    await send_verification_email(to_email=email, verification_url=verification_url)
+    default_queue.enqueue(
+        "app.utils.email.send_verification_email_sync",
+        kwargs={"to_email": email, "verification_url": verification_url},
+    )
 
 
 async def verify_token(raw_token: str, db: AsyncSession) -> str:
@@ -141,11 +146,15 @@ async def verify_token(raw_token: str, db: AsyncSession) -> str:
     Validate an incoming raw token from the verify-email endpoint (T-19).
 
     Checks:
-      1. Token hash exists in the DB.
-      2. Token has not expired.
+      1. Token hash exists in the DB and has not expired.
+      2. Row is locked FOR UPDATE so concurrent requests can't double-verify.
 
-    On success: deletes the token row (one-time-use) and returns the `user_id`.
-    On failure: raises ValueError with a generic message (do not reveal why).
+    On success:
+      - Deletes the token row (one-time-use).
+      - Marks user.is_verified = True in the same transaction.
+      - Returns the user_id string.
+
+    On failure: raises ValueError with a generic message.
 
     Args:
         raw_token: The raw token from the URL query param.
@@ -157,11 +166,18 @@ async def verify_token(raw_token: str, db: AsyncSession) -> str:
     Raises:
         ValueError: If the token is invalid or expired.
     """
+    from app.models.user import User
+
     token_hash = _hash_token(raw_token)
     now = datetime.now(timezone.utc)
 
+    # SELECT FOR UPDATE: locks the row so a second concurrent request that
+    # arrives before the DELETE commits will block and then see record=None
+    # (the row is gone), raising ValueError instead of double-verifying.
     result = await db.execute(
-        select(EmailVerification).where(EmailVerification.token_hash == token_hash)
+        select(EmailVerification)
+        .where(EmailVerification.token_hash == token_hash)
+        .with_for_update()
     )
     record: EmailVerification | None = result.scalar_one_or_none()
 
@@ -169,32 +185,36 @@ async def verify_token(raw_token: str, db: AsyncSession) -> str:
         log.warning("verification_token_not_found", token_hash=token_hash[:8] + "...")
         raise ValueError("Invalid verification token")
 
-    # T-19: Sweep all expired tokens for this user on every verification attempt.
-    # Avoids accumulation of stale rows without a separate cron job.
-    # Done before the expiry check so cleanup happens regardless of whether
-    # the current token is itself expired.
-    record_id = record.id
-    record_user_id = record.user_id
+    # Normalise timezone for SQLite compatibility.
     expires_at = record.expires_at
-
-    await _sweep_expired_tokens_for_user(db, record_user_id)
-
-    # SQLite strips timezone info; normalise to UTC for comparison.
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
+
     if expires_at < now:
-        # The sweep already deleted this row (it was expired).
-        # Nothing left to delete — just raise.
-        log.warning("verification_token_expired", user_id=record_user_id)
+        # Expired — sweep it and raise.
+        await db.execute(
+            delete(EmailVerification).where(EmailVerification.id == record.id)
+        )
+        await db.flush()
+        log.warning("verification_token_expired", user_id=record.user_id)
         raise ValueError("Invalid or expired verification token")
 
-    user_id = record_user_id
+    user_id = record.user_id
 
-    # One-time-use: delete the (valid, not-yet-swept) row.
+    # One-time-use: delete the token row.
     await db.execute(
-        delete(EmailVerification).where(EmailVerification.id == record_id)
+        delete(EmailVerification).where(EmailVerification.id == record.id)
     )
+
+    # Mark the user verified in the same transaction — atomic with the delete.
+    await db.execute(
+        update(User).where(User.id == user_id).values(is_verified=True)
+    )
+
     await db.flush()
+
+    # Also sweep any other stale tokens for this user as a cleanup courtesy.
+    await _sweep_expired_tokens_for_user(db, user_id)
 
     log.info("verification_token_consumed", user_id=user_id)
     return str(user_id)

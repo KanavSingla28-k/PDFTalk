@@ -58,7 +58,9 @@ from app.services.llm import stream_llm_response
 from app.utils.openai_client import (
     CircuitBreakerOpenError,
     DailyQuotaExceededError,
+    DailyQueryQuotaExceededError,
     OpenAIRetryExhaustedError,
+    check_and_increment_query_usage,
 )
 from app.utils.rate_limit import RateLimiter, user_id_from_request
 logger = logging.getLogger(__name__)
@@ -103,6 +105,12 @@ async def ask(
     All pre-stream validation runs before StreamingResponse is returned,
     so failures here produce normal HTTP error responses (not SSE events).
     """
+    # Step 2b: Daily query quota check (T-44).
+    # Runs before any embedding/LLM calls so over-quota users are rejected
+    # cheaply, before any OpenAI spend occurs. Raises DailyQueryQuotaExceededError
+    # which is mapped to 429 by register_exception_handlers().
+    await check_and_increment_query_usage(user_id=str(current_user.id))
+
     # Step 3: ownership + READY check
     # Raises DocumentNotFoundError (404) or DocumentNotReadyError (409).
     await validate_documents_for_query(
@@ -202,10 +210,18 @@ async def _sse_generator(
     except DailyQuotaExceededError:
         # Re-raised from llm.py's finally block after quota counter crosses
         # the limit. Tokens already yielded cannot be un-sent.
-        logger.warning("Daily quota exceeded mid-stream for user %s.", user_id)
+        logger.warning("Daily token quota exceeded mid-stream for user %s.", user_id)
         yield _error_event(
             "DAILY_QUOTA_EXCEEDED",
             "You have reached your daily usage limit. Please try again tomorrow.",
+        )
+
+    except DailyQueryQuotaExceededError:
+        # Theoretically fires mid-stream only if quota rolled over mid-response.
+        logger.warning("Daily query quota exceeded mid-stream for user %s.", user_id)
+        yield _error_event(
+            "DAILY_QUOTA_EXCEEDED",
+            "You have reached your daily query limit. Please try again tomorrow.",
         )
 
     except (CircuitBreakerOpenError, OpenAIRetryExhaustedError) as exc:

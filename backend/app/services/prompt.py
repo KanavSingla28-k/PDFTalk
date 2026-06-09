@@ -4,7 +4,8 @@ from app.services.retrieval import RetrievedChunk
 
 # Budget constants
 CONTEXT_TOKEN_BUDGET = 3_000
-ENCODER = tiktoken.get_encoding("o200k_base")
+ENCODER = tiktoken.get_encoding("cl100k_base")  # matches chunking.py + gpt-4o-mini / text-embedding-3-small
+
 
 SYSTEM_PROMPT = """You are a precise document assistant. Answer the user's question using ONLY the context provided below.
 

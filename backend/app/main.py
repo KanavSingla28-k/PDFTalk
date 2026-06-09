@@ -66,8 +66,3 @@ app.add_middleware(
 )
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestLoggingMiddleware)   # added last = outermost
-
-
-@app.get("/health")
-def health():
-    return {"status": "ok"}

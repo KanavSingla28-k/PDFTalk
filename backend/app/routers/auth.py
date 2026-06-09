@@ -18,8 +18,6 @@ from app.exceptions import (
     InvalidCredentialsError,
     UnverifiedEmailError
 )
-from sqlalchemy import select
-from app.models.user import User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -61,11 +59,23 @@ async def register(
     db: AsyncSession = Depends(get_db),
     _rate: None = Depends(_register_limiter),  # T-42 rate limit now wired up
 ) -> RegisterResponse:
-    await user_service.register(
-        db=db,
-        email=payload.email,
-        password=payload.password,
-    )
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+    try:
+        await user_service.register(
+            db=db,
+            email=payload.email,
+            password=payload.password,
+        )
+    except RuntimeError:
+        # Email delivery failed (e.g. Resend API error, unverified sender domain).
+        # The user row is already committed; return 202 so the frontend can
+        # prompt the user to check their inbox or request a resend.
+        # The error is already logged inside send_verification_email().
+        _log.warning(
+            "register: email delivery failed for %s — still returning 202",
+            payload.email,
+        )
     return RegisterResponse(message="Verification email sent")
 
 # ---------------------------------------------------------------------------
@@ -94,14 +104,13 @@ async def verify_email(
     Error slugs:
       - invalid_token  — hash not found (never existed, already used, tampered)
       - token_expired  — found but past its 24-hour window
+
+    is_verified is now set atomically inside verify_token() in the same
+    transaction as the token deletion, so there is no separate SELECT+UPDATE.
     """
     try:
-        user_id = await verify_token(raw_token=token, db=db)
-        import uuid as _uuid
-        result = await db.execute(select(User).where(User.id == _uuid.UUID(user_id)))
-        user = result.scalar_one_or_none()
-        if user:
-            user.is_verified = True
+        # verify_token() atomically deletes the token AND marks is_verified=True.
+        await verify_token(raw_token=token, db=db)
         await db.commit()
     except ValueError as exc:
         msg = str(exc).lower()
@@ -159,17 +168,11 @@ async def login(
     an attacker any signal about which check failed.
     """
 
-    access_token, raw_refresh_token, expires_in = await login_user(
+    access_token, raw_refresh_token, expires_in, user = await login_user(
         db=db,
         email=payload.email,
         password=payload.password,
     )
-
-    # Fetch user info for the response body (user already validated by login_user).
-    result = await db.execute(
-        select(User).where(User.email_lower == payload.email.lower().strip())
-    )
-    user = result.scalar_one()
 
     # ------------------------------------------------------------------
     # Set the refresh token as an httpOnly cookie.
@@ -250,10 +253,10 @@ async def refresh(
         # Token not found, already used, or expired.
         # Clear the stale cookie so the browser doesn't keep replaying it.
         response.delete_cookie(
-            key="refresh_token", 
+            key="refresh_token",
             path="/auth",
             secure=False,    #TODO: change to true once domain cert certification is done
-            samesite="lax",
+            samesite="strict",  # Must match set_cookie samesite exactly
             )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

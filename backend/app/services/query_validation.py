@@ -24,8 +24,14 @@ async def validate_documents_for_query(
     Returns the list of Document ORM objects on success.
     Raises DocumentNotFoundError or DocumentNotReadyError on failure.
     """
+    # Fetch only documents owned by this user — ownership enforced at DB level,
+    # not just in Python. This prevents loading other users' documents into the
+    # ORM session even temporarily.
     result = await db.execute(
-        select(Document).where(Document.id.in_(document_ids))
+        select(Document).where(
+            Document.id.in_(document_ids),
+            Document.user_id == user_id,
+        )
     )
     documents = result.scalars().all()
 
@@ -37,7 +43,7 @@ async def validate_documents_for_query(
 
         # Not found OR belongs to a different user → 404
         # The 404 (not 403) is intentional: a 403 would reveal the resource exists
-        if doc is None or doc.user_id != user_id:
+        if doc is None:
             raise DocumentNotFoundError(document_id=doc_id)
 
         if doc.status != DocumentStatus.READY:

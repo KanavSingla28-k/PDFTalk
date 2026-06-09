@@ -5,8 +5,9 @@ Streaming LLM service for RAG query responses.
 
 Responsibilities:
   - Accept a pre-built messages list from services/prompt.py (T-37)
-  - Stream tokens from gpt-4o-mini via openai_client.chat_complete()
-  - Count output tokens as they arrive (tiktoken, cl100k_base)
+  - Stream tokens from gpt-4o-mini via openai_client._stream_chat_with_usage()
+  - Capture API-reported output token count from the final stream chunk
+    (stream_options={"include_usage": True}, per T-44)
   - Update the user's daily token quota after the stream completes
   - Propagate circuit breaker / retry errors as-is for the router (T-39)
     to surface as SSE error events
@@ -15,14 +16,10 @@ Callers receive an async generator of str token strings. The generator
 raises on connection failure (before any tokens are yielded) and propagates
 mid-stream errors to the caller if they occur.
 
-Token counting note:
-  tiktoken does not tokenise delta strings the same way the API does
-  (the API counts BPE tokens; we count on raw delta text). The discrepancy
-  is typically <2% and acceptable for quota purposes. We do NOT call the
-  API's usage field because it is only populated on the final chunk with
-  stream_options={"include_usage": True}, which adds latency.
-  TODO (T-44): evaluate switching to stream_options usage field if
-  quota accuracy becomes important.
+Token counting:
+  Token counts come directly from the API's usage field on the final chunk
+  (stream_options={"include_usage": True}). This is accurate BPE token count
+  from the model itself, used for quota purposes.
 """
 
 from __future__ import annotations
@@ -30,11 +27,9 @@ from __future__ import annotations
 import logging
 from typing import AsyncIterator
 
-import tiktoken
 from openai.types.chat import ChatCompletionMessageParam
-from typing import cast
 from app.utils.openai_client import (
-    chat_complete,
+    _stream_chat_with_usage,
     check_and_increment_token_usage,
     CircuitBreakerOpenError,
     DailyQuotaExceededError,
@@ -42,10 +37,6 @@ from app.utils.openai_client import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Shared encoder — same family as the embedding model; instantiation is cheap
-# after the first call (tiktoken caches the vocab internally).
-_encoder = tiktoken.get_encoding("cl100k_base")
 
 _MODEL = "gpt-4o-mini"
 _MAX_TOKENS = 1024   # cap output; matches chat_complete default
@@ -71,27 +62,21 @@ async def stream_llm_response(
     tokens have already been yielded; the SSE router (T-39) catches these
     and emits a terminal error event.
     """
-    # chat_complete(stream=True) returns an async generator — connection is
-    # established (with retry) inside _stream_chat before the first yield.
-    # Any connection-phase exception (CircuitBreakerOpenError,
-    # OpenAIRetryExhaustedError, APIStatusError) propagates here before we
-    # enter the loop, so the caller sees a clean raise, not a broken generator.
-    token_stream = cast(
-        AsyncIterator[str],
-        await chat_complete(
-            messages=messages,
-            stream=True,
-            model=_MODEL,
-            max_tokens=_MAX_TOKENS,
-        ),
+    token_stream = _stream_chat_with_usage(
+        messages=messages,
+        model=_MODEL,
+        max_tokens=_MAX_TOKENS,
     )
 
     output_tokens = 0
 
     try:
-        async for token in token_stream:
-            output_tokens += len(_encoder.encode(token))
-            yield token
+        async for token, usage in token_stream:
+            if token is not None:
+                yield token
+            elif usage is not None:
+                # Final chunk — API-reported completion token count.
+                output_tokens = usage.completion_tokens or 0
     finally:
         # Always attempt quota accounting, even if the stream was cut short.
         # A partial response still consumed real tokens.
@@ -120,7 +105,7 @@ async def stream_llm_response(
                 )
 
         logger.debug(
-            "LLM stream complete for user %s: %d output tokens.",
+            "LLM stream complete for user %s: %d output tokens (API-reported).",
             user_id,
             output_tokens,
         )

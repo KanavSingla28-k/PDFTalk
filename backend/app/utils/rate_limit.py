@@ -51,7 +51,6 @@ The response includes a Retry-After header (seconds until the oldest request
 falls out of the window) so well-behaved clients know when to retry.
 """
 
-from openai.types.beta.realtime import conversation_item_input_audio_transcription_completed_event
 import time
 import logging
 from typing import Callable
@@ -127,23 +126,19 @@ class RateLimiter:
         now_ms = int(time.time() * 1000)
         window_start_ms = now_ms - (self.window_seconds * 1000)
 
-        # Sliding window pipeline — atomic via pipeline(transaction=True)
+        # Phase 1: remove expired entries + count current window atomically.
+        # ZADD is intentionally NOT in this pipeline — we only add the
+        # request timestamp if the count is within the limit (below).
         async with redis.pipeline(transaction=True) as pipe:
-            # 1. Remove timestamps older than the current window
             pipe.zremrangebyscore(redis_key, 0, window_start_ms)
-            # 2. Count remaining entries in the window
             pipe.zcard(redis_key)
-            # 3. Add current timestamp (score = member = now_ms for uniqueness)
-            pipe.zadd(redis_key, {uuid.uuid4().hex: now_ms})
-            # 4. Refresh TTL so the key doesn't linger after activity stops
-            pipe.expire(redis_key, self.window_seconds)
             results = await pipe.execute()
 
-        current_count: int = results[1]  # zcard result (before the new entry)
+        current_count: int = results[1]  # zcard result (after stale removal)
 
         if current_count >= self.limit:
+            # Request rejected — do NOT add to the sorted set.
             # Calculate seconds until the oldest entry falls out of the window.
-            # This is the minimum time the client must wait before retrying.
             oldest_score_result = await redis.zrange(redis_key, 0, 0, withscores=True)
             if oldest_score_result:
                 oldest_ms = int(oldest_score_result[0][1])
@@ -165,6 +160,12 @@ class RateLimiter:
             )
 
             raise RateLimitExceededError(retry_after)
+
+        # Phase 2: request is allowed — record it and refresh the TTL.
+        async with redis.pipeline(transaction=True) as pipe:
+            pipe.zadd(redis_key, {uuid.uuid4().hex: now_ms})
+            pipe.expire(redis_key, self.window_seconds)
+            await pipe.execute()
 
     # ------------------------------------------------------------------
     # Identifier helpers

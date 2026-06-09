@@ -20,10 +20,6 @@ def main() -> None:
         connection=conn,
         default_timeout=600,  # 10 min max per job — protects against hung PyMuPDF
     )
-    failed_q = Queue(
-        "failed",
-        connection=conn,
-    )
 
     worker = Worker(
         queues=[ingest_q],

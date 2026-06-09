@@ -3,9 +3,36 @@ Sets all required environment variables before any app module is imported.
 This prevents Settings() from failing on missing fields during test collection.
 
 These are dummy values — no real services are contacted in unit tests.
+
+IMPORTANT: os.environ.setdefault() calls MUST appear before any app import,
+because Settings() is instantiated at module-level in config.py the moment
+any app module is imported.
 """
 
 import os
+
+# ---------------------------------------------------------------------------
+# Environment setup — MUST be first, before any app.* import
+# ---------------------------------------------------------------------------
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://pdftalk:test@localhost/pdftalk_test")
+os.environ.setdefault("REDIS_URL", "redis://:test@localhost:6379")
+
+os.environ.setdefault("JWT_SECRET_KEY", "00000000000000000000000000000000000000000000000000000000000000ff")
+
+os.environ.setdefault("RESEND_API_KEY", "re_test_000000000000000000000000000000000000")
+os.environ.setdefault("FROM_EMAIL", "noreply@test.example.com")
+
+os.environ.setdefault("OPENAI_API_KEY", "sk-test-000000000000000000000000000000000000000000000000")
+os.environ.setdefault("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
+os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
+os.environ.setdefault("S3_BUCKET_NAME", "pdftalk-test-bucket")
+
+os.environ.setdefault("APP_URL", "http://localhost")
+
+# ---------------------------------------------------------------------------
+# App imports — safe after env vars are in place
+# ---------------------------------------------------------------------------
+
 import uuid
 
 import pytest
@@ -17,22 +44,6 @@ from sqlalchemy.orm import sessionmaker
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
-
-
-# Set vars before any app import touches pydantic-settings
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://pdftalk:test@localhost/pdftalk_test")
-os.environ.setdefault("REDIS_URL", "redis://:test@localhost:6379")
-
-os.environ.setdefault("JWT_SECRET", "00000000000000000000000000000000000000000000000000000000000000ff")
-
-os.environ.setdefault("RESEND_API_KEY", "re_test_000000000000000000000000000000000000")
-
-os.environ.setdefault("OPENAI_API_KEY", "sk-test-000000000000000000000000000000000000000000000000")
-os.environ.setdefault("AWS_ACCESS_KEY_ID", "AKIAIOSFODNN7EXAMPLE")
-os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
-os.environ.setdefault("S3_BUCKET_NAME", "pdftalk-test-bucket")
-
-os.environ.setdefault("APP_URL", "http://localhost")
 
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
@@ -51,12 +62,21 @@ def mock_redis(monkeypatch):
         fake_get_redis,
     )
 
-@pytest_asyncio.fixture(autouse=True)
+@pytest.fixture(autouse=True)
 def mock_email(monkeypatch):
-    async def fake_send_email(*args, **kwargs):
-        pass
-    monkeypatch.setattr("app.services.email_verification.send_verification_email", fake_send_email)
-    monkeypatch.setattr("app.utils.email.send_verification_email", fake_send_email)
+    """Prevent any real RQ enqueue calls during tests.
+
+    The email_verification service calls ``default_queue.enqueue(...)`` directly
+    (not a local send_verification_email function), so we patch the queue object
+    itself.  We also patch the sync email helper used inside RQ workers so that
+    any test which invokes it directly doesn't hit Resend.
+    """
+    from unittest.mock import MagicMock
+    fake_queue = MagicMock()
+    monkeypatch.setattr("app.services.email_verification.default_queue", fake_queue)
+    monkeypatch.setattr("app.workers.queues.default_queue", fake_queue)
+    # Also stub the sync worker-side helper so tests that call it don't hit Resend.
+    monkeypatch.setattr("app.utils.email.send_verification_email_sync", MagicMock())
 
 
 # ---------------------------------------------------------------------------

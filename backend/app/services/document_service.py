@@ -24,7 +24,7 @@ import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.exceptions import QuotaExceededError
+from app.exceptions import QuotaExceededError, DocumentNotFoundError
 from app.models.user import User
 from app.models.document import Document, DocumentStatus, _ALLOWED_TRANSITIONS
 from app.services.file_validation import FileValidationError, validate_upload
@@ -59,19 +59,6 @@ class InvalidStatusTransitionError(Exception):
         )
 
 
-class DocumentNotFoundError(Exception):
-    """Raised when a document lookup returns no row."""
-
-
-class DocumentOwnershipError(Exception):
-    """
-    Raised when the requesting user does not own the document.
-
-    Callers should surface this as HTTP 404, not 403 — to avoid
-    revealing that the resource exists.
-    """
-
-
 async def get_document_for_user(
     db: AsyncSession,
     document_id: uuid.UUID,
@@ -92,9 +79,7 @@ async def get_document_for_user(
     )
     doc = result.scalar_one_or_none()
     if doc is None:
-        raise DocumentNotFoundError(
-            f"Document {document_id} not found for user {user_id}"
-        )
+        raise DocumentNotFoundError(document_id=document_id)
     return doc
 
 async def transition_status(
@@ -153,14 +138,23 @@ async def count_user_documents(
     user_id: uuid.UUID,
     *,
     status: DocumentStatus | None = None,
+    exclude_failed: bool = False,
 ) -> int:
     """
     Count documents for a user, optionally filtered by status.
-    Used by GET /documents to populate DocumentListResponse.total.
+    Used by GET /documents to populate DocumentListResponse.total,
+    and by the quota check in upload_document.
+
+    Args:
+        exclude_failed: When True, FAILED documents are excluded from the
+            count. Used during quota enforcement so failed uploads don't
+            permanently reduce a user's quota capacity.
     """
     stmt = select(func.count(Document.id)).where(Document.user_id == user_id)
     if status is not None:
         stmt = stmt.where(Document.status == status.value)
+    if exclude_failed:
+        stmt = stmt.where(Document.status != DocumentStatus.FAILED.value)
     result = await db.execute(stmt)
     return result.scalar_one()
 
@@ -204,7 +198,7 @@ async def upload_document(
       2. File validation — MIME type, magic bytes, size
       3. S3 upload
       4. DB insert (status=PENDING)
-      5. TODO T-28 — enqueue RQ ingest job
+      5. Return the Document — caller (router) enqueues the RQ ingest job
  
     Returns:
         The newly created Document ORM object (id and status populated).
@@ -216,10 +210,13 @@ async def upload_document(
     """
     # ------------------------------------------------------------------ #
     # 1. Quota check — before reading a single byte of the upload         #
+    # Exclude FAILED documents: a user whose uploads consistently fail    #
+    # (e.g., corrupt PDFs) should not be permanently blocked.            #
     # ------------------------------------------------------------------ #
     active_count = await count_user_documents(
         db=db,
         user_id=current_user.id,
+        exclude_failed=True,
     )
     if active_count >= settings.MAX_DOCS_PER_USER:
         logger.warning(
@@ -307,19 +304,7 @@ async def upload_document(
                 s3_key=s3_key,
             )
         raise
- 
-    logger.info(
-        "document_db_created",
-        user_id=str(current_user.id),
-        document_id=str(document_id),
-        status=document.status,
-    )
- 
-    # ------------------------------------------------------------------ #
-    # 5. TODO T-28 — enqueue RQ ingest job                                #
-    #    queue.enqueue("workers.ingest.run", str(document_id))            #
-    # ------------------------------------------------------------------ #
- 
+
     return document
 
 async def delete_document(

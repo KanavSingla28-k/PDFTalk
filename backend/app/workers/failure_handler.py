@@ -13,12 +13,21 @@ from app.core.config import settings
 from app.models.document import Document
 from app.models.job_log import JobLog
 
-# Sync engine — failure handler runs in the worker process, not the async API
-_sync_engine = create_engine(
-    settings.DATABASE_URL.replace("+asyncpg", "+psycopg"),
-    pool_size=2,
-    max_overflow=0,
-)
+# Sync engine — created lazily on first use so a misconfigured DATABASE_URL
+# does not crash the worker process at startup (before any job is processed).
+_sync_engine = None
+
+
+def _get_engine():
+    global _sync_engine
+    if _sync_engine is None:
+        _sync_engine = create_engine(
+            settings.DATABASE_URL.replace("+asyncpg", "+psycopg"),
+            pool_size=2,
+            max_overflow=0,
+        )
+    return _sync_engine
+
 
 
 def handle_ingest_failure(
@@ -38,7 +47,7 @@ def handle_ingest_failure(
 
     tb_str = "".join(traceback.format_tb(tb))
 
-    with Session(_sync_engine) as session:
+    with Session(_get_engine()) as session:
         doc = session.get(Document, uuid.UUID(document_id))
         if doc:
             doc.status = "FAILED"
