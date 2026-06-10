@@ -59,6 +59,30 @@ services:
     networks:
       - internal
 
+  worker:
+    build:
+      context: ./backend
+
+    environment:
+      ENV_FILE: .env.docker
+    env_file:
+      - ./backend/.env.docker
+
+    volumes:
+      - ./backend:/app
+      - /app/.venv
+
+    command: .venv/bin/python -m app.workers.worker
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+    networks:
+      - internal
+
   nginx:
     image: nginx:alpine
 

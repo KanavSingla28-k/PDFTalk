@@ -77,6 +77,73 @@ async def test_register_duplicate_email(async_client: AsyncClient):
     assert response.status_code == 202
     assert response.json()["message"] == "Verification email sent"
 
+
+# ---------------------------------------------------------------------------
+# Resend Verification
+# ---------------------------------------------------------------------------
+
+async def test_resend_verification_unverified_success(async_client: AsyncClient, db: AsyncSession):
+    # 1. Register unverified user
+    await async_client.post(
+        "/auth/register",
+        json={"email": "resend_unverified@example.com", "password": TEST_PASSWORD}
+    )
+
+    # 2. Resend verification
+    response = await async_client.post(
+        "/auth/resend-verification",
+        json={"email": "resend_unverified@example.com"}
+    )
+    assert response.status_code == 202
+    assert response.json()["message"] == "Verification email sent"
+
+    # Verify a token exists in the DB
+    result = await db.execute(select(User).where(User.email_lower == "resend_unverified@example.com"))
+    user = result.scalar_one()
+    result_token = await db.execute(select(EmailVerification).where(EmailVerification.user_id == user.id))
+    assert result_token.scalar_one_or_none() is not None
+
+
+async def test_resend_verification_verified_silent_success(async_client: AsyncClient, db: AsyncSession):
+    # 1. Register and verify user
+    await async_client.post(
+        "/auth/register",
+        json={"email": "resend_verified@example.com", "password": TEST_PASSWORD}
+    )
+    await make_user_verified(db, "resend_verified@example.com")
+
+    # Delete any existing verifications to test no-op
+    result = await db.execute(select(User).where(User.email_lower == "resend_verified@example.com"))
+    user = result.scalar_one()
+    from sqlalchemy import delete
+    await db.execute(delete(EmailVerification).where(EmailVerification.user_id == user.id))
+    await db.commit()
+
+    # 2. Resend verification
+    response = await async_client.post(
+        "/auth/resend-verification",
+        json={"email": "resend_verified@example.com"}
+    )
+    # Must still return 202
+    assert response.status_code == 202
+    assert response.json()["message"] == "Verification email sent"
+
+    # Verify NO token was generated in the DB
+    result_token = await db.execute(select(EmailVerification).where(EmailVerification.user_id == user.id))
+    assert result_token.scalar_one_or_none() is None
+
+
+async def test_resend_verification_nonexistent_user_silent_success(async_client: AsyncClient, db: AsyncSession):
+    # Resend for nonexistent email
+    response = await async_client.post(
+        "/auth/resend-verification",
+        json={"email": "nonexistent_resend@example.com"}
+    )
+    # Must still return 202 to prevent enumeration
+    assert response.status_code == 202
+    assert response.json()["message"] == "Verification email sent"
+
+
 # ---------------------------------------------------------------------------
 # T-19: Email Verification
 # ---------------------------------------------------------------------------

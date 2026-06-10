@@ -21,13 +21,18 @@ def main() -> None:
         default_timeout=600,  # 10 min max per job — protects against hung PyMuPDF
     )
 
+    default_q = Queue(
+        "default",
+        connection=conn,
+    )
+
     worker = Worker(
-        queues=[ingest_q],
+        queues=[ingest_q, default_q],
         connection=conn,
         exception_handlers=[],  # RQ's built-in handler moves to failed queue
     )
 
-    logger.info("RQ worker starting — listening on 'ingest' queue")
+    logger.info("RQ worker starting — listening on 'ingest' and 'default' queues")
     worker.work(with_scheduler=True)  # --with-scheduler handles retry timing
 
 

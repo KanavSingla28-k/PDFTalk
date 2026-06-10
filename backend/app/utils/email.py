@@ -23,7 +23,8 @@ log = structlog.get_logger(__name__)
 
 # Initialise Resend with the API key once at import time.
 # The SDK uses this globally — no per-call auth needed.
-resend.api_key = settings.RESEND_API_KEY
+if not settings.LOG_EMAILS_ONLY:
+    resend.api_key = settings.RESEND_API_KEY
 
 # ── Sender identity ───────────────────────────────────────────────────────────
 # Must match a verified domain in your Resend dashboard.
@@ -58,6 +59,21 @@ async def send_verification_email(to_email: str, verification_url: str) -> None:
         "html": html_body,
         "text": text_body,
     }
+
+    if settings.LOG_EMAILS_ONLY:
+        log.info(
+            "verification_email_logged_only",
+            to=to_email,
+            subject="Verify your PDFTalk account",
+            verification_url=verification_url,
+        )
+        print(f"\n==================================================")
+        print(f"EMAIL SENT (LOG_EMAILS_ONLY = True)")
+        print(f"To: {to_email}")
+        print(f"Subject: Verify your PDFTalk account")
+        print(f"Verification URL: {verification_url}")
+        print(f"==================================================\n")
+        return
 
     try:
         # Resend's Python SDK is synchronous. Run it in a thread pool so we

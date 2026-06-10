@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 
-import { register } from '@/lib/auth.api';
+import { register, resendVerification } from '@/lib/auth.api';
 import { ApiError, ERROR_CODES } from '@/lib/api';
 import { emailSchema, type EmailFormValues } from '@/lib/auth.schemas';
 import { Button, Input, FormError } from '@/components/ui';
@@ -55,9 +55,8 @@ function ResendForm({
     setSubmitError(null);
     setIsSubmitting(true);
     try {
-      // POST /auth/register with the email re-sends the verification if unverified.
-      // The backend always returns 202 — no user enumeration.
-      await register({ email: data.email, password: '' });
+      // Use the dedicated resend verification route
+      await resendVerification({ email: data.email });
       setSent(true);
       toast.success('Verification email sent! Check your inbox.');
     } catch (err) {

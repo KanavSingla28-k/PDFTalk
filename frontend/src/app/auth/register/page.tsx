@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 
-import { register } from '@/lib/auth.api';
+import { register, resendVerification } from '@/lib/auth.api';
 import { ApiError, ERROR_CODES } from '@/lib/api';
 import { registerSchema, type RegisterFormValues } from '@/lib/auth.schemas';
 import { Button, Input, PasswordInput, FormError } from '@/components/ui';
@@ -148,13 +148,13 @@ export default function RegisterPage() {
     }
   };
 
-  // Resend: call the same register endpoint with the confirmed email
+  // Resend: call the dedicated resend endpoint
   const handleResend = async () => {
     if (!confirmedEmail || isResending) return;
     setIsResending(true);
     try {
-      await register({ email: confirmedEmail, password: '' });
-      // 202 always returned — even with empty password for re-send path
+      await resendVerification({ email: confirmedEmail });
+      toast.success('Verification email sent! Check your inbox.');
     } catch (err) {
       if (err instanceof ApiError && err.code === ERROR_CODES.RATE_LIMIT_EXCEEDED) {
         const seconds = err.retryAfter ?? 60;

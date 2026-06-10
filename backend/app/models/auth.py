@@ -86,6 +86,10 @@ class RegisterResponse(BaseModel):
     message: str
 
 
+class ResendVerificationRequest(BaseModel):
+    email: EmailStr
+
+
 class LoginRequest(BaseModel):
     """
     POST /auth/login request body.

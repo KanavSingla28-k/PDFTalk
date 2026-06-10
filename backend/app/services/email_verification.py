@@ -50,10 +50,16 @@ def _hash_token(raw_token: str) -> str:
 def _build_verification_url(raw_token: str) -> str:
     """
     Build the full URL that goes into the verification email.
-    APP_URL comes from settings (e.g. "https://pdftalk.com" in prod,
-    "http://localhost:3000" in dev).
+    In local development, the frontend is on port 3000/3001, and the backend
+    API is on port 8000. The verification link must point directly to the
+    backend API so it can process the token and redirect back to the frontend.
     """
-    return f"{settings.APP_URL}/verify-email?token={raw_token}"
+    if "localhost:300" in settings.APP_URL or "127.0.0.1:300" in settings.APP_URL:
+        api_url = "http://localhost:8000"
+    else:
+        # In production/Nginx environment, API is routed through /api
+        api_url = f"{settings.APP_URL.rstrip('/')}/api"
+    return f"{api_url}/auth/verify-email?token={raw_token}"
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

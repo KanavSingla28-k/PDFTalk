@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 
-import { login, register } from '@/lib/auth.api';
+import { login, register, resendVerification } from '@/lib/auth.api';
 import { ApiError, ERROR_CODES } from '@/lib/api';
 import { loginSchema, type LoginFormValues } from '@/lib/auth.schemas';
 import { Button, Input, PasswordInput, FormError } from '@/components/ui';
@@ -131,13 +131,13 @@ function LoginForm() {
     }
   };
 
-  // ── Resend verification (calls POST /auth/register again) ───────────────
+  // ── Resend verification (calls POST /auth/resend-verification) ──────────
   const handleResend = async () => {
     const email = unverifiedEmail ?? getValues('email');
     if (!email || isResending) return;
     setIsResending(true);
     try {
-      await register({ email, password: '' });
+      await resendVerification({ email });
       toast.success('Verification email resent. Check your inbox.');
     } catch (err) {
       if (err instanceof ApiError && err.code === ERROR_CODES.RATE_LIMIT_EXCEEDED) {

@@ -10,7 +10,7 @@ from app.auth.tokens import (
 )
 from app.core.config import settings
 from app.db.session import get_db
-from app.models.auth import RegisterRequest, RegisterResponse, LoginRequest, LoginResponse, UserInfo, RefreshResponse
+from app.models.auth import RegisterRequest, RegisterResponse, LoginRequest, LoginResponse, UserInfo, RefreshResponse, ResendVerificationRequest
 from app.services import user_service
 from app.services.email_verification import verify_token
 from app.services.user_service import login as login_user
@@ -30,6 +30,12 @@ _register_limiter = RateLimiter(
     limit=5,
     window_seconds=3600,  # 5 registrations per IP per hour (T-18 spec)
     key_prefix="register",
+)
+
+_resend_limiter = RateLimiter(
+    limit=5,
+    window_seconds=3600,  # 5 resends per IP per hour
+    key_prefix="resend",
 )
 
 _login_limiter = RateLimiter(
@@ -78,6 +84,46 @@ async def register(
         )
     return RegisterResponse(message="Verification email sent")
 
+
+@router.post(
+    "/resend-verification",
+    response_model=RegisterResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Resend verification email",
+    description=(
+        "Resends a verification email for an unverified account. "
+        "Always returns 202 regardless of whether the email is registered or verified, "
+        "to prevent user enumeration."
+    ),
+)
+async def resend_verification(
+    payload: ResendVerificationRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _rate: None = Depends(_resend_limiter),
+) -> RegisterResponse:
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+    email_lower = payload.email.strip().lower()
+
+    existing = await user_service.get_by_email_lower(db, email_lower)
+
+    if existing is not None:
+        if not existing.is_verified:
+            try:
+                # Delete the stale verification row first so we don't accumulate orphaned tokens
+                await user_service._delete_pending_verification(db, existing.id)
+                await user_service.send_verification_email_for_user(str(existing.id), existing.email, db)
+                await db.commit()
+            except Exception as exc:
+                _log.warning(
+                    "resend_verification: email delivery failed for %s: %s",
+                    existing.email,
+                    exc,
+                )
+    return RegisterResponse(message="Verification email sent")
+
+
 # ---------------------------------------------------------------------------
 # T-19 — Email verification
 # ---------------------------------------------------------------------------
@@ -116,12 +162,12 @@ async def verify_email(
         msg = str(exc).lower()
         slug = "token_expired" if "expired" in msg else "invalid_token"
         return RedirectResponse(
-            url=f"{settings.APP_URL}/verify-email?error={slug}",
+            url=f"{settings.APP_URL}/auth/verify-email?error={slug}",
             status_code=302,
         )
 
     return RedirectResponse(
-        url=f"{settings.APP_URL}/login?verified=true",
+        url=f"{settings.APP_URL}/auth/login?verified=true",
         status_code=302,
     )
 

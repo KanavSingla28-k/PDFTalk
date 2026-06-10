@@ -66,6 +66,23 @@ export async function register(data: RegisterRequest): Promise<RegisterResponse>
   });
 }
 
+export interface ResendVerificationRequest {
+  email: string;
+}
+
+/**
+ * POST /auth/resend-verification
+ *
+ * Request resending verification email. Always returns 202.
+ */
+export async function resendVerification(data: ResendVerificationRequest): Promise<RegisterResponse> {
+  return apiRequest<RegisterResponse>('/auth/resend-verification', {
+    method: 'POST',
+    body: JSON.stringify(data),
+    skipAuth: true,
+  });
+}
+
 /**
  * POST /auth/login
  *

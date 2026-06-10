@@ -24,10 +24,7 @@ class Settings(BaseSettings):
     AWS_REGION: str = "ap-south-1"
     S3_BUCKET_NAME: str
 
-    SMTP_HOST: Optional[str] = None
-    SMTP_PORT: Optional[int] = None
-    SMTP_USER:Optional[str] = None
-    SMTP_PASSWORD: Optional[str] = None
+    LOG_EMAILS_ONLY: bool = False
 
     APP_URL: str
 

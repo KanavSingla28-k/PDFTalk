@@ -56,13 +56,21 @@ app.include_router(health_router)
 #   - measures total wall-clock time including all middleware
 #   - catches exceptions from every inner layer
 # ---------------------------------------------------------------------------
-app.add_middleware(
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestLoggingMiddleware)
+
+allowed_origins = [settings.APP_URL]
+if settings.APP_URL.startswith("http://localhost"):
+    for port in ["3000", "3001", "3002"]:
+        allowed_origins.append(f"http://localhost:{port}")
+        allowed_origins.append(f"http://127.0.0.1:{port}")
+allowed_origins = list(set(allowed_origins))
+
+app.add_middleware(                          # added last = outermost
     CORSMiddleware,
-    allow_origins=[settings.APP_URL],
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
     max_age=600,
 )
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(RequestLoggingMiddleware)   # added last = outermost

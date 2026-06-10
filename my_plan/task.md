@@ -228,6 +228,11 @@ This task list integrates `pdftalk_mvp_tasklist.md` with `frontend_api_reference
   - `[ ]` End-to-end smoke test: Register → Verify email → Login → Upload PDF → Poll to READY → Ask question → Assert non-empty streamed answer → Logout.
   - `[ ]` Execute final security and launch checklist (see `pdftalk_mvp_tasklist.md` T-63).
 
+- `[ ]` **T-64: Password Reset Flow Implementation**
+  - `[ ]` Add `/auth/reset-password` API endpoints (request + confirm).
+  - `[ ]` Add frontend routes `/auth/forgot-password` and `/auth/reset-password`.
+  - `[ ]` Build verification templates and test flows.
+
 ---
 
 ## Open Design Decisions

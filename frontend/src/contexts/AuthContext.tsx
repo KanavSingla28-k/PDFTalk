@@ -120,8 +120,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         scheduleRefresh(data.expires_in);
         
       } catch (err) {
-        if (!mounted) return;
         clearSession();
+        if (!mounted) return;
         
         // Only redirect to login if we're on a protected route
         const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname?.startsWith(route));
