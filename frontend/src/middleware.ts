@@ -8,25 +8,26 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
-  // Basic proxy signal: httpOnly refresh cookie presence means "probably logged in".
+  // Basic proxy signal: presence of session proxy cookie means "probably logged in".
   // Real validation happens server-side / in AuthContext on the client.
-  const hasRefreshToken = request.cookies.has('refresh_token');
+  const hasSession = request.cookies.has('pdftalk_logged_in');
 
   // Unauthenticated on a protected route → send to login
-  if (!hasRefreshToken && !isPublicRoute && pathname !== '/') {
+  if (!hasSession && !isPublicRoute && pathname !== '/') {
     const loginUrl = new URL('/auth/login', request.url);
     loginUrl.searchParams.set('next', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
   // Authenticated trying to hit a public auth page → send to dashboard
-  if (hasRefreshToken && isPublicRoute) {
+  if (hasSession && isPublicRoute) {
     return NextResponse.redirect(new URL('/dashboard/documents', request.url));
   }
 
-  // Root → redirect to login (or dashboard if authed — caught above)
+  // Root → redirect to login (or dashboard if authed)
   if (pathname === '/') {
-    return NextResponse.redirect(new URL('/auth/login', request.url));
+    const target = hasSession ? '/dashboard/documents' : '/auth/login';
+    return NextResponse.redirect(new URL(target, request.url));
   }
 
   return NextResponse.next();

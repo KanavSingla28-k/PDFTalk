@@ -48,6 +48,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setState({ user: null, accessToken: null, isLoading: false });
     accessTokenRef.current = null;
     sessionStorage.removeItem('pdftalk_user');
+    if (typeof window !== 'undefined') {
+      document.cookie = "pdftalk_logged_in=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict";
+    }
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = null;
@@ -72,6 +75,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = await refreshToken();
         accessTokenRef.current = data.access_token;
         setState((prev) => ({ ...prev, accessToken: data.access_token }));
+        if (typeof window !== 'undefined') {
+          document.cookie = "pdftalk_logged_in=true; path=/; max-age=604800; SameSite=Strict";
+        }
         scheduleRefresh(data.expires_in);
       } catch (err) {
         // Silent refresh failed -> session dead
@@ -86,6 +92,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await refreshToken();
     accessTokenRef.current = data.access_token;
     setState((prev) => ({ ...prev, accessToken: data.access_token }));
+    if (typeof window !== 'undefined') {
+      document.cookie = "pdftalk_logged_in=true; path=/; max-age=604800; SameSite=Strict";
+    }
     scheduleRefresh(data.expires_in);
     return data.access_token;
   }, [scheduleRefresh]);
@@ -117,6 +126,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const user = storedUser ? JSON.parse(storedUser) : null;
 
         setState({ user, accessToken: data.access_token, isLoading: false });
+        if (typeof window !== 'undefined') {
+          document.cookie = "pdftalk_logged_in=true; path=/; max-age=604800; SameSite=Strict";
+        }
         scheduleRefresh(data.expires_in);
         
       } catch (err) {
@@ -150,6 +162,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       accessTokenRef.current = access_token;
       setState({ user, accessToken: access_token, isLoading: false });
+      if (typeof window !== 'undefined') {
+        document.cookie = "pdftalk_logged_in=true; path=/; max-age=604800; SameSite=Strict";
+      }
       scheduleRefresh(expires_in);
     };
 
