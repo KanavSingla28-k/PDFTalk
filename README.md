@@ -17,7 +17,3 @@ Frontend:
 ## Development
 
 make dev
-
-## Testing
-
-make test

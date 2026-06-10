@@ -71,4 +71,3 @@ def build_document_s3_key(user_id: str, document_id: str, filename: str) -> str:
 
 # Singleton — import this everywhere
 s3_client = S3Client()
-

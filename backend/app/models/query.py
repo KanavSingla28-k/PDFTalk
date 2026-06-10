@@ -24,5 +24,3 @@ class QueryRequest(BaseModel):
         if len(v) > 1000:
             raise ValueError("question must not exceed 1000 characters")
         return v
-
-

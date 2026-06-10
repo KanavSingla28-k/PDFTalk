@@ -3,7 +3,12 @@
 .env.*
 !.env.example
 backend/.env
-frontend/.env.local
+backend/.env.*
+!backend/.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+postman
 
 # Python
 __pycache__/

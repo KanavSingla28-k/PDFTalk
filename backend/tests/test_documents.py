@@ -289,6 +289,12 @@ class TestListDocuments:
         doc_a = await _seed_document(db, verified_user.id, filename="older.pdf")
         doc_b = await _seed_document(db, verified_user.id, filename="newer.pdf")
 
+        # Explicitly backdate doc_a to prevent identical timestamp sorting issues on fast SQLite in-memory tests
+        from datetime import datetime, timedelta, timezone
+        doc_a.created_at = datetime.now(timezone.utc) - timedelta(seconds=10)
+        db.add(doc_a)
+        await db.commit()
+
         resp = await async_client.get("/documents", headers=auth_headers)
         body = resp.json()
         ids = [item["document_id"] for item in body["items"]]

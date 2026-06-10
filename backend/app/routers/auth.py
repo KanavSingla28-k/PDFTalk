@@ -57,7 +57,7 @@ async def register(
     payload: RegisterRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    _rate: None = Depends(_register_limiter),  # T-42 rate limit now wired up
+    _rate: None = Depends(_register_limiter),
 ) -> RegisterResponse:
     import logging as _logging
     _log = _logging.getLogger(__name__)
