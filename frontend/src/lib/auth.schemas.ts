@@ -45,3 +45,17 @@ export const emailSchema = z.object({
 });
 
 export type EmailFormValues = z.infer<typeof emailSchema>;
+
+// ─── Reset Password schema ────────────────────────────────────────────────────
+
+export const resetPasswordSchema = z
+  .object({
+    password: passwordSchema,
+    confirmPassword: z.string().min(1, 'Please confirm your password'),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords don't match",
+    path: ['confirmPassword'],
+  });
+
+export type ResetPasswordFormValues = z.infer<typeof resetPasswordSchema>;

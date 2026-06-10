@@ -51,3 +51,6 @@ class User(Base):
     email_verifications: Mapped[list["EmailVerification"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    password_resets: Mapped[list["PasswordReset"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )

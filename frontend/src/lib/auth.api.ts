@@ -152,3 +152,33 @@ export async function logout(): Promise<void> {
     // Best-effort: if the request fails (e.g. network error), we still clear local state
   });
 }
+
+/**
+ * POST /auth/forgot-password
+ *
+ * Always returns 202 regardless of whether the email already exists.
+ * Throws ApiError on 429 (rate limit).
+ */
+export async function forgotPassword(email: string): Promise<void> {
+  await apiRequest<void>('/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+    skipAuth: true,
+  });
+}
+
+/**
+ * POST /auth/reset-password
+ *
+ * Returns 200 on success.
+ * Throws ApiError on:
+ *   400 INVALID_OR_EXPIRED_TOKEN
+ *   422 Validation error (password too weak)
+ */
+export async function resetPassword(token: string, newPassword: string): Promise<void> {
+  await apiRequest<void>('/auth/reset-password', {
+    method: 'POST',
+    body: JSON.stringify({ token, new_password: newPassword }),
+    skipAuth: true,
+  });
+}

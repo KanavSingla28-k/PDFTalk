@@ -223,15 +223,34 @@ This task list integrates `pdftalk_mvp_tasklist.md` with `frontend_api_reference
 
 - `[ ]` **T-60: Backend unit tests**
 - `[ ]` **T-61: Backend integration tests**
-- `[ ]` **T-62: Backup automation**
+- `[x]` **T-68: Walkthrough and wrap-up**
 - `[ ]` **T-63: Production smoke test + launch checklist**
   - `[ ]` End-to-end smoke test: Register → Verify email → Login → Upload PDF → Poll to READY → Ask question → Assert non-empty streamed answer → Logout.
   - `[ ]` Execute final security and launch checklist (see `pdftalk_mvp_tasklist.md` T-63).
 
-- `[ ]` **T-64: Password Reset Flow Implementation**
-  - `[ ]` Add `/auth/reset-password` API endpoints (request + confirm).
-  - `[ ]` Add frontend routes `/auth/forgot-password` and `/auth/reset-password`.
-  - `[ ]` Build verification templates and test flows.
+- `[x]` **T-64: Password_resets table + Alembic migration**
+  - `[x]` Add `password_resets` table to the schema. Columns: `id` UUID PK, `user_id` UUID FK→users CASCADE, `token_hash` TEXT UNIQUE NOT NULL, `expires_at` TIMESTAMPTZ NOT NULL, `created_at` TIMESTAMPTZ DEFAULT NOW(). Add index on `token_hash` and on `user_id`.
+  - `[ ]` Write Alembic migration. (Failed due to local DB connection timeout. Must be run when DB is up: `uv run alembic revision --autogenerate -m "Add password_resets table"`)
+  - `[x]` Add `PasswordReset` SQLAlchemy model in `backend/app/models/auth.py` (alongside RefreshToken / EmailVerification).
+- `[x]` **T-65: Password reset service**
+  - `[x]` Create `backend/app/services/password_reset.py` with three functions:
+    - `initiate_password_reset(email: str, db)`: looks up user by email_lower; if not found, returns silently; if found but is_verified=False, enqueues verification email; if found and verified, deletes any existing reset tokens, generates raw token, stores SHA-256 hash with 1 hour expiry, enqueues reset email via RQ.
+    - `send_password_reset_email(user_id, raw_token)`: RQ-compatible sync function; builds reset URL, sends via Resend. Add HTML + plain-text templates to `app/utils/email.py`.
+    - `consume_reset_token(raw_token: str, new_password: str, db)`: hashes token, looks up in DB, validates not expired, validates password strength, calls hash_password(), updates user.password_hash, deletes the reset token row, deletes all refresh tokens for that user (session invalidation). Raises `InvalidTokenError`.
+- `[x]` **T-66: Forgot-password + reset-password endpoints**
+  - `[x]` Add to `backend/app/routers/auth.py`:
+    - `POST /auth/forgot-password`: rate-limited at 3/hr/IP (`_reset_limiter`). Body: `{ email }`. Calls `initiate_password_reset()`. Always returns 202 `{ message: "If an account with that email exists, you'll receive an email shortly." }`.
+    - `POST /auth/reset-password`: no auth required. Body: `{ token, new_password }`. Validates password strength. Calls `consume_reset_token()`. On success returns 200 `{ message: "Password updated. Please log in." }`. On error returns 400 `{ code: "INVALID_OR_EXPIRED_TOKEN" }`.
+  - `[x]` Discuss / evaluate adding `GET /auth/me`.
+- `[x]` **T-67: Frontend: forgot-password + reset-password pages**
+  - `[x]` Update `src/lib/auth.api.ts`: add `forgotPassword(email)` and `resetPassword(token, newPassword)`.
+  - `[x]` Create `src/app/(auth)/forgot-password/page.tsx`: Zod form with email. Shows uniform confirmation message.
+  - `[x]` Create `src/app/(auth)/reset-password/page.tsx`: reads `?token=` from URL. Zod form with newPassword + confirmPassword. On success redirect to login. On `INVALID_OR_EXPIRED_TOKEN` show inline error with link back to forgot-password. On missing token redirect to forgot-password.
+  - `[x]` Add "Forgot your password?" link to the login page pointing to `/forgot-password`.
+- `[ ]` **T-68: Password reset integration tests**
+  - `[ ]` Test `POST /auth/forgot-password`: unknown email, unverified email, verified email, rate limit exceeded.
+  - `[ ]` Test `POST /auth/reset-password`: valid token (login possible, old sessions invalidated), expired token, used token, invalid format, weak password.
+  - `[ ]` Confirm session invalidation logic works correctly.
 
 ---
 

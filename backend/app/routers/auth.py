@@ -10,10 +10,12 @@ from app.auth.tokens import (
 )
 from app.core.config import settings
 from app.db.session import get_db
-from app.models.auth import RegisterRequest, RegisterResponse, LoginRequest, LoginResponse, UserInfo, RefreshResponse, ResendVerificationRequest
+from app.models.auth import RegisterRequest, RegisterResponse, LoginRequest, LoginResponse, UserInfo, RefreshResponse, ResendVerificationRequest, ForgotPasswordRequest, ResetPasswordRequest
 from app.services import user_service
 from app.services.email_verification import verify_token
+from app.services.password_reset import initiate_password_reset, consume_reset_token
 from app.services.user_service import login as login_user
+from app.auth.dependencies import get_verified_user
 from app.exceptions import (
     InvalidCredentialsError,
     UnverifiedEmailError
@@ -42,6 +44,12 @@ _login_limiter = RateLimiter(
     limit=10,
     window_seconds=60,  # 10 login attempts per IP per minute (T-20 spec)
     key_prefix="login",
+)
+
+_reset_limiter = RateLimiter(
+    limit=3,
+    window_seconds=3600,  # 3 password resets per IP per hour
+    key_prefix="reset",
 )
 
 # ---------------------------------------------------------------------------
@@ -375,3 +383,63 @@ async def logout(
         samesite="strict",
         secure=False,        # TODO: flip to True once TLS cert is in place (T-10)
     )
+
+# ---------------------------------------------------------------------------
+# T-47 — Get Current User
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/me",
+    response_model=UserInfo,
+    summary="Get current logged-in user",
+)
+async def get_me(
+    user=Depends(get_verified_user),
+) -> UserInfo:
+    return UserInfo.model_validate(user)
+
+
+# ---------------------------------------------------------------------------
+# T-66 — Password Reset
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/forgot-password",
+    response_model=RegisterResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Request a password reset",
+)
+async def forgot_password(
+    payload: ForgotPasswordRequest,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    _rate: None = Depends(_reset_limiter),
+) -> RegisterResponse:
+    import structlog
+    _log = structlog.get_logger(__name__)
+    
+    try:
+        await initiate_password_reset(email=payload.email, db=db)
+    except Exception as exc:
+        _log.error("forgot_password_failed", email=payload.email, error=str(exc))
+        
+    return RegisterResponse(message="If an account with that email exists, you'll receive an email shortly.")
+
+
+@router.post(
+    "/reset-password",
+    response_model=RegisterResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Reset password with token",
+)
+async def reset_password(
+    payload: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+) -> RegisterResponse:
+    await consume_reset_token(
+        raw_token=payload.token,
+        new_password=payload.new_password,
+        db=db,
+    )
+    await db.commit()
+    return RegisterResponse(message="Password updated. Please log in.")

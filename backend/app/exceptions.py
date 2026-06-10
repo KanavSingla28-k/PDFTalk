@@ -114,6 +114,13 @@ class UnverifiedEmailError(Exception):
     """
 
 
+class InvalidResetTokenError(Exception):
+    """
+    Raised when a password reset token is missing, invalid, or expired.
+    Maps to 400 INVALID_OR_EXPIRED_TOKEN.
+    """
+
+
 # ---------------------------------------------------------------------------
 # File validation exceptions
 # ---------------------------------------------------------------------------
@@ -267,6 +274,19 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "error": "EMAIL_NOT_VERIFIED",
                 "message": str(exc) or "Please verify your email address before continuing",
+            },
+        )
+
+    @app.exception_handler(InvalidResetTokenError)
+    async def invalid_reset_token_handler(
+        request: Request,
+        exc: InvalidResetTokenError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "INVALID_OR_EXPIRED_TOKEN",
+                "message": str(exc) or "This password reset link is invalid or has expired.",
             },
         )
 

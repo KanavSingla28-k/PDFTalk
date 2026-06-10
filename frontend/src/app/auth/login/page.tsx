@@ -217,6 +217,14 @@ function LoginForm() {
             error={errors.password?.message}
             {...formRegister('password')}
           />
+          <Link
+            href="/auth/forgot-password"
+            className="self-end text-sm font-semibold transition-colors hover:underline"
+            style={{ color: 'var(--brand-600)' }}
+            tabIndex={-1}
+          >
+            Forgot your password?
+          </Link>
         </div>
 
         <Button

@@ -48,6 +48,7 @@ export const ERROR_CODES = {
   EMAIL_NOT_VERIFIED: 'EMAIL_NOT_VERIFIED',
   TOKEN_EXPIRED: 'TOKEN_EXPIRED',
   INVALID_TOKEN: 'INVALID_TOKEN',
+  INVALID_OR_EXPIRED_TOKEN: 'INVALID_OR_EXPIRED_TOKEN',
   ACCOUNT_INACTIVE: 'ACCOUNT_INACTIVE',
   // Rate / quota
   RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED',
@@ -77,6 +78,7 @@ export const ERROR_MESSAGES: Record<string, string> = {
   [ERROR_CODES.EMAIL_NOT_VERIFIED]: 'Your email address has not been verified yet.',
   [ERROR_CODES.TOKEN_EXPIRED]: 'Your session has expired. Please log in again.',
   [ERROR_CODES.INVALID_TOKEN]: 'Your session is invalid. Please log in again.',
+  [ERROR_CODES.INVALID_OR_EXPIRED_TOKEN]: 'This password reset link is invalid or has expired.',
   [ERROR_CODES.ACCOUNT_INACTIVE]: 'Your account has been deactivated. Contact support.',
   [ERROR_CODES.RATE_LIMIT_EXCEEDED]: 'Too many requests. Please wait before trying again.',
   [ERROR_CODES.DAILY_QUOTA_EXCEEDED]: 'Daily document limit reached. Try again tomorrow.',

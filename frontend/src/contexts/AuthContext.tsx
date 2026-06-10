@@ -23,7 +23,13 @@ interface AuthContextValue extends AuthState {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const PUBLIC_ROUTES = ['/auth/login', '/auth/register', '/auth/verify-email'];
+const PUBLIC_ROUTES = [
+  '/auth/login',
+  '/auth/register',
+  '/auth/verify-email',
+  '/auth/forgot-password',
+  '/auth/reset-password',
+];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
