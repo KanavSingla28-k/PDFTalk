@@ -176,15 +176,19 @@ class RateLimiter:
         """
         Extract the client IP from the request.
 
-        Prefers X-Forwarded-For (set by Nginx) over the direct client IP,
-        since the API sits behind an Nginx reverse proxy in production.
-        Takes only the first (leftmost) IP from the header to avoid spoofing
-        via a crafted multi-value X-Forwarded-For header.
+        Prefers X-Real-IP (forcefully set by Nginx) to prevent IP spoofing.
+        Falls back to X-Forwarded-For, then the direct client IP.
         """
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
+            return real_ip.strip()
+
         forwarded_for = request.headers.get("X-Forwarded-For")
         if forwarded_for:
-            # "1.2.3.4, 10.0.0.1" → "1.2.3.4"  (first = original client)
+            # If multiple proxies exist, the closest client to Nginx is appended last.
+            # However, since X-Real-IP is preferred, this is merely a fallback.
             return forwarded_for.split(",")[0].strip()
+
         return request.client.host if request.client else "unknown"
 
 

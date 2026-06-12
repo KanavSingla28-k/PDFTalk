@@ -98,12 +98,15 @@ def _elapsed_ms(start: float) -> int:
 
 def _get_client_ip(request: Request) -> str:
     """
-    Return the real client IP, preferring X-Forwarded-For set by Nginx.
-    Falls back to the direct connection IP (useful in local dev without Nginx).
+    Return the real client IP, preferring X-Real-IP set by Nginx to prevent spoofing.
+    Falls back to X-Forwarded-For, then the direct connection IP.
     """
+    real_ip = request.headers.get("X-Real-IP")
+    if real_ip:
+        return real_ip.strip()
+
     forwarded_for = request.headers.get("X-Forwarded-For")
     if forwarded_for:
-        # X-Forwarded-For can be a comma-separated list; first entry is the client
         return forwarded_for.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
