@@ -1,3 +1,39 @@
-.venv
-__pycache__
-.pytest_cache
+# ── Secrets — NEVER bake these into an image ─────────────────────────────────
+.env
+.env.*
+!.env.example
+
+# ── Virtual environment ───────────────────────────────────────────────────────
+# The builder stage creates its own venv; the host venv must never be copied.
+.venv/
+venv/
+
+# ── Python cache ──────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.mypy_cache/
+.ruff_cache/
+
+# ── Test artefacts ────────────────────────────────────────────────────────────
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+tests/
+
+# ── Development / editor noise ────────────────────────────────────────────────
+.git/
+.gitignore
+.vscode/
+.idea/
+*.md
+
+# ── uv cache (not needed in image) ───────────────────────────────────────────
+.uv/
+uv-cache/
+
+# ── OS noise ─────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

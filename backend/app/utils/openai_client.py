@@ -25,6 +25,7 @@ from typing import AsyncIterator
 
 from openai import AsyncOpenAI, APIStatusError, RateLimitError
 from openai.types.chat import ChatCompletionMessageParam
+from openai.types.completion_usage import CompletionUsage
 
 from app.core.config import settings
 from app.utils import redis_client as rc
@@ -347,7 +348,7 @@ async def _stream_chat_with_usage(
     *,
     model: str,
     max_tokens: int,
-) -> AsyncIterator[tuple[str | None, object | None]]:
+) -> AsyncIterator[tuple[str | None, CompletionUsage | None]]:
     """
     Streaming chat generator that includes API-reported token usage.
 

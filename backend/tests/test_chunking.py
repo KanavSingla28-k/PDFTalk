@@ -62,3 +62,15 @@ class TestChunkText:
         text = _make_text(CHUNK_SIZE + 1)
         chunks = chunk_text(text)
         assert len(chunks) == 2
+
+    def test_exact_chunk_counts_for_known_inputs(self):
+        # 1 token -> 1 chunk
+        assert len(chunk_text(_make_text(1))) == 1
+        # CHUNK_SIZE tokens -> 1 chunk
+        assert len(chunk_text(_make_text(CHUNK_SIZE))) == 1
+        # CHUNK_SIZE + 1 tokens -> 2 chunks
+        assert len(chunk_text(_make_text(CHUNK_SIZE + 1))) == 2
+        # CHUNK_SIZE + CHUNK_STEP tokens -> 2 chunks
+        assert len(chunk_text(_make_text(CHUNK_SIZE + CHUNK_STEP))) == 2
+        # CHUNK_SIZE + CHUNK_STEP + 1 tokens -> 3 chunks
+        assert len(chunk_text(_make_text(CHUNK_SIZE + CHUNK_STEP + 1))) == 3

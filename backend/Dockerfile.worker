@@ -57,10 +57,6 @@ COPY --from=builder /app/.venv /app/.venv
 
 # Copy application source.
 COPY app/ ./app/
-# Alembic migrations are run at deploy time (before `docker compose up`),
-# but the config and versions must be present in the image.
-COPY alembic/ ./alembic/
-COPY alembic.ini ./
 
 RUN chown -R appuser:appuser /app
 USER appuser
@@ -72,12 +68,4 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-EXPOSE 8000
-
-# 2 workers is right for a 2-vCPU Lightsail instance.
-# Scale this when you move to a bigger plan.
-CMD ["uvicorn", "app.main:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8000", \
-     "--workers", "2", \
-     "--no-access-log"]
+CMD ["rq", "worker", "ingest", "--with-scheduler"]

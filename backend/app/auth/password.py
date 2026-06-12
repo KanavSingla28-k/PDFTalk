@@ -60,7 +60,10 @@ def verify_password(plain: str, hashed: str) -> bool:
     """
     if not plain:
         return False
-    return _pwd_context.verify(plain, hashed)
+    try:
+        return _pwd_context.verify(plain, hashed)
+    except Exception:
+        return False
 
 
 def needs_rehash(hashed: str) -> bool:

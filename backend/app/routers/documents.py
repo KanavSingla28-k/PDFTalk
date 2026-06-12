@@ -1,6 +1,6 @@
 import math
 import uuid
-from rq import Retry
+from rq import Retry, Callback
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status, Request
 from fastapi.responses import Response
@@ -72,14 +72,15 @@ async def upload_document_endpoint(
             "app.workers.ingest.run_ingest",
             kwargs={"document_id": str(document.id)},
             retry=Retry(max=3, interval=RETRY_DELAYS),
-            on_failure=handle_ingest_failure,
+            on_failure=Callback(handle_ingest_failure),
             job_timeout=600,
         )
-    except Exception:
+    except Exception as e:
         # RQ enqueue failed — roll back the document so the user can retry
-        logger.error(
+        logger.exception(
             "ingest_enqueue_failed",
             document_id=str(document.id),
+            error=str(e),
         )
         await delete_document(
             db=db,

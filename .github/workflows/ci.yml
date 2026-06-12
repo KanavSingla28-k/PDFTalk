@@ -1,0 +1,152 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Backend — lint + typecheck + pytest
+  # ---------------------------------------------------------------------------
+  backend:
+    name: Backend (lint + test)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_DB: pdftalk_test
+          POSTGRES_USER: pdftalk
+          POSTGRES_PASSWORD: test     # pragma: allowlist secret
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          # python-magic requires libmagic; pytesseract requires tesseract-ocr
+          sudo apt-get install -y --no-install-recommends libmagic1 tesseract-ocr
+
+      - name: Install uv
+        run: pip install uv --quiet
+
+      - name: Cache uv
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/uv
+          key: uv-${{ runner.os }}-${{ hashFiles('backend/pyproject.toml') }}
+          restore-keys: |
+            uv-${{ runner.os }}-
+
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync
+
+      - name: Lint (ruff)
+        working-directory: backend
+        run: uv run ruff check .
+
+      - name: Typecheck (mypy)
+        working-directory: backend
+        run: uv run mypy app/
+
+      - name: Run migrations
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://pdftalk:test@localhost:5432/pdftalk_test   # pragma: allowlist secret
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET_KEY: ci-test-secret-not-used-in-production-minimum-32-chars  # pragma: allowlist secret
+          FROM_EMAIL: ci@pdftalk.test
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test      # pragma: allowlist secret
+          AWS_REGION: us-east-1
+          S3_BUCKET_NAME: pdftalk-test
+          APP_URL: http://localhost
+        run: uv run alembic upgrade head
+
+      - name: Test (pytest)
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://pdftalk:test@localhost:5432/pdftalk_test  # pragma: allowlist secret
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET_KEY: ci-test-secret-not-used-in-production-minimum-32-chars  # pragma: allowlist secret
+          FROM_EMAIL: ci@pdftalk.test
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test    # pragma: allowlist secret
+          AWS_REGION: us-east-1
+          S3_BUCKET_NAME: pdftalk-test
+          APP_URL: http://localhost
+          # Explicitly absent: OPENAI_API_KEY, RESEND_API_KEY — both Optional in Settings
+          # Integration tests that need real OpenAI are marked @pytest.mark.integration
+          # and skipped here (no -m integration flag passed)
+        run: uv run pytest --cov=app --cov-report=xml -x -m "not integration"
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+
+  # ---------------------------------------------------------------------------
+  # Frontend — typecheck + lint + test
+  # ---------------------------------------------------------------------------
+  frontend:
+    name: Frontend (typecheck + lint + test)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        working-directory: frontend
+        run: pnpm type-check
+
+      - name: Lint
+        working-directory: frontend
+        run: pnpm lint
+
+      - name: Test
+        working-directory: frontend
+        run: pnpm test

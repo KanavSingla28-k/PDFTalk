@@ -1,0 +1,189 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+# Prevent concurrent deploys — if a deploy is in progress and another push
+# lands on main, cancel the older run rather than queuing both.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Build — Docker images + Next.js static export
+  # Runs on every push to main; artifacts handed off to the deploy job.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- Backend images ---
+      - name: Build API image
+        run: |
+          docker build \
+            -t pdftalk-api:${{ github.sha }} \
+            ./backend
+
+      - name: Build worker image
+        run: |
+          docker build \
+            -t pdftalk-worker:${{ github.sha }} \
+            -f ./backend/Dockerfile.worker \
+            ./backend
+
+      - name: Save images as tar.gz
+        run: |
+          docker save \
+            pdftalk-api:${{ github.sha }} \
+            pdftalk-worker:${{ github.sha }} \
+            | gzip > images.tar.gz
+
+      - name: Upload images artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-images
+          path: images.tar.gz
+          retention-days: 1   # Only needed for the deploy job; don't accumulate
+
+      # --- Frontend static export ---
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: pnpm-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: |
+            pnpm-${{ runner.os }}-
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend (static export)
+        working-directory: frontend
+        env:
+          # NEXT_PUBLIC_API_URL is baked into the static bundle at build time.
+          # Set this secret in GitHub → Settings → Secrets and variables → Actions.
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+        run: pnpm build
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-out
+          path: frontend/out/
+          retention-days: 1
+
+  # ---------------------------------------------------------------------------
+  # Deploy — requires manual approval (GitHub environment gate)
+  # Set up: GitHub → Settings → Environments → production → add required reviewers
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy to Lightsail
+    runs-on: ubuntu-latest
+    needs: build
+    environment: production   # Manual approval gate lives here
+
+    steps:
+      - name: Download Docker images
+        uses: actions/download-artifact@v4
+        with:
+          name: docker-images
+
+      - name: Download frontend build
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-out
+          path: frontend-out/
+
+      - name: Transfer images to Lightsail
+        run: |
+          echo "${{ secrets.LIGHTSAIL_SSH_KEY }}" > /tmp/deploy_key
+          chmod 600 /tmp/deploy_key
+          scp -i /tmp/deploy_key \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=30 \
+            images.tar.gz \
+            ubuntu@${{ secrets.LIGHTSAIL_IP }}:/tmp/pdftalk-images.tar.gz
+
+      - name: Transfer frontend build to Lightsail
+        run: |
+          # Sync the Next.js static export to the instance.
+          # rsync --delete removes stale files from previous deploys.
+          rsync -az --delete \
+            -e "ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no" \
+            frontend-out/ \
+            ubuntu@${{ secrets.LIGHTSAIL_IP }}:/opt/pdftalk/frontend/out/
+
+      - name: Deploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.LIGHTSAIL_IP }}
+          username: ubuntu
+          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          envs: GITHUB_SHA
+          script: |
+            set -e
+            cd /opt/pdftalk
+
+            echo "==> Loading Docker images (SHA: $GITHUB_SHA)"
+            docker load < /tmp/pdftalk-images.tar.gz
+            rm /tmp/pdftalk-images.tar.gz
+
+            export GIT_SHA=$GITHUB_SHA
+
+            echo "==> Backing up database"
+            docker compose exec -T postgres sh -c "pg_dump -U \${POSTGRES_USER:-pdftalk} -d \${POSTGRES_DB:-pdftalk} -F c -f /var/lib/postgresql/data/backup_$GIT_SHA.dump"
+
+            echo "==> Running DB migrations"
+            # Run against the already-healthy postgres container.
+            # --no-deps prevents compose from recreating postgres/redis.
+            docker compose run --rm --no-deps api alembic upgrade head
+
+            echo "==> Restarting API and worker"
+            # --no-deps: don't restart postgres/redis, only the named services.
+            # Compose picks up the new GIT_SHA image tag from the environment.
+            docker compose up -d --no-deps api worker
+
+            echo "==> Reloading nginx (picks up any config changes)"
+            docker compose exec -T nginx nginx -s reload || docker compose up -d --no-deps nginx
+
+            echo "==> Pruning old images (keeping images newer than 72h)"
+            docker image prune -f --filter "until=72h"
+
+            echo "==> Deploy complete"
+
+      - name: Smoke test
+        # Wait for containers to pass their healthchecks before probing.
+        # Hitting the IP directly over HTTP (SSL deferred until T-09/T-10).
+        # TODO T-10: change http:// to https:// and use secrets.APP_DOMAIN
+        run: |
+          echo "Waiting for API to become healthy..."
+          sleep 15
+          curl --fail \
+               --silent \
+               --show-error \
+               --max-time 10 \
+               --retry 3 \
+               --retry-delay 5 \
+               http://${{ secrets.LIGHTSAIL_IP }}/api/health
+          echo ""
+          echo "Smoke test passed."
+
+      - name: Clean up SSH key
+        if: always()   # Run even if a previous step failed
+        run: rm -f /tmp/deploy_key
