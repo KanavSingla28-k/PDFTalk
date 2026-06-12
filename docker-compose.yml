@@ -44,7 +44,7 @@ services:
       --requirepass ${REDIS_PASSWORD}
       --appendonly yes
       --maxmemory 256mb
-      --maxmemory-policy noeviction
+      --maxmemory-policy volatile-lru
     networks:
       - internal
     volumes:
