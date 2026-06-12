@@ -14,9 +14,9 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
-  // Basic proxy signal: presence of session proxy cookie means "probably logged in".
+  // Check for the presence of the refresh_token cookie directly.
   // Real validation happens server-side / in AuthContext on the client.
-  const hasSession = request.cookies.has('pdftalk_logged_in');
+  const hasSession = request.cookies.has('refresh_token');
 
   // Unauthenticated on a protected route → send to login
   if (!hasSession && !isPublicRoute && pathname !== '/') {

@@ -214,8 +214,7 @@ async def login(
                    renewed without the httpOnly refresh token cookie. See T-47.
 
     Refresh token → httpOnly cookie → invisible to JavaScript entirely.
-                   path="/auth/refresh" means it's only sent on that one route,
-                   not on every API call, minimising the attack surface.
+                   path="/" allows Next.js middleware to check for session presence.
 
     The 401 message is deliberately identical for all failure cases
     (wrong email, wrong password, inactive account, locked account) to deny
@@ -244,7 +243,7 @@ async def login(
         secure=False,        # TODO: change to true after domain cert certification
         samesite="strict",
         max_age=60 * 60 * 24 * 7,  # 7 days — matches REFRESH_TOKEN_EXPIRE_DAYS
-        path="/auth",
+        path="/",
     )
 
     return LoginResponse(
@@ -308,7 +307,7 @@ async def refresh(
         # Clear the stale cookie so the browser doesn't keep replaying it.
         response.delete_cookie(
             key="refresh_token",
-            path="/auth",
+            path="/",
             secure=False,    #TODO: change to true once domain cert certification is done
             samesite="strict",  # Must match set_cookie samesite exactly
             )
@@ -328,7 +327,7 @@ async def refresh(
         secure=False,        # TODO: flip to True once TLS cert is in place (T-10)
         samesite="strict",
         max_age=60 * 60 * 24 * 7,  # 7 days — matches REFRESH_TOKEN_EXPIRE_DAYS
-        path="/auth",
+        path="/",
     )
 
     expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
@@ -379,7 +378,7 @@ async def logout(
     # set_cookie used, or the browser will not remove it.
     response.delete_cookie(
         key="refresh_token",
-        path="/auth",
+        path="/",
         samesite="strict",
         secure=False,        # TODO: flip to True once TLS cert is in place (T-10)
     )
