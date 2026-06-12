@@ -3,8 +3,11 @@ repos:
     rev: v1.5.0
     hooks:
       - id: detect-secrets
-        args: ['--baseline', '.secrets.baseline']
-
+        args:
+          - --baseline
+          - .secrets.baseline
+          - --exclude-files
+          - frontend/pnpm-lock.yaml
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

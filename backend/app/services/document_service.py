@@ -23,6 +23,7 @@ import uuid
 import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.exceptions import QuotaExceededError, DocumentNotFoundError
 from app.models.user import User
@@ -63,6 +64,9 @@ async def get_document_for_user(
     db: AsyncSession,
     document_id: uuid.UUID,
     user_id: uuid.UUID,
+    *,
+    include_chunks: bool = False,
+    include_job_logs: bool = False,
 ) -> Document:
     """
     Fetch a document by ID and assert ownership in one query.
@@ -71,12 +75,16 @@ async def get_document_for_user(
         DocumentNotFoundError: document doesn't exist or isn't owned by user_id.
             Callers surface this as 404 (not 403) to avoid resource enumeration.
     """
-    result = await db.execute(
-        select(Document).where(
-            Document.id == document_id,
-            Document.user_id == user_id,
-        )
+    stmt = select(Document).where(
+        Document.id == document_id,
+        Document.user_id == user_id,
     )
+    if include_chunks:
+        stmt = stmt.options(selectinload(Document.chunks))
+    if include_job_logs:
+        stmt = stmt.options(selectinload(Document.job_logs))
+
+    result = await db.execute(stmt)
     doc = result.scalar_one_or_none()
     if doc is None:
         raise DocumentNotFoundError(document_id=document_id)
@@ -165,6 +173,8 @@ async def get_user_documents(
     status: DocumentStatus | None = None,
     limit: int = 10,
     offset: int = 0,
+    include_chunks: bool = False,
+    include_job_logs: bool = False,
 ) -> list[Document]:
     """
     Paginated list of documents for a user, optionally filtered by status.
@@ -173,6 +183,12 @@ async def get_user_documents(
     stmt = select(Document).where(Document.user_id == user_id)
     if status is not None:
         stmt = stmt.where(Document.status == status.value)
+        
+    if include_chunks:
+        stmt = stmt.options(selectinload(Document.chunks))
+    if include_job_logs:
+        stmt = stmt.options(selectinload(Document.job_logs))
+
     stmt = (
         stmt.order_by(
             Document.created_at.desc(), 
