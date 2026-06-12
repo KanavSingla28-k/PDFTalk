@@ -60,11 +60,7 @@ app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestLoggingMiddleware)
 
 allowed_origins = [settings.APP_URL]
-if settings.APP_URL.startswith("http://localhost"):
-    for port in ["3000", "3001", "3002"]:
-        allowed_origins.append(f"http://localhost:{port}")
-        allowed_origins.append(f"http://127.0.0.1:{port}")
-allowed_origins = list(set(allowed_origins))
+
 
 app.add_middleware(                          # added last = outermost
     CORSMiddleware,
