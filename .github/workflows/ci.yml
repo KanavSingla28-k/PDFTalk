@@ -95,10 +95,9 @@ jobs:
           AWS_REGION: us-east-1
           S3_BUCKET_NAME: pdftalk-test
           APP_URL: http://localhost
-          # Explicitly absent: OPENAI_API_KEY, RESEND_API_KEY — both Optional in Settings
-          # Integration tests that need real OpenAI are marked @pytest.mark.integration
-          # and skipped here (no -m integration flag passed)
-        run: uv run pytest --cov=app --cov-report=xml -x -m "not integration"
+          # Integration tests use mocked OpenAI/Resend responses but need the pgvector DB.
+          INTEGRATION_DATABASE_URL: postgresql+psycopg://pdftalk:test@localhost:5432/pdftalk_test  # pragma: allowlist secret
+        run: uv run pytest --cov=app --cov-report=xml -x
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
