@@ -33,7 +33,7 @@ function DocumentSelector({
   if (documents.length === 0) {
     return (
       <div className="rounded-lg border border-[var(--warning-200)] bg-[var(--warning-50)] p-4 text-sm text-[var(--warning-700)]">
-        You don't have any ready documents. Upload a document first.
+        You don&apos;t have any ready documents. Upload a document first.
       </div>
     );
   }

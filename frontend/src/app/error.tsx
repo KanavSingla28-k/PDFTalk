@@ -28,7 +28,7 @@ export default function ErrorBoundary({
         Something went wrong
       </h2>
       <p className="text-sm text-[var(--gray-600)] mb-6 max-w-md">
-        An unexpected error occurred while rendering this page. We've been notified and are looking into it.
+        An unexpected error occurred while rendering this page. We&apos;ve been notified and are looking into it.
       </p>
       <div className="flex gap-4">
         <Button onClick={() => reset()}>

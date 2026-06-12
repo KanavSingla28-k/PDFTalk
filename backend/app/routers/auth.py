@@ -1,6 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status, Cookie
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.utils.rate_limit import RateLimiter
 from app.auth.tokens import (
@@ -73,8 +76,6 @@ async def register(
     db: AsyncSession = Depends(get_db),
     _rate: None = Depends(_register_limiter),
 ) -> RegisterResponse:
-    import logging as _logging
-    _log = _logging.getLogger(__name__)
     try:
         await user_service.register(
             db=db,
@@ -86,7 +87,7 @@ async def register(
         # The user row is already committed; return 202 so the frontend can
         # prompt the user to check their inbox or request a resend.
         # The error is already logged inside send_verification_email().
-        _log.warning(
+        logger.warning(
             "register: email delivery failed for %s — still returning 202",
             payload.email,
         )
@@ -110,8 +111,6 @@ async def resend_verification(
     db: AsyncSession = Depends(get_db),
     _rate: None = Depends(_resend_limiter),
 ) -> RegisterResponse:
-    import logging as _logging
-    _log = _logging.getLogger(__name__)
     email_lower = payload.email.strip().lower()
 
     existing = await user_service.get_by_email_lower(db, email_lower)
@@ -124,7 +123,7 @@ async def resend_verification(
                 await user_service.send_verification_email_for_user(str(existing.id), existing.email, db)
                 await db.commit()
             except Exception as exc:
-                _log.warning(
+                logger.warning(
                     "resend_verification: email delivery failed for %s: %s",
                     existing.email,
                     exc,

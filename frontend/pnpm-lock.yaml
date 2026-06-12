@@ -45,6 +45,9 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@eslint/eslintrc':
+        specifier: ^3.3.5
+        version: 3.3.5
       '@next/bundle-analyzer':
         specifier: ^15.0.0
         version: 15.5.19

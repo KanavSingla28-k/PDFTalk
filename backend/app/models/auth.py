@@ -45,6 +45,7 @@ class RefreshToken(Base):
 
 class EmailVerification(Base):
     __tablename__ = "email_verifications"
+    __table_args__ = (Index("idx_email_verifications_token_hash", "token_hash"),)
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

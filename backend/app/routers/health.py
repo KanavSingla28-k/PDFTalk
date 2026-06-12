@@ -54,8 +54,13 @@ async def _check_s3() -> dict:
         return {"status": "error", "latency_ms": latency_ms, "detail": str(e)}
 
 
-@router.get("/health")
-async def health_check():
+@router.get("/live")
+async def liveness_check():
+    return JSONResponse(content={"status": "ok"}, status_code=200)
+
+
+@router.get("/ready")
+async def readiness_check():
     db_result, redis_result, s3_result = await asyncio.gather(
         _check_db(),
         _check_redis(),

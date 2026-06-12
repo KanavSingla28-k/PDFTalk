@@ -47,11 +47,11 @@ export function Spinner({ size = 16, className = '' }: { size?: number; classNam
 
 type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   isLoading?: boolean;
   fullWidth?: boolean;
-}
+};
 
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
@@ -162,7 +162,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
 
 // ─── PasswordInput ────────────────────────────────────────────────────────────
 
-interface PasswordInputProps extends Omit<InputProps, 'type'> {}
+type PasswordInputProps = Omit<InputProps, 'type'>;
 
 export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
   function PasswordInput({ id, ...props }, ref) {
