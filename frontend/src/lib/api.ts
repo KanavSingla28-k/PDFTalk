@@ -149,10 +149,22 @@ function parseRetryAfter(response: Response): number | undefined {
 
 async function parseErrorBody(response: Response): Promise<BackendErrorBody> {
   const contentType = response.headers.get('content-type') ?? '';
-  if (!contentType.includes('application/json')) return {};
+  if (!contentType.includes('application/json')) {
+    try {
+      // Clone the response so we can read the text without consuming the stream
+      // if it's needed elsewhere (though typically it isn't for error parsing).
+      const text = await response.clone().text();
+      // Log to console; in production this should be wired to a service like Sentry.
+      console.error(`[API Error] Non-JSON response (${response.status}):`, text);
+    } catch {
+      // Ignore text reading errors
+    }
+    return {};
+  }
   try {
     return (await response.json()) as BackendErrorBody;
-  } catch {
+  } catch (err) {
+    console.error(`[API Error] Failed to parse JSON error response:`, err);
     return {};
   }
 }
