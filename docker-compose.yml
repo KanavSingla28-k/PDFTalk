@@ -104,6 +104,7 @@ services:
       resources:
         limits:
           memory: 1536M
+    stop_grace_period: 60s
 
   nginx:
     image: nginx:1.25-alpine
