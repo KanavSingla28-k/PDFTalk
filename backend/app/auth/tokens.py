@@ -241,7 +241,9 @@ async def validate_and_rotate_refresh_token(
     expires_at = stored.expires_at
     if expires_at.tzinfo is None:
         expires_at = expires_at.replace(tzinfo=timezone.utc)
-    if expires_at < _now_utc():
+    
+    now = _now_utc()
+    if expires_at < now:
         # Clean up the stale row while we're here
         await db.delete(stored)
         await db.commit()
@@ -249,11 +251,26 @@ async def validate_and_rotate_refresh_token(
 
     user_id: str = str(stored.user_id)
 
-    # Delete the consumed token BEFORE issuing the new one.
-    # If anything fails after this point, the user must re-login — that is
-    # the safer outcome vs. leaving a consumed token alive in the DB.
-    await db.delete(stored)
-    await db.flush()  # push the DELETE within the open transaction
+    if stored.revoked_at:
+        revoked_at = stored.revoked_at
+
+        if revoked_at.tzinfo is None:
+            revoked_at = revoked_at.replace(tzinfo=timezone.utc)
+
+        grace_period_end = revoked_at + timedelta(seconds=60)
+
+        if now > grace_period_end:
+            # Replay attack or past grace period. Clean it up.
+            await db.delete(stored)
+            await db.commit()
+            raise TokenInvalidError("Refresh token is invalid or has already been used")
+        # Within grace period: proceed to issue new tokens.
+    else:
+        # First use. Mark as revoked instead of deleting.
+        # This allows concurrent requests in the grace period to succeed.
+        stored.revoked_at = now
+        db.add(stored)
+        await db.flush()
 
     new_raw_refresh = await store_refresh_token(user_id, db)  # commits
     new_access = create_access_token(user_id)

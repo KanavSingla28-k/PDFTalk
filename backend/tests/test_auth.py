@@ -267,7 +267,7 @@ async def test_login_lockout_after_10_attempts(async_client: AsyncClient, db: As
 # T-21: Refresh & Logout
 # ---------------------------------------------------------------------------
 
-async def test_refresh_token_rotation(async_client: AsyncClient, db: AsyncSession):
+async def test_refresh_token_rotation_and_grace_period(async_client: AsyncClient, db: AsyncSession):
     # 1. Login
     await async_client.post(
         "/auth/register",
@@ -290,15 +290,27 @@ async def test_refresh_token_rotation(async_client: AsyncClient, db: AsyncSessio
     new_access_token = refresh_resp.json()["access_token"]
     assert new_access_token != old_access_token
 
-    # 3. Verify old token is consumed (one-time use)
-    # Clear the client cookie and manually set the old one to test replay
+    # 3. Verify old token can still be used within grace period
     async_client.cookies.clear()
     async_client.cookies.set("refresh_token", old_refresh_token)
     
-    replay_resp = await async_client.post("/auth/refresh")
-    assert replay_resp.status_code == 401
-    # The router raises HTTPException with detail= (not error=)
-    assert "invalid" in replay_resp.json()["detail"].lower()
+    replay_resp_success = await async_client.post("/auth/refresh")
+    assert replay_resp_success.status_code == 200
+
+    # 4. Expire the grace period manually in the DB
+    from app.auth.tokens import _hash_token
+    token_hash = _hash_token(old_refresh_token)
+    result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
+    stored = result.scalar_one()
+    stored.revoked_at = datetime.now(timezone.utc) - timedelta(seconds=65)
+    await db.commit()
+
+    # 5. Replay after grace period (should fail)
+    async_client.cookies.clear()
+    async_client.cookies.set("refresh_token", old_refresh_token)
+    replay_resp_fail = await async_client.post("/auth/refresh")
+    assert replay_resp_fail.status_code == 401
+    assert "invalid" in replay_resp_fail.json()["detail"].lower()
 
 
 async def test_logout_clears_session(async_client: AsyncClient, db: AsyncSession):

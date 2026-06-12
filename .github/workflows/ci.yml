@@ -20,7 +20,7 @@ jobs:
           POSTGRES_USER: pdftalk
           POSTGRES_PASSWORD: test     # pragma: allowlist secret
         options: >-
-          --health-cmd pg_isready
+          --health-cmd "pg_isready -U pdftalk -d pdftalk_test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
