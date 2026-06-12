@@ -46,8 +46,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const router = useRouter();
 
-  // While session is restoring, show a full-page loader
-  if (isLoading) {
+  // While session is restoring, or if unauthenticated (redirecting), show loader
+  if (isLoading || !user) {
     return (
       <div className="flex min-h-screen items-center justify-center" style={{ background: 'var(--gray-50)' }}>
         <div className="flex flex-col items-center gap-3">
