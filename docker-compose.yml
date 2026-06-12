@@ -43,8 +43,6 @@ services:
       redis-server
       --requirepass ${REDIS_PASSWORD}
       --appendonly yes
-      --maxmemory 256mb
-      --maxmemory-policy volatile-lru
     networks:
       - internal
     volumes:

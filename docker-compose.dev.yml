@@ -27,9 +27,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: pdftalk-redis
-    command: redis-server --requirepass pdftalk_redis
+    command: redis-server --requirepass pdftalk_redis --appendonly yes
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
     networks:
       - internal
 
@@ -101,6 +103,7 @@ services:
 
 volumes:
   postgres_data:
+  redis_data:
 
 networks:
   internal:
