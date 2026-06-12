@@ -55,7 +55,8 @@ import time
 import logging
 from typing import Callable
 import uuid
-from fastapi import Request
+from fastapi import Request, HTTPException
+from redis.exceptions import RedisError
 
 from app.exceptions import RateLimitExceededError
 from app.utils.redis_client import get_redis
@@ -126,46 +127,50 @@ class RateLimiter:
         now_ms = int(time.time() * 1000)
         window_start_ms = now_ms - (self.window_seconds * 1000)
 
-        # Phase 1: remove expired entries + count current window atomically.
-        # ZADD is intentionally NOT in this pipeline — we only add the
-        # request timestamp if the count is within the limit (below).
-        async with redis.pipeline(transaction=True) as pipe:
-            pipe.zremrangebyscore(redis_key, 0, window_start_ms)
-            pipe.zcard(redis_key)
-            results = await pipe.execute()
+        try:
+            # Phase 1: remove expired entries + count current window atomically.
+            # ZADD is intentionally NOT in this pipeline — we only add the
+            # request timestamp if the count is within the limit (below).
+            async with redis.pipeline(transaction=True) as pipe:
+                pipe.zremrangebyscore(redis_key, 0, window_start_ms)
+                pipe.zcard(redis_key)
+                results = await pipe.execute()
 
-        current_count: int = results[1]  # zcard result (after stale removal)
+            current_count: int = results[1]  # zcard result (after stale removal)
 
-        if current_count >= self.limit:
-            # Request rejected — do NOT add to the sorted set.
-            # Calculate seconds until the oldest entry falls out of the window.
-            oldest_score_result = await redis.zrange(redis_key, 0, 0, withscores=True)
-            if oldest_score_result:
-                oldest_ms = int(oldest_score_result[0][1])
-                retry_after = max(
-                    1,
-                    int((oldest_ms + self.window_seconds * 1000 - now_ms) / 1000),
+            if current_count >= self.limit:
+                # Request rejected — do NOT add to the sorted set.
+                # Calculate seconds until the oldest entry falls out of the window.
+                oldest_score_result = await redis.zrange(redis_key, 0, 0, withscores=True)
+                if oldest_score_result:
+                    oldest_ms = int(oldest_score_result[0][1])
+                    retry_after = max(
+                        1,
+                        int((oldest_ms + self.window_seconds * 1000 - now_ms) / 1000),
+                    )
+                else:
+                    retry_after = self.window_seconds
+
+                logger.warning(
+                    "Rate limit exceeded",
+                    extra={
+                        "key_prefix": self.key_prefix,
+                        "identifier": identifier,
+                        "limit": self.limit,
+                        "window_seconds": self.window_seconds,
+                    },
                 )
-            else:
-                retry_after = self.window_seconds
 
-            logger.warning(
-                "Rate limit exceeded",
-                extra={
-                    "key_prefix": self.key_prefix,
-                    "identifier": identifier,
-                    "limit": self.limit,
-                    "window_seconds": self.window_seconds,
-                },
-            )
+                raise RateLimitExceededError(retry_after)
 
-            raise RateLimitExceededError(retry_after)
-
-        # Phase 2: request is allowed — record it and refresh the TTL.
-        async with redis.pipeline(transaction=True) as pipe:
-            pipe.zadd(redis_key, {uuid.uuid4().hex: now_ms})
-            pipe.expire(redis_key, self.window_seconds)
-            await pipe.execute()
+            # Phase 2: request is allowed — record it and refresh the TTL.
+            async with redis.pipeline(transaction=True) as pipe:
+                pipe.zadd(redis_key, {uuid.uuid4().hex: now_ms})
+                pipe.expire(redis_key, self.window_seconds)
+                await pipe.execute()
+        except RedisError as exc:
+            logger.error("Redis error in rate limiter: %s", exc)
+            raise HTTPException(status_code=503, detail="Service Unavailable")
 
     # ------------------------------------------------------------------
     # Identifier helpers

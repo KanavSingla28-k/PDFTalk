@@ -299,3 +299,27 @@ async def test_custom_identifier_fn_is_used(fake_redis):
     # Verify the Redis key used the custom identifier
     keys = await fake_redis.keys("ratelimit:test_custom:*")
     assert any(b"custom-id-xyz" in k for k in keys)
+
+
+@pytest.mark.asyncio
+async def test_redis_error_returns_503(fake_redis):
+    """If Redis raises a RedisError, the rate limiter must raise an HTTPException 503."""
+    limiter = RateLimiter(limit=1, window_seconds=60, key_prefix="test_redis_err")
+    request = make_request()
+    
+    import redis.exceptions
+    from fastapi import HTTPException
+
+    with patch("app.utils.rate_limit.get_redis") as mock_get_redis:
+        mock_redis_instance = MagicMock()
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__.return_value = mock_pipeline
+        mock_pipeline.execute.side_effect = redis.exceptions.RedisError("Connection lost")
+        mock_redis_instance.pipeline.return_value = mock_pipeline
+        mock_get_redis.return_value = mock_redis_instance
+
+        with pytest.raises(HTTPException) as exc_info:
+            await limiter(request)
+
+        assert exc_info.value.status_code == 503
+        assert exc_info.value.detail == "Service Unavailable"
