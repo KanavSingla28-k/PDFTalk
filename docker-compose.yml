@@ -112,10 +112,10 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    args:
-        NEXT_PUBLIC_API_URL: http://13.207.100.137/api
-        NEXT_PUBLIC_APP_NAME: PDFTalk
-        NEXT_PUBLIC_MAX_UPLOAD_MB: 50
+      args:
+          NEXT_PUBLIC_API_URL: http://13.207.100.137/api
+          NEXT_PUBLIC_APP_NAME: PDFTalk
+          NEXT_PUBLIC_MAX_UPLOAD_MB: 50
     container_name: pdftalk-frontend-prod
     restart: unless-stopped
     env_file:
@@ -125,6 +125,8 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      frontend:
+        condition: service_started
     deploy:
       resources:
         limits:
