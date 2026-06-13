@@ -40,7 +40,7 @@ jobs:
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: latest
+          version: 11
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -72,6 +72,7 @@ jobs:
       - name: Build frontend image
         run: |
           docker build \
+            --build-arg CI=true \
             -t pdftalk-frontend:${{ github.sha }} \
             ./frontend
 
