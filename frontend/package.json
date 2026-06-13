@@ -2,6 +2,8 @@
   "name": "frontend",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@11.6.0",
+
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -11,6 +13,7 @@
     "test": "jest",
     "analyze": "ANALYZE=true pnpm build"
   },
+
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
     "date-fns": "^4.4.0",
@@ -25,6 +28,7 @@
     "sonner": "^2.0.7",
     "zod": "^4.4.3"
   },
+
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
     "@next/bundle-analyzer": "^15.0.0",
