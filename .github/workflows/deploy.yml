@@ -37,6 +37,14 @@ jobs:
             ./backend
 
       # --- Frontend image ---
+      - name: Build frontend (static export)
+        working-directory: frontend
+        env: 
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_APP_NAME: PDFTalk
+          NEXT_PUBLIC_MAX_UPLOAD_MB: 50
+        run: pnpm build
+
       - name: Build frontend image
         run: |
           docker build \
@@ -135,7 +143,7 @@ jobs:
                --max-time 10 \
                --retry 3 \
                --retry-delay 5 \
-               http://${{ secrets.LIGHTSAIL_IP }}/api/health
+               http://${{ secrets.LIGHTSAIL_IP }}/api/live
           echo ""
           echo "Smoke test passed."
 
