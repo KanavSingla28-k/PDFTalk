@@ -194,9 +194,20 @@ function ChatContent() {
     setInput('');
     setIsStreaming(true);
 
-    const userMsgId = crypto.randomUUID();
-    const assistantMsgId = crypto.randomUUID();
 
+    // TODO: when shifting to https, remove down code and use only crypto.randomUUID
+    // const userMsgId = crypto.randomUUID();
+    // const assistantMsgId = crypto.randomUUID();
+
+    const userMsgId = typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2) + Date.now().toString(36);
+    const assistantMsgId = typeof crypto.randomUUID === 'function'
+      ? crypto.randomUUID()
+      : Math.random().toString(36).slice(2) + Date.now().toString(36);
+
+// -----------------------------------------------------------------------------
+ 
     setMessages((prev) => [
       ...prev,
       { id: userMsgId, role: 'user', content: query },

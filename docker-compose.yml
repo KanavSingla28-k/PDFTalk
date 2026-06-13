@@ -91,6 +91,7 @@ services:
       dockerfile: Dockerfile.worker
     container_name: pdftalk-worker-prod
     restart: unless-stopped
+    command: rq worker ingest default --with-scheduler
     env_file:
       - .env
     networks:
@@ -112,7 +113,7 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     args:
-        NEXT_PUBLIC_API_URL: http://13.207.100.137
+        NEXT_PUBLIC_API_URL: http://13.207.100.137/api
         NEXT_PUBLIC_APP_NAME: PDFTalk
         NEXT_PUBLIC_MAX_UPLOAD_MB: 50
     container_name: pdftalk-frontend-prod
