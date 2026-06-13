@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # Build — Docker images + Next.js static export
+  # Build — Docker images
   # Runs on every push to main; artifacts handed off to the deploy job.
   # ---------------------------------------------------------------------------
   build:
@@ -36,11 +36,19 @@ jobs:
             -f ./backend/Dockerfile.worker \
             ./backend
 
+      # --- Frontend image ---
+      - name: Build frontend image
+        run: |
+          docker build \
+            -t pdftalk-frontend:${{ github.sha }} \
+            ./frontend
+
       - name: Save images as tar.gz
         run: |
           docker save \
             pdftalk-api:${{ github.sha }} \
             pdftalk-worker:${{ github.sha }} \
+            pdftalk-frontend:${{ github.sha }} \
             | gzip > images.tar.gz
 
       - name: Upload images artifact
@@ -49,44 +57,6 @@ jobs:
           name: docker-images
           path: images.tar.gz
           retention-days: 1   # Only needed for the deploy job; don't accumulate
-
-      # --- Frontend static export ---
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: latest
-
-      - name: Cache pnpm store
-        uses: actions/cache@v4
-        with:
-          path: ~/.local/share/pnpm/store
-          key: pnpm-${{ runner.os }}-${{ hashFiles('frontend/pnpm-lock.yaml') }}
-          restore-keys: |
-            pnpm-${{ runner.os }}-
-
-      - name: Install frontend dependencies
-        working-directory: frontend
-        run: pnpm install --frozen-lockfile
-
-      - name: Build frontend (static export)
-        working-directory: frontend
-        env:
-          # NEXT_PUBLIC_API_URL is baked into the static bundle at build time.
-          # Set this secret in GitHub → Settings → Secrets and variables → Actions.
-          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
-        run: pnpm build
-
-      - name: Upload frontend artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: frontend-out
-          path: frontend/out/
-          retention-days: 1
 
   # ---------------------------------------------------------------------------
   # Deploy — requires manual approval (GitHub environment gate)
@@ -104,12 +74,6 @@ jobs:
         with:
           name: docker-images
 
-      - name: Download frontend build
-        uses: actions/download-artifact@v4
-        with:
-          name: frontend-out
-          path: frontend-out/
-
       - name: Transfer images to Lightsail
         run: |
           echo "${{ secrets.LIGHTSAIL_SSH_KEY }}" > /tmp/deploy_key
@@ -119,15 +83,6 @@ jobs:
             -o ConnectTimeout=30 \
             images.tar.gz \
             ubuntu@${{ secrets.LIGHTSAIL_IP }}:/tmp/pdftalk-images.tar.gz
-
-      - name: Transfer frontend build to Lightsail
-        run: |
-          # Sync the Next.js static export to the instance.
-          # rsync --delete removes stale files from previous deploys.
-          rsync -az --delete \
-            -e "ssh -i /tmp/deploy_key -o StrictHostKeyChecking=no" \
-            frontend-out/ \
-            ubuntu@${{ secrets.LIGHTSAIL_IP }}:/opt/pdftalk/frontend/out/
 
       - name: Deploy
         uses: appleboy/ssh-action@v1
@@ -147,17 +102,17 @@ jobs:
             export GIT_SHA=$GITHUB_SHA
 
             echo "==> Backing up database"
-            docker compose exec -T postgres sh -c "pg_dump -U \${POSTGRES_USER:-pdftalk} -d \${POSTGRES_DB:-pdftalk} -F c -f /var/lib/postgresql/data/backup_$GIT_SHA.dump"
+            docker compose exec -T postgres sh -c "pg_dump -U \${POSTGRES_USER:-pdftalk} -d \${POSTGRES_DB:-pdftalk} -F c -f /var/lib/postgresql/data/backup_$GIT_SHA.dump" || true
 
             echo "==> Running DB migrations"
             # Run against the already-healthy postgres container.
             # --no-deps prevents compose from recreating postgres/redis.
             docker compose run --rm --no-deps api alembic upgrade head
 
-            echo "==> Restarting API and worker"
+            echo "==> Restarting API, worker, and frontend"
             # --no-deps: don't restart postgres/redis, only the named services.
             # Compose picks up the new GIT_SHA image tag from the environment.
-            docker compose up -d --no-deps api worker
+            docker compose up -d --no-deps api worker frontend
 
             echo "==> Reloading nginx (picks up any config changes)"
             docker compose exec -T nginx nginx -s reload || docker compose up -d --no-deps nginx

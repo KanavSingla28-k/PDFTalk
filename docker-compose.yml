@@ -58,6 +58,7 @@ services:
       retries: 5
 
   api:
+    image: pdftalk-api:${GIT_SHA:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -84,6 +85,7 @@ services:
       start_period: 20s
 
   worker:
+    image: pdftalk-worker:${GIT_SHA:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
@@ -105,6 +107,7 @@ services:
     stop_grace_period: 60s
 
   frontend:
+    image: pdftalk-frontend:${GIT_SHA:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile
