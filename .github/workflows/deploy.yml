@@ -37,6 +37,30 @@ jobs:
             ./backend
 
       # --- Frontend image ---
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: latest
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Build frontend (static export)
+        working-directory: frontend
+        env:
+          NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_APP_NAME: PDFTalk
+          NEXT_PUBLIC_MAX_UPLOAD_MB: 50
+        run: pnpm build
+
       - name: Build frontend (static export)
         working-directory: frontend
         env: 
