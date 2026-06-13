@@ -4,20 +4,20 @@ from typing import cast
 import redis.asyncio as aioredis
 from app.core.config import settings
 
-# Single connection pool — shared across the app lifetime
-_pool: aioredis.ConnectionPool | None = None
+import asyncio
 
+# Dictionary mapping event loops to their connection pools
+_pools: dict[asyncio.AbstractEventLoop, aioredis.ConnectionPool] = {}
 
 def get_pool() -> aioredis.ConnectionPool:
-    global _pool
-    if _pool is None:
-        _pool = aioredis.ConnectionPool.from_url(
+    loop = asyncio.get_running_loop()
+    if loop not in _pools:
+        _pools[loop] = aioredis.ConnectionPool.from_url(
             settings.REDIS_URL,
             max_connections=20,
             decode_responses=True,
         )
-    return _pool
-
+    return _pools[loop]
 
 def get_redis() -> aioredis.Redis:
     return aioredis.Redis(connection_pool=get_pool())

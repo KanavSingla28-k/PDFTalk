@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status, Cookie
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
@@ -272,7 +272,7 @@ async def refresh(
     response: Response,
     db: AsyncSession = Depends(get_db),
     refresh_token: str | None = Cookie(default=None),
-) -> RefreshResponse:
+) -> RefreshResponse | JSONResponse:
     """
     POST /auth/refresh
 
@@ -304,17 +304,19 @@ async def refresh(
     except TokenInvalidError as exc:
         # Token not found, already used, or expired.
         # Clear the stale cookie so the browser doesn't keep replaying it.
-        response.delete_cookie(
+        # Must return JSONResponse instead of raising HTTPException so cookie changes are preserved.
+        resp = JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": str(exc)},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        resp.delete_cookie(
             key="refresh_token",
             path="/",
             secure=False,    #TODO: change to true once domain cert certification is done
             samesite="strict",  # Must match set_cookie samesite exactly
-            )
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(exc),
-            headers={"WWW-Authenticate": "Bearer"},
         )
+        return resp
 
     # Overwrite the old cookie with the new refresh token.
     # All settings must mirror the login cookie exactly so the browser

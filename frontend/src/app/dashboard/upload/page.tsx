@@ -9,7 +9,6 @@ export const metadata: Metadata = {
 
 // Dynamically import the heavy UploadForm that contains react-dropzone
 const UploadForm = dynamic(() => import('./UploadForm'), {
-  ssr: false, // Dropzone is highly interactive, no need to SSR
   loading: () => (
     <div className="flex h-64 items-center justify-center">
       <Spinner size={32} className="text-[var(--brand-500)]" />

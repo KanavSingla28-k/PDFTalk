@@ -21,16 +21,27 @@ export function middleware(request: NextRequest) {
 
   // Authenticated trying to hit a public auth page → send to dashboard
   if (hasSession && isPublicRoute) {
-    return NextResponse.redirect(new URL('/dashboard/documents', request.url));
+    const response = NextResponse.redirect(new URL('/dashboard/documents', request.url));
+    // Clear legacy path="/auth" cookie that causes infinite redirect loops
+    response.cookies.delete({
+      name: 'refresh_token',
+      path: '/auth',
+    });
+    return response;
   }
 
   // Root → redirect to login (or dashboard if authed)
   if (pathname === '/') {
     const target = hasSession ? '/dashboard/documents' : '/auth/login';
-    return NextResponse.redirect(new URL(target, request.url));
+    const response = NextResponse.redirect(new URL(target, request.url));
+    if (hasSession) {
+      response.cookies.delete({ name: 'refresh_token', path: '/auth' });
+    }
+    return response;
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+  return response;
 }
 
 export const config = {

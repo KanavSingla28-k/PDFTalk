@@ -9,7 +9,7 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
-revision = '0004_add_email_verification_index'
+revision = '0004_add_email_verif_index'
 down_revision = '0003_add_revoked_at'
 branch_labels = None
 depends_on = None
