@@ -13,9 +13,7 @@ from openai.types.chat import ChatCompletionMessageParam
 from app.utils.openai_client import (
     _stream_chat_with_usage,
     check_and_increment_token_usage,
-    CircuitBreakerOpenError,
     DailyQuotaExceededError,
-    OpenAIRetryExhaustedError,
 )
 from app.utils.metrics import openai_tokens_used_total
 

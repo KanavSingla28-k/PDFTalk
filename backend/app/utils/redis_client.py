@@ -1,4 +1,3 @@
-import hashlib
 from datetime import date
 from typing import cast
 import redis.asyncio as aioredis

@@ -2410,7 +2410,7 @@ async def admin_stats(
     # ── Aggregate counts ──────────────────────────────────────────────────
     total_users        = (await db.execute(select(func.count()).select_from(User))).scalar()
     verified_users     = (await db.execute(
-        select(func.count()).select_from(User).where(User.is_verified == True)
+        select(func.count()).select_from(User).where(User.is_verified)
     )).scalar()
     total_documents    = (await db.execute(select(func.count()).select_from(Document))).scalar()
     documents_by_status = (await db.execute(

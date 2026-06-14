@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 import structlog
 import unicodedata
 from dataclasses import dataclass

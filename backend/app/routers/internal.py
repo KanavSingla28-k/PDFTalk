@@ -14,10 +14,8 @@ import asyncio
 import logging
 from datetime import date
 
-import redis as sync_redis_lib
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from rq import Queue
 from rq.registry import FailedJobRegistry
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,7 +24,6 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.auth import EmailVerification
 from app.models.document import Document
-from app.models.job_log import JobLog
 from app.models.user import User
 from app.services.alerting import dispatch_alert
 from app.utils.redis_client import get_redis, get_sync_redis
@@ -91,7 +88,7 @@ async def admin_stats(
 
     verified_users = (
         await db.execute(
-            select(func.count()).select_from(User).where(User.is_verified == True)
+            select(func.count()).select_from(User).where(User.is_verified)
         )
     ).scalar() or 0
 

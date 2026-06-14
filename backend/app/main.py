@@ -1,6 +1,4 @@
 from contextlib import asynccontextmanager
-from importlib.metadata import PackageNotFoundError
-from importlib.metadata import version as pkg_version
 from prometheus_fastapi_instrumentator import Instrumentator
 
 from fastapi import FastAPI

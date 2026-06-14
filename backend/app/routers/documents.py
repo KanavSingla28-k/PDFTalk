@@ -9,7 +9,6 @@ import structlog
 
 from app.auth.dependencies import get_verified_user
 from app.db.session import get_db
-from app.exceptions import FileValidationError, QuotaExceededError
 from app.models.document import (
     DocumentListResponse,
     DocumentStatus,

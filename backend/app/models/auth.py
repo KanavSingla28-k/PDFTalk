@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING
 import uuid
 from datetime import datetime
 
@@ -9,7 +10,8 @@ from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
 import re
 
 from app.db.base import Base
-
+if TYPE_CHECKING:
+    from app.models.user import User
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"

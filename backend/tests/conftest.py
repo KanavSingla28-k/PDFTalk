@@ -40,7 +40,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-
+import fakeredis.aioredis
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
@@ -48,7 +48,7 @@ from app.main import app
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
-import fakeredis.aioredis
+
 
 @pytest.fixture(autouse=True)
 def mock_redis(monkeypatch):

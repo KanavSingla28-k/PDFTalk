@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import traceback
 import uuid
-from typing import TYPE_CHECKING
 
 from rq.job import Job
 from redis import Redis

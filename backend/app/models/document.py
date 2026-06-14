@@ -3,14 +3,19 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, Enum, ForeignKey, Integer, Index, Text, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, Index, Text, func
 from pydantic import BaseModel, ConfigDict, Field
 
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from app.models.user import User
+    from app.models.chunk import Chunk
+    from app.models.job_log import JobLog
 
 class DocumentStatus(str, enum.Enum):
     """
