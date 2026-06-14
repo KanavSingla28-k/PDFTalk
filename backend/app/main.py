@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as pkg_version
 
 from fastapi import FastAPI
@@ -16,6 +17,10 @@ from app.routers.health import router as health_router
 from app.utils.logging import configure_logging
 from app.utils.redis_client import get_pool, get_redis
 
+try:
+    __version__ = pkg_version("pdftalk")
+except PackageNotFoundError:
+    __version__ = "1.0.0"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -36,7 +41,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="PDFTalk API",
-    version=pkg_version("pdftalk"),
+    version=__version__,
     docs_url="/docs" if settings.APP_URL.startswith("http://localhost") else None,
     lifespan=lifespan,
 )
