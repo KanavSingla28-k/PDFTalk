@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from importlib.metadata import version as pkg_version
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -35,7 +36,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="PDFTalk API",
-    version="0.1.0",
+    version=pkg_version("pdftalk"),
     docs_url="/docs" if settings.APP_URL.startswith("http://localhost") else None,
     lifespan=lifespan,
 )

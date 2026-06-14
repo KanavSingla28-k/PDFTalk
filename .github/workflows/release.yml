@@ -1,0 +1,118 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write   # Needed to create GitHub Releases and push CHANGELOG
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # Full history needed for git log range
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 1. Extract version from tag ──────────────────────────────────
+      - name: Extract version
+        id: version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}        # e.g. v1.1.0
+          VERSION=${TAG#v}                     # e.g. 1.1.0
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      # ── 2. Bump pyproject.toml ───────────────────────────────────────
+      - name: Bump backend version
+        run: |
+          sed -i 's/^version = ".*"/version = "${{ steps.version.outputs.version }}"/' \
+            backend/pyproject.toml
+          echo "✅ backend/pyproject.toml → ${{ steps.version.outputs.version }}"
+
+      # ── 3. Bump frontend package.json ────────────────────────────────
+      - name: Bump frontend version
+        run: |
+          cd frontend
+          npm version ${{ steps.version.outputs.version }} --no-git-tag-version
+          echo "✅ frontend/package.json → ${{ steps.version.outputs.version }}"
+
+      # ── 4. Generate release notes from commits since last tag ────────
+      - name: Generate release notes
+        id: notes
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sed -n '2p')
+          CURRENT_TAG=${{ steps.version.outputs.tag }}
+
+          if [ -z "$PREV_TAG" ]; then
+            RANGE="HEAD"
+            echo "No previous tag found — using full history"
+          else
+            RANGE="${PREV_TAG}..${CURRENT_TAG}"
+            echo "Generating notes from $PREV_TAG → $CURRENT_TAG"
+          fi
+
+          # Categorise commits by conventional commit prefix
+          FEATURES=$(git log $RANGE --pretty=format:"- %s" -- | grep -E "^- feat(\(.+\))?:" | sed 's/^- feat[^:]*: /- /' || true)
+          FIXES=$(git log $RANGE --pretty=format:"- %s" -- | grep -E "^- fix(\(.+\))?:" | sed 's/^- fix[^:]*: /- /' || true)
+          CHORES=$(git log $RANGE --pretty=format:"- %s" -- | grep -E "^- (chore|refactor|perf)(\(.+\))?:" | sed 's/^- [^:]*: /- /' || true)
+          OTHER=$(git log $RANGE --pretty=format:"- %s" -- | grep -vE "^- (feat|fix|chore|refactor|perf)(\(.+\))?:" || true)
+
+          DATE=$(date +%Y-%m-%d)
+
+          # Build the release notes block
+          NOTES="## [${{ steps.version.outputs.version }}] — $DATE"$'\n'
+
+          if [ -n "$FEATURES" ]; then
+            NOTES+=$'\n### Added\n'"$FEATURES"$'\n'
+          fi
+          if [ -n "$FIXES" ]; then
+            NOTES+=$'\n### Fixed\n'"$FIXES"$'\n'
+          fi
+          if [ -n "$CHORES" ]; then
+            NOTES+=$'\n### Changed\n'"$CHORES"$'\n'
+          fi
+          if [ -n "$OTHER" ]; then
+            NOTES+=$'\n### Other\n'"$OTHER"$'\n'
+          fi
+
+          # Save for later steps (multiline safe)
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          echo "$NOTES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+          echo "$NOTES"
+
+      # ── 5. Prepend to CHANGELOG.md ───────────────────────────────────
+      - name: Update CHANGELOG
+        run: |
+          NOTES="${{ steps.notes.outputs.notes }}"
+          # Prepend new entry below the header
+          awk -v entry="$NOTES" '
+            /^---$/ && !inserted {
+              print; print ""; print entry; print "---"; inserted=1; next
+            }
+            { print }
+          ' CHANGELOG.md > CHANGELOG.tmp && mv CHANGELOG.tmp CHANGELOG.md
+
+      # ── 6. Commit the bumped files back to main ───────────────────────
+      - name: Commit version bump
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/pyproject.toml frontend/package.json CHANGELOG.md
+          git commit -m "chore: release ${{ steps.version.outputs.tag }} [skip ci]"
+          git push origin HEAD:main
+
+      # ── 7. Create GitHub Release ──────────────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "PDFTalk ${{ steps.version.outputs.tag }}"
+          body: ${{ steps.notes.outputs.notes }}
+          draft: false
+          prerelease: false
