@@ -1,6 +1,6 @@
 {
-  "name": "frontend",
-  "version": "0.1.0",
+  "name": "pdftalk",
+  "version": "1.0.0",
   "private": true,
   "packageManager": "pnpm@11.6.0",
 
