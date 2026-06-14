@@ -28,11 +28,12 @@ from app.services.document_service import (
 from app.utils.rate_limit import RateLimiter, user_id_from_request
 from app.workers.queues import ingest_queue
 from app.workers.failure_handler import handle_ingest_failure
-from app.workers.worker import RETRY_DELAYS
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
+RETRY_DELAYS = [60, 300, 900]
 
 logger = structlog.get_logger()
 

@@ -9,7 +9,6 @@ from sqlalchemy import text
 from app.db.session import engine          # async engine, not get_db()
 from app.utils.redis_client import get_redis
 from app.utils.s3_client import s3_client
-from importlib.metadata import version as pkg_version
 
 router = APIRouter(tags=["health"])
 
@@ -75,7 +74,7 @@ async def readiness_check():
 
     body = {
         "status": "ok" if all_ok else "degraded",
-        "version": pkg_version("pdftalk"),
+        "version": "1.0.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "checks": {
             "db": db_result,

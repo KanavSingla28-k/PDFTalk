@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from importlib.metadata import version as pkg_version
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +14,7 @@ from app.routers.auth import router as auth_router
 from app.routers.documents import router as document_router
 from app.routers.query import router as query_router
 from app.routers.health import router as health_router
+from app.routers.internal import router as internal_router
 from app.utils.logging import configure_logging
 from app.utils.redis_client import get_pool, get_redis
 
@@ -36,7 +38,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="PDFTalk API",
-    version=pkg_version("pdftalk"),
+    version="1.0.0",
     docs_url="/docs" if settings.APP_URL.startswith("http://localhost") else None,
     lifespan=lifespan,
 )
@@ -46,6 +48,17 @@ app.include_router(auth_router)
 app.include_router(document_router)
 app.include_router(query_router)
 app.include_router(health_router)
+app.include_router(internal_router)
+
+# ── Prometheus metrics ────────────────────────────────────────────────────────
+# Exposes /metrics for Prometheus scraping (internal network only — not proxied
+# through Nginx). Instrumentator must be set up after routers are registered
+# so it sees all routes for labelling, but before middleware is added.
+Instrumentator(
+    should_group_status_codes=True,       # 2xx/4xx/5xx, not individual codes
+    should_ignore_untemplated=True,       # drops /metrics itself from its own metrics
+    excluded_handlers=["/health", "/metrics"],
+).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
 
 # ---------------------------------------------------------------------------
 # Middleware stack — added in reverse execution order.

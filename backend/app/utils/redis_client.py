@@ -3,6 +3,7 @@ from datetime import date
 from typing import cast
 import redis.asyncio as aioredis
 from app.core.config import settings
+import redis as sync_redis_lib
 
 import asyncio
 
@@ -85,3 +86,13 @@ def key_circuit_breaker_failures() -> str:
 
 def key_circuit_breaker_open_until() -> str:
     return "cb:openai:open_until"
+
+def get_sync_redis() -> sync_redis_lib.Redis:
+    """
+    Synchronous Redis client for use in RQ worker contexts (e.g. FailedJobRegistry).
+    Not suitable for use inside async request handlers — use get_redis() there.
+    """
+    return sync_redis_lib.Redis.from_url(
+        settings.REDIS_URL,
+        decode_responses=True,
+    )

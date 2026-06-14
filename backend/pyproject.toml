@@ -37,6 +37,9 @@ dependencies = [
     "pytesseract",
     "pillow",
     "python-magic>=0.4.27",
+    "prometheus-client>=0.20.0",
+    "prometheus-fastapi-instrumentator>=7.0.0",
+    "python-magic-bin>=0.4.14",
 ]
 
 [tool.setuptools.packages.find]
