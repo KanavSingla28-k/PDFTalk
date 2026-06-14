@@ -235,7 +235,7 @@ async def _stream_chat(
             "OpenAI circuit breaker is open. Try again shortly."
         )
 
-    last_exc: Exception | None = None
+    # last_exc: Exception | None = None
     stream = None
 
     for attempt in range(1, _RETRY_ATTEMPTS + 1):
@@ -250,7 +250,6 @@ async def _stream_chat(
             break
 
         except RateLimitError as exc:
-            last_exc = exc
             openai_errors_total.labels(error_type="rate_limit").inc()
             if attempt == _RETRY_ATTEMPTS:
                 raise OpenAIRetryExhaustedError(
@@ -291,7 +290,7 @@ async def _stream_chat_with_usage(
             "OpenAI circuit breaker is open. Try again shortly."
         )
 
-    last_exc: Exception | None = None
+    # last_exc: Exception | None = None
     stream = None
 
     for attempt in range(1, _RETRY_ATTEMPTS + 1):
@@ -307,7 +306,6 @@ async def _stream_chat_with_usage(
             break
 
         except RateLimitError as exc:
-            last_exc = exc
             openai_errors_total.labels(error_type="rate_limit").inc()
             if attempt == _RETRY_ATTEMPTS:
                 raise OpenAIRetryExhaustedError(
