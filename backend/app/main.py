@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError
 from importlib.metadata import version as pkg_version
 from prometheus_fastapi_instrumentator import Instrumentator
 
@@ -17,7 +18,6 @@ from app.routers.health import router as health_router
 from app.routers.internal import router as internal_router
 from app.utils.logging import configure_logging
 from app.utils.redis_client import get_pool, get_redis
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
