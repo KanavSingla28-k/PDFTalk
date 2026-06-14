@@ -9,6 +9,7 @@ from sqlalchemy import text
 from app.db.session import engine          # async engine, not get_db()
 from app.utils.redis_client import get_redis
 from app.utils.s3_client import s3_client
+from importlib.metadata import PackageNotFoundError
 
 router = APIRouter(tags=["health"])
 
