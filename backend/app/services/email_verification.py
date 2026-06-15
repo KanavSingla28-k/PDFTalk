@@ -119,20 +119,9 @@ async def verify_token(raw_token: str, db: AsyncSession) -> str:
     )
 
     await db.flush()
-    await _sweep_expired_tokens_for_user(db, user_id)
 
     log.info("verification_token_consumed", user_id=user_id)
     return str(user_id)
-
-
-async def _sweep_expired_tokens_for_user(db: AsyncSession, user_id: uuid.UUID) -> None:
-    now = datetime.now(timezone.utc)
-    await db.execute(
-        delete(EmailVerification).where(
-            EmailVerification.user_id == user_id,
-            EmailVerification.expires_at < now,
-        )
-    )
 
 
 async def purge_expired_tokens(db: AsyncSession) -> int:

@@ -1,8 +1,14 @@
 import tiktoken
 from typing import cast
 from openai.types.chat import ChatCompletionMessageParam
+from prometheus_client import Counter
 
 from app.services.retrieval import RetrievedChunk
+
+context_truncated_total = Counter(
+    "pdftalk_context_truncated_total",
+    "Total times context chunks were truncated to fit the token budget",
+)
 
 # Budget constants
 CONTEXT_TOKEN_BUDGET = 3_000
@@ -58,6 +64,9 @@ def build_context_block(chunks: list[RetrievedChunk]) -> tuple[str, list[Retriev
 
         included.append(chunk)
         tokens_used += chunk_total
+
+    if len(included) < len(chunks):
+        context_truncated_total.inc()
 
     # Build the final context string from the included chunks
     parts: list[str] = []

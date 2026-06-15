@@ -19,6 +19,7 @@ from __future__ import annotations
 from fastapi import UploadFile
 
 
+import io
 import uuid
 import structlog
 from sqlalchemy import func, select
@@ -241,7 +242,6 @@ async def upload_document(
         filename=file.filename or "upload",
     )
  
-    import io
     s3_client.upload_file(
         file_obj=io.BytesIO(file_data),
         s3_key=s3_key,

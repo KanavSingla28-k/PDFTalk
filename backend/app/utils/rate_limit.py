@@ -134,14 +134,15 @@ class RateLimiter:
             async with redis.pipeline(transaction=True) as pipe:
                 pipe.zremrangebyscore(redis_key, 0, window_start_ms)
                 pipe.zcard(redis_key)
+                pipe.zrange(redis_key, 0, 0, withscores=True)
                 results = await pipe.execute()
 
             current_count: int = results[1]  # zcard result (after stale removal)
+            oldest_score_result = results[2]
 
             if current_count >= self.limit:
                 # Request rejected — do NOT add to the sorted set.
                 # Calculate seconds until the oldest entry falls out of the window.
-                oldest_score_result = await redis.zrange(redis_key, 0, 0, withscores=True)
                 if oldest_score_result:
                     oldest_ms = int(oldest_score_result[0][1])
                     retry_after = max(

@@ -21,10 +21,6 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from app.db.base import Base
-from app.db.session import get_db
-from app.main import app
-
 # ---------------------------------------------------------------------------
 # Environment setup — MUST be first, before any app.* import
 # ---------------------------------------------------------------------------
@@ -49,6 +45,9 @@ atexit.register(lambda: shutil.rmtree(_temp_dir, ignore_errors=True))
 # ---------------------------------------------------------------------------
 # App imports — safe after env vars are in place
 # ---------------------------------------------------------------------------
+from app.db.base import Base
+from app.db.session import get_db
+from app.main import app
 
 
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"

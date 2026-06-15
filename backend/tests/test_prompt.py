@@ -20,6 +20,8 @@ class TestPromptBuilder:
         # We know each label "[doc.pdf]\n" is around 4-5 tokens.
         # Let's create chunks that easily fit within 3000 together,
         # and one that pushes it over.
+        from app.services.prompt import context_truncated_total
+        initial_val = context_truncated_total._value.get()
         
         # 1 token per word (roughly)
         chunk1 = make_chunk("word " * 500, "doc.pdf")
@@ -32,8 +34,12 @@ class TestPromptBuilder:
         assert len(included) == 2
         assert included == [chunk1, chunk2]
         assert "word" in context
+        assert context_truncated_total._value.get() == initial_val + 1
 
     def test_build_context_skips_large_chunk(self):
+        from app.services.prompt import context_truncated_total
+        initial_val = context_truncated_total._value.get()
+        
         # A chunk that is larger than the budget alone
         chunk1 = make_chunk("word " * 3100, "doc.pdf")
         # A small chunk that fits
@@ -42,6 +48,7 @@ class TestPromptBuilder:
         context, included = build_context_block([chunk1, chunk2])
         assert len(included) == 1
         assert included == [chunk2]
+        assert context_truncated_total._value.get() == initial_val + 1
 
     def test_build_messages_with_no_chunks(self):
         messages, included = build_messages([], "What is life?")

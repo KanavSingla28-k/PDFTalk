@@ -144,7 +144,7 @@ async def login(
 
     # Step 4: Account active check
     if not user.is_active:
-        login_failures_total.labels(reason="wrong_password").inc()  # don't leak inactive status
+        login_failures_total.labels(reason="inactive").inc()  # don't leak inactive status
         raise InvalidCredentialsError()
 
     # Step 5: Lockout check
@@ -175,9 +175,10 @@ async def login(
         login_failures_total.labels(reason="wrong_password").inc()
         raise InvalidCredentialsError()
 
-    # Step 8: Success — reset failure counters, issue tokens
+    # Step 8: Success — reset failure counters, update last login, issue tokens
     user.failed_login_attempts = 0
     user.locked_until = None
+    user.last_login_at = _now_utc()
     await db.flush()
 
     access_token, raw_refresh_token, expires_in = await issue_token_pair(
