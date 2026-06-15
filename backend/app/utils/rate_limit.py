@@ -52,7 +52,7 @@ falls out of the window) so well-behaved clients know when to retry.
 """
 
 import time
-import structlog
+import logging
 from typing import Callable
 import uuid
 from fastapi import Request, HTTPException
@@ -61,7 +61,7 @@ from redis.exceptions import RedisError
 from app.exceptions import RateLimitExceededError
 from app.utils.redis_client import get_redis
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class RateLimiter:
@@ -134,15 +134,14 @@ class RateLimiter:
             async with redis.pipeline(transaction=True) as pipe:
                 pipe.zremrangebyscore(redis_key, 0, window_start_ms)
                 pipe.zcard(redis_key)
-                pipe.zrange(redis_key, 0, 0, withscores=True)
                 results = await pipe.execute()
 
             current_count: int = results[1]  # zcard result (after stale removal)
-            oldest_score_result = results[2]
 
             if current_count >= self.limit:
                 # Request rejected — do NOT add to the sorted set.
                 # Calculate seconds until the oldest entry falls out of the window.
+                oldest_score_result = await redis.zrange(redis_key, 0, 0, withscores=True)
                 if oldest_score_result:
                     oldest_ms = int(oldest_score_result[0][1])
                     retry_after = max(
@@ -153,11 +152,13 @@ class RateLimiter:
                     retry_after = self.window_seconds
 
                 logger.warning(
-                    "rate_limit.exceeded",
-                    key_prefix=self.key_prefix,
-                    identifier=identifier,
-                    limit=self.limit,
-                    window_seconds=self.window_seconds,
+                    "Rate limit exceeded",
+                    extra={
+                        "key_prefix": self.key_prefix,
+                        "identifier": identifier,
+                        "limit": self.limit,
+                        "window_seconds": self.window_seconds,
+                    },
                 )
 
                 raise RateLimitExceededError(retry_after)
@@ -168,7 +169,7 @@ class RateLimiter:
                 pipe.expire(redis_key, self.window_seconds)
                 await pipe.execute()
         except RedisError as exc:
-            logger.error("rate_limiter.redis_error", error=str(exc))
+            logger.error("Redis error in rate limiter: %s", exc)
             raise HTTPException(status_code=503, detail="Service Unavailable")
 
     # ------------------------------------------------------------------

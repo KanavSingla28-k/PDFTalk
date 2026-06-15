@@ -71,9 +71,8 @@ async def send_verification_email_for_user(
 ) -> None:
     raw_token = await generate_and_store_verification_token(user_id, db)
     verification_url = _build_verification_url(raw_token)
-    from app.utils.email import send_verification_email_sync
     default_queue.enqueue(
-        send_verification_email_sync,
+        "app.utils.email.send_verification_email_sync",
         kwargs={"to_email": email, "verification_url": verification_url},
     )
     emails_sent_total.labels(type="verification").inc()
@@ -119,9 +118,20 @@ async def verify_token(raw_token: str, db: AsyncSession) -> str:
     )
 
     await db.flush()
+    await _sweep_expired_tokens_for_user(db, user_id)
 
     log.info("verification_token_consumed", user_id=user_id)
     return str(user_id)
+
+
+async def _sweep_expired_tokens_for_user(db: AsyncSession, user_id: uuid.UUID) -> None:
+    now = datetime.now(timezone.utc)
+    await db.execute(
+        delete(EmailVerification).where(
+            EmailVerification.user_id == user_id,
+            EmailVerification.expires_at < now,
+        )
+    )
 
 
 async def purge_expired_tokens(db: AsyncSession) -> int:

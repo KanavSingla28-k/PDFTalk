@@ -91,7 +91,7 @@ class UserNotFoundError(AuthError):
 
 
 
-class InvalidCredentialsError(AuthError):
+class InvalidCredentialsError(Exception):
     """
     Raised for ANY login failure that should surface as 401.
 
@@ -102,7 +102,7 @@ class InvalidCredentialsError(AuthError):
     """
 
 
-class UnverifiedEmailError(AuthError):
+class UnverifiedEmailError(Exception):
     """
     Raised when the account exists but email is not yet verified.
 
@@ -114,7 +114,7 @@ class UnverifiedEmailError(AuthError):
     """
 
 
-class InvalidResetTokenError(PDFTalkError):
+class InvalidResetTokenError(Exception):
     """
     Raised when a password reset token is missing, invalid, or expired.
     Maps to 400 INVALID_OR_EXPIRED_TOKEN.
@@ -126,7 +126,7 @@ class InvalidResetTokenError(PDFTalkError):
 # ---------------------------------------------------------------------------
 
 
-class QuotaExceededError(PDFTalkError):
+class QuotaExceededError(Exception):
     """
     Raised by document_service.upload_document() when the user’s document
     quota (per plan) has been reached.
@@ -139,43 +139,15 @@ class QuotaExceededError(PDFTalkError):
 # Document-related exceptions
 # ---------------------------------------------------------------------------
 
-class DocumentNotFoundError(PDFTalkError):
+class DocumentNotFoundError(Exception):
     def __init__(self, document_id: uuid.UUID):
         self.document_id = document_id
 
 
-class DocumentNotReadyError(PDFTalkError):
+class DocumentNotReadyError(Exception):
     def __init__(self, document_id: uuid.UUID, status: str):
         self.document_id = document_id
         self.status = status
-
-
-class InvalidStatusTransitionError(PDFTalkError):
-    """
-    Raised when a caller attempts a document status move that violates the
-    state machine defined in _ALLOWED_TRANSITIONS.
-
-    Maps to 409 Conflict — the request is syntactically valid but conflicts
-    with the current resource state.
-
-    Attributes:
-        document_id: the document whose transition was attempted
-        from_status: current status at the time of the attempt
-        to_status:   the illegal target status
-    """
-    def __init__(
-        self,
-        document_id: uuid.UUID,
-        from_status: object,   # DocumentStatus enum — typed loosely to avoid circular import
-        to_status: object,
-    ) -> None:
-        self.document_id = document_id
-        self.from_status = from_status
-        self.to_status = to_status
-        super().__init__(
-            f"Document {document_id}: cannot transition "
-            f"{from_status} → {to_status}"
-        )
 
 
 # ---------------------------------------------------------------------------
@@ -199,28 +171,6 @@ class FileValidationError(PDFTalkError):
 
     def __init__(self, reason: str, message: str) -> None:
         self.reason = reason
-        super().__init__(message)
-
-
-# ---------------------------------------------------------------------------
-# Ingestion / Processing exceptions
-# ---------------------------------------------------------------------------
-
-class ExtractionError(PDFTalkError):
-    """
-    Raised when text extraction from a document fails.
-    """
-    def __init__(self, reason: str, s3_key: str) -> None:
-        self.reason = reason
-        self.s3_key = s3_key
-        super().__init__(f"ExtractionError({reason!r}) for key={s3_key!r}")
-
-
-class ChunkingError(PDFTalkError):
-    """
-    Raised when chunking a document fails or limits are exceeded.
-    """
-    def __init__(self, message: str) -> None:
         super().__init__(message)
 
 
@@ -394,19 +344,6 @@ def register_exception_handlers(app: FastAPI) -> None:
                     f"Document {exc.document_id} is not ready for querying "
                     f"(current status: {exc.status})"
                 ),
-            },
-        )
-
-    @app.exception_handler(InvalidStatusTransitionError)
-    async def invalid_status_transition_handler(
-        request: Request,
-        exc: InvalidStatusTransitionError,
-    ) -> JSONResponse:
-        return JSONResponse(
-            status_code=409,
-            content={
-                "error": "INVALID_STATUS_TRANSITION",
-                "message": str(exc),
             },
         )
 

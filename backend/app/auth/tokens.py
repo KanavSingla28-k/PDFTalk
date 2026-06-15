@@ -20,7 +20,7 @@ Design (from T-16 spec):
 """
 
 import hashlib
-import structlog
+import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -34,7 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.auth import RefreshToken  # SQLAlchemy model matching T-04 schema
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -294,28 +294,6 @@ async def revoke_refresh_token(raw_token: str, db: AsyncSession) -> None:
         delete(RefreshToken).where(RefreshToken.token_hash == token_hash)
     )
     await db.commit()
-
-
-async def revoke_all_refresh_tokens(user_id: uuid.UUID, db: AsyncSession) -> int:
-    """
-    Invalidate ALL active refresh tokens for *user_id* in a single query.
-
-    Used by DELETE /auth/sessions to implement "sign out of all devices".
-    Any device that subsequently tries to use its refresh token will receive
-    a 401 and be forced to re-authenticate.
-
-    Returns:
-        The number of tokens deleted (useful for logging).
-    """
-    result = await db.execute(
-        delete(RefreshToken)
-        .where(RefreshToken.user_id == user_id)
-        .returning(RefreshToken.id)
-    )
-    count = len(result.fetchall())
-    await db.commit()
-    logger.info("revoke_all_refresh_tokens: deleted %d token(s) for user %s", count, user_id)
-    return count
 
 
 # ---------------------------------------------------------------------------

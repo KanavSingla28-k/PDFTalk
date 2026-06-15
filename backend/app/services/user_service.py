@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import structlog
+import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -21,7 +21,7 @@ from app.utils.metrics import (
     login_failures_total,
 )
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -144,7 +144,7 @@ async def login(
 
     # Step 4: Account active check
     if not user.is_active:
-        login_failures_total.labels(reason="inactive").inc()  # don't leak inactive status
+        login_failures_total.labels(reason="wrong_password").inc()  # don't leak inactive status
         raise InvalidCredentialsError()
 
     # Step 5: Lockout check
@@ -167,18 +167,17 @@ async def login(
             user.locked_until = _now_utc() + timedelta(minutes=_LOCKOUT_DURATION_MINUTES)
             user.failed_login_attempts = 0
             logger.warning(
-                "account.locked",
-                user_id=str(user.id),
+                "Account locked due to repeated failed logins",
+                extra={"user_id": str(user.id)},
             )
 
         await db.commit()
         login_failures_total.labels(reason="wrong_password").inc()
         raise InvalidCredentialsError()
 
-    # Step 8: Success — reset failure counters, update last login, issue tokens
+    # Step 8: Success — reset failure counters, issue tokens
     user.failed_login_attempts = 0
     user.locked_until = None
-    user.last_login_at = _now_utc()
     await db.flush()
 
     access_token, raw_refresh_token, expires_in = await issue_token_pair(
@@ -187,6 +186,6 @@ async def login(
     )
 
     user_logins_total.inc()
-    logger.info("user.login", user_id=str(user.id))
+    logger.info("User logged in", extra={"user_id": str(user.id)})
 
     return access_token, raw_refresh_token, expires_in, user

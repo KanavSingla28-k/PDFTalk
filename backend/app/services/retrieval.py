@@ -26,17 +26,17 @@ Design notes:
 
 from __future__ import annotations
 
-import structlog
+import logging
 import uuid
 from dataclasses import dataclass
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.utils.openai_client import create_embeddings
+from app.services.embedding import embed_texts
 from app.core.config import settings
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -92,12 +92,18 @@ async def retrieve_similar_chunks(
 
     logger.debug(
         "retrieval.start",
-        user_id=str(user_id),
-        document_count=len(document_ids),
-        k=effective_k,
+        extra={
+            "user_id": str(user_id),
+            "document_count": len(document_ids),
+            "k": effective_k,
+        },
     )
 
-    vectors = await create_embeddings([query])
+    # embed_texts() is sync (uses asyncio.run() internally).
+    # We call it here via run_in_executor so we don't block the event loop.
+    import asyncio
+    loop = asyncio.get_running_loop()
+    vectors = await loop.run_in_executor(None, embed_texts, [query])
     query_vector = vectors[0]  # single query → single vector
 
     rows = await _run_similarity_search(
@@ -110,8 +116,7 @@ async def retrieve_similar_chunks(
 
     logger.debug(
         "retrieval.complete",
-        user_id=str(user_id),
-        results_returned=len(rows),
+        extra={"user_id": str(user_id), "results_returned": len(rows)},
     )
 
     return rows

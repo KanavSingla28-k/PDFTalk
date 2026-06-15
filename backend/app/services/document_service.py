@@ -19,14 +19,13 @@ from __future__ import annotations
 from fastapi import UploadFile
 
 
-import io
 import uuid
 import structlog
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.exceptions import QuotaExceededError, DocumentNotFoundError, InvalidStatusTransitionError
+from app.exceptions import QuotaExceededError, DocumentNotFoundError
 from app.models.user import User
 from app.models.document import Document, DocumentStatus, _ALLOWED_TRANSITIONS
 from app.services.file_validation import validate_upload
@@ -36,6 +35,29 @@ from app.utils.s3_client import build_document_s3_key, s3_client
 
 logger = structlog.get_logger()
 
+
+class InvalidStatusTransitionError(Exception):
+    """
+    Raised when a caller attempts a status move that violates the state machine.
+
+    Attributes:
+        document_id: the document whose transition was attempted
+        from_status: current status at the time of the attempt
+        to_status: the illegal target status
+    """
+    def __init__(
+        self,
+        document_id: uuid.UUID,
+        from_status: DocumentStatus,
+        to_status: DocumentStatus,
+    ) -> None:
+        self.document_id = document_id
+        self.from_status = from_status
+        self.to_status = to_status
+        super().__init__(
+            f"Document {document_id}: cannot transition "
+            f"{from_status.value} → {to_status.value}"
+        )
 
 
 async def get_document_for_user(
@@ -242,6 +264,7 @@ async def upload_document(
         filename=file.filename or "upload",
     )
  
+    import io
     s3_client.upload_file(
         file_obj=io.BytesIO(file_data),
         s3_key=s3_key,

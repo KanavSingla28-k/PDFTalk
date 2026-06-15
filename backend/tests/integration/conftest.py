@@ -7,9 +7,6 @@ from unittest.mock import patch, AsyncMock
 @pytest.fixture(autouse=True)
 def s3_mock(monkeypatch):
     """Mock S3 bucket for all integration tests."""
-    # Ensure S3_BUCKET_NAME is set for the worker logic which reads it
-    monkeypatch.setenv("S3_BUCKET_NAME", "pdftalk-test-bucket")
-    
     with mock_aws():
         # Re-initialize the global s3_client's internal boto3 client
         # so it gets wrapped by moto correctly.
