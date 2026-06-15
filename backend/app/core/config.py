@@ -35,7 +35,7 @@ class Settings(BaseSettings):
     LOG_EMAILS_ONLY: bool = False
 
     APP_URL: str
-    PROMETHEUS_MULTIPROC_DIR: str = "/tmp/prometheus"
+    PROMETHEUS_MULTIPROC_DIR: str = "/tmp/prometheus/"  # default empty string will raise errors later
 
     GRAFANA_ADMIN_PASSWORD: str | None = None
     GRAFANA_SERVER_ROOT_URL: str | None = None
