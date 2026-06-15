@@ -10,7 +10,7 @@ Usage in workers/worker.py:
     Worker(["ingest"], connection=redis_conn).work()
 """
 
-import logging
+import structlog
 import threading
 import time
 
@@ -21,7 +21,7 @@ from rq.registry import FailedJobRegistry
 
 from app.utils.metrics import queue_length, dead_letter_queue_length
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 _POLL_INTERVAL = 15  # seconds
 

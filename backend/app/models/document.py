@@ -34,7 +34,7 @@ _ALLOWED_TRANSITIONS: dict[DocumentStatus, set[DocumentStatus]] = {
     DocumentStatus.PENDING: {DocumentStatus.PROCESSING},
     DocumentStatus.PROCESSING: {DocumentStatus.READY, DocumentStatus.FAILED},
     DocumentStatus.READY: set(),    # terminal
-    DocumentStatus.FAILED: set(),   # terminal
+    DocumentStatus.FAILED: {DocumentStatus.PROCESSING},   # allowed for retry
 }
 
 class Document(Base):
