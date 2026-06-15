@@ -133,11 +133,11 @@ def create_access_token(user_id: str) -> str:
         "jti": str(uuid.uuid4()),
         "type": "access",
     }
-    return cast(str, jwt.encode(
+    return jwt.encode(
         payload,
         settings.JWT_SECRET_KEY,
         algorithm=settings.JWT_ALGORITHM,
-    ))
+    )
 
 
 def decode_access_token(token: str) -> str:
@@ -294,6 +294,28 @@ async def revoke_refresh_token(raw_token: str, db: AsyncSession) -> None:
         delete(RefreshToken).where(RefreshToken.token_hash == token_hash)
     )
     await db.commit()
+
+
+async def revoke_all_refresh_tokens(user_id: uuid.UUID, db: AsyncSession) -> int:
+    """
+    Invalidate ALL active refresh tokens for *user_id* in a single query.
+
+    Used by DELETE /auth/sessions to implement "sign out of all devices".
+    Any device that subsequently tries to use its refresh token will receive
+    a 401 and be forced to re-authenticate.
+
+    Returns:
+        The number of tokens deleted (useful for logging).
+    """
+    result = await db.execute(
+        delete(RefreshToken)
+        .where(RefreshToken.user_id == user_id)
+        .returning(RefreshToken.id)
+    )
+    count = len(result.fetchall())
+    await db.commit()
+    logger.info("revoke_all_refresh_tokens: deleted %d token(s) for user %s", count, user_id)
+    return count
 
 
 # ---------------------------------------------------------------------------
