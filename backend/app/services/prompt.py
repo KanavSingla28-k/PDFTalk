@@ -1,5 +1,5 @@
 import tiktoken
-from typing import Any, cast
+from typing import cast
 from openai.types.chat import ChatCompletionMessageParam
 
 from app.services.retrieval import RetrievedChunk
