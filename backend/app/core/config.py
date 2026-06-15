@@ -28,14 +28,14 @@ class Settings(BaseSettings):
 
     APP_URL: str
 
-    GRAFANA_ADMIN_PASSWORD: str
-    GRAFANA_SERVER_ROOT_URL: str
+    GRAFANA_ADMIN_PASSWORD: str | None = None
+    GRAFANA_SERVER_ROOT_URL: str | None = None
     GF_SERVER_SERVE_FROM_SUB_PATH: bool = True
     
-    ADMIN_TOKEN: str
+    ADMIN_TOKEN: str | None = None
     SLACK_WEBHOOK_URL: Optional[str] = None
-    ALERT_EMAIL_TO: str
-    EMAIL_FROM_DOMAIN: str
+    ALERT_EMAIL_TO: str | None = None
+    EMAIL_FROM_DOMAIN: str | None = None
 
     MAX_DOCS_PER_USER: int = 20
     MAX_DAILY_TOKENS_PER_USER: int = 100000
