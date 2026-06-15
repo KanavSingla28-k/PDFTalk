@@ -77,7 +77,7 @@ def _extract_pdf(raw: bytes, s3_key: str) -> str:
 
     try:
         pages: list[str] = []
-        for page_num, page in enumerate(doc, start=1):   # type: ignore[arg-type]
+        for page_num, page in enumerate(doc, start=1):   
             try:
                 text = page.get_text("text").strip()
             except Exception as exc:
