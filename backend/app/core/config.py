@@ -1,5 +1,4 @@
 from typing import Literal, Optional
-from pydantic import field_validator
 from pydantic_settings import BaseSettings
 import os
 
@@ -14,13 +13,6 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-
-    @field_validator("JWT_SECRET_KEY")
-    @classmethod
-    def validate_jwt_secret_key(cls, v: str) -> str:
-        if len(v) < 32:
-            raise ValueError("JWT_SECRET_KEY must be at least 32 characters long")
-        return v
 
     RESEND_API_KEY: Optional[str] = None
     FROM_EMAIL: str

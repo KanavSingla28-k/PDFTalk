@@ -11,7 +11,7 @@ The /api/internal/ prefix is blocked at Nginx for external traffic
 """
 
 import asyncio
-import structlog
+import logging
 from datetime import date
 from typing import Any
 
@@ -29,7 +29,7 @@ from app.models.user import User
 from app.services.alerting import dispatch_alert
 from app.utils.redis_client import get_redis, get_sync_redis
 
-log = structlog.get_logger(__name__)
+log = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 bearer = HTTPBearer()
@@ -40,12 +40,6 @@ bearer = HTTPBearer()
 # ---------------------------------------------------------------------------
 
 def _require_admin(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> None:
-    if settings.ADMIN_TOKEN is None:
-        log.error("internal.admin_token_missing", reason="ADMIN_TOKEN is not configured in settings")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Admin token is not configured on the server."
-        )
     if creds.credentials != settings.ADMIN_TOKEN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 

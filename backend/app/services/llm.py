@@ -6,7 +6,7 @@ Streaming LLM service for RAG query responses.
 
 from __future__ import annotations
 
-import structlog
+import logging
 from typing import AsyncIterator
 
 from openai.types.chat import ChatCompletionMessageParam
@@ -17,7 +17,7 @@ from app.utils.openai_client import (
 )
 from app.utils.metrics import openai_tokens_used_total
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 _MODEL = "gpt-4o-mini"
 _MAX_TOKENS = 1024
@@ -54,20 +54,22 @@ async def stream_llm_response(
                 await check_and_increment_token_usage(user_id, output_tokens)
             except DailyQuotaExceededError:
                 logger.warning(
-                    "llm.quota_exceeded_mid_stream",
-                    user_id=user_id,
-                    output_tokens=output_tokens,
+                    "User %s exceeded daily token quota mid-stream "
+                    "(%d output tokens in this response).",
+                    user_id,
+                    output_tokens,
                 )
                 raise
             except Exception:
                 logger.exception(
-                    "llm.token_recording_failed",
-                    output_tokens=output_tokens,
-                    user_id=user_id,
+                    "Failed to record %d output tokens for user %s. "
+                    "Quota counter may be inaccurate.",
+                    output_tokens,
+                    user_id,
                 )
 
         logger.debug(
-            "llm.stream_complete",
-            user_id=user_id,
-            output_tokens=output_tokens,
+            "LLM stream complete for user %s: %d output tokens (API-reported).",
+            user_id,
+            output_tokens,
         )

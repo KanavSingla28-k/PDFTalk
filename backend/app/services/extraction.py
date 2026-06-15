@@ -1,10 +1,12 @@
 from __future__ import annotations
 
-from enum import Enum
 import structlog
 import unicodedata
+from dataclasses import dataclass
+from enum import Enum
+
 import fitz  # PyMuPDF
-from app.exceptions import ExtractionError
+
 from app.utils.s3_client import s3_client
 
 logger = structlog.get_logger()
@@ -13,6 +15,16 @@ class MimeType(str, Enum):
     PDF = "application/pdf"
     TXT = "text/plain"
     MD = "text/markdown"
+
+
+@dataclass
+class ExtractionError(Exception):
+    """Raised when a file cannot be extracted."""
+    reason: str
+    s3_key: str
+
+    def __str__(self) -> str:
+        return f"ExtractionError({self.reason!r}) for key={self.s3_key!r}"
 
 
 def extract_text(s3_key: str, mime_type: str) -> str:

@@ -9,7 +9,6 @@ from app.models.document import Document, DocumentStatus
 from app.models.chunk import Chunk
 from app.workers.ingest import _run, _fail
 from app.services.chunking import ChunkData
-from app.exceptions import ChunkingError
 
 pytestmark = pytest.mark.integration
 
@@ -98,9 +97,9 @@ async def test_ingestion_quota_exceeded(
     # Return massive text that exceeds 500,000 tokens
     # Or just mock `_check_token_budget` to raise ValueError
     with patch("app.workers.ingest.extract_text", return_value="Text."), \
-         patch("app.workers.ingest._check_token_budget", side_effect=ChunkingError("Quota exceeded")):
+         patch("app.workers.ingest._check_token_budget", side_effect=ValueError("Quota exceeded")):
         
-        with pytest.raises(ChunkingError, match="Quota exceeded"):
+        with pytest.raises(ValueError, match="Quota exceeded"):
             try:
                 await db.run_sync(_run, uuid.UUID(doc_id))
             except Exception as exc:

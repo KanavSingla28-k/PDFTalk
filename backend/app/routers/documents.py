@@ -24,7 +24,6 @@ from app.services.document_service import (
     get_document_for_user,
     get_user_documents,
     upload_document,
-    transition_status,
 )
 from app.utils.rate_limit import RateLimiter, user_id_from_request
 from app.workers.queues import ingest_queue
@@ -70,9 +69,8 @@ async def upload_document_endpoint(
     document = await upload_document(current_user=current_user, file=file, db=db)
 
     try:
-        from app.workers.ingest import run_ingest
         ingest_queue.enqueue(
-            run_ingest,
+            "app.workers.ingest.run_ingest",
             kwargs={"document_id": str(document.id)},
             retry=Retry(max=3, interval=RETRY_DELAYS),
             on_failure=Callback(handle_ingest_failure),
@@ -200,73 +198,6 @@ async def delete_document_endpoint(
         )
 
     return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-@router.post(
-    "/{document_id}/retry",
-    status_code=status.HTTP_202_ACCEPTED,
-    response_model=DocumentUploadResponse,
-)
-async def retry_document_endpoint(
-    document_id: uuid.UUID,
-    current_user: User = Depends(get_verified_user),
-    db: AsyncSession = Depends(get_db),
-) -> DocumentUploadResponse:
-    """
-    Retry a failed document ingestion.
-    """
-    try:
-        document = await get_document_for_user(
-            db=db,
-            document_id=document_id,
-            user_id=current_user.id,
-        )
-    except DocumentNotFoundError:
-        raise HTTPException(status_code=404, detail="Document not found.")
-
-    if document.status_enum != DocumentStatus.FAILED:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Only FAILED documents can be retried. Current status is {document.status}.",
-        )
-
-    # Transition to PROCESSING to signal the retry has started
-    await transition_status(db, document, DocumentStatus.PROCESSING)
-    await db.commit()
-
-    try:
-        from app.workers.ingest import run_ingest
-        ingest_queue.enqueue(
-            run_ingest,
-            kwargs={"document_id": str(document.id)},
-            retry=Retry(max=3, interval=RETRY_DELAYS),
-            on_failure=Callback(handle_ingest_failure),
-            job_timeout=600,
-        )
-    except Exception as e:
-        logger.exception(
-            "ingest_retry_enqueue_failed",
-            document_id=str(document.id),
-            error=str(e),
-        )
-        # Roll back status to FAILED
-        await transition_status(
-            db,
-            document,
-            DocumentStatus.FAILED,
-            error_message="Processing queue unavailable. Please try again shortly.",
-        )
-        await db.commit()
-        raise HTTPException(
-            status_code=503,
-            detail="Processing queue unavailable. Please try again shortly.",
-        )
-
-    return DocumentUploadResponse(
-        document_id=document.id,
-        status=DocumentStatus(document.status),
-    )
-
 
 
 # --------------------------------------------------------------------------- #

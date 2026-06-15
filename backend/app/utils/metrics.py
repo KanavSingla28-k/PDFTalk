@@ -73,7 +73,7 @@ user_logins_total = Counter(
 login_failures_total = Counter(
     "pdftalk_login_failures_total",
     "Failed login attempts",
-    ["reason"],  # "wrong_password" | "locked" | "unverified" | "not_found" | "inactive"
+    ["reason"],  # "wrong_password" | "locked" | "unverified" | "not_found"
 )
 
 emails_sent_total = Counter(

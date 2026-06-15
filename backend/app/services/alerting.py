@@ -8,7 +8,7 @@ Called from POST /internal/alerts/webhook via asyncio.create_task()
 so the webhook response is immediate and dispatch is fire-and-forget.
 """
 
-import structlog
+import logging
 from typing import Any
 
 import httpx
@@ -16,7 +16,7 @@ import resend
 
 from app.core.config import settings
 
-log = structlog.get_logger(__name__)
+log = logging.getLogger(__name__)
 
 
 async def dispatch_alert(payload: dict[str, Any]) -> None:
@@ -57,7 +57,7 @@ async def _send_email(subject: str, body: str, alert_name: str) -> None:
             "text":    body,
         })
     except Exception as e:
-        log.warning("alert_email_failed", error=str(e), alert=alert_name)
+        log.warning("alert_email_failed", extra={"error": str(e), "alert": alert_name})
 
 
 async def _send_slack(emoji: str, subject: str, description: str, alert_name: str) -> None:
@@ -74,4 +74,4 @@ async def _send_slack(emoji: str, subject: str, description: str, alert_name: st
                 },
             )
     except Exception as e:
-        log.warning("alert_slack_failed", error=str(e), alert=alert_name)
+        log.warning("alert_slack_failed", extra={"error": str(e), "alert": alert_name})

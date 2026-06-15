@@ -185,9 +185,8 @@ async def test_send_enqueues_job_on_default_queue(db):
 
     pos_args, kw_args = fake_queue.enqueue.call_args
 
-    from app.utils.email import send_verification_email_sync
-    # First positional arg is the worker function object.
-    assert pos_args[0] == send_verification_email_sync
+    # First positional arg is the import-path string of the worker function.
+    assert pos_args[0] == "app.utils.email.send_verification_email_sync"
 
     # kwargs must carry to_email and a verification_url containing the token.
     job_kwargs = kw_args.get("kwargs", {})
@@ -286,6 +285,78 @@ async def test_purge_removes_only_expired(db):
     assert len(remaining) == 1
     assert remaining[0].token_hash == _sha256("valid-token")
 
+
+# ── T-19: Per-user expired-token sweep on verify ──────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_verify_sweeps_other_expired_tokens_for_same_user(db):
+    """
+    When a valid token is consumed, all other expired tokens for the same user
+    are deleted as a side-effect (on-use cleanup, no cron needed).
+    """
+    import uuid as _uuid
+    user_uuid = _uuid.UUID(USER_ID)
+    now = datetime.now(timezone.utc)
+
+    # Add two stale tokens for the same user alongside the valid one.
+    stale_1 = EmailVerification(
+        user_id=user_uuid,
+        token_hash=_sha256("stale-token-1"),
+        expires_at=now - timedelta(hours=2),
+    )
+    stale_2 = EmailVerification(
+        user_id=user_uuid,
+        token_hash=_sha256("stale-token-2"),
+        expires_at=now - timedelta(hours=5),
+    )
+    db.add_all([stale_1, stale_2])
+    await db.commit()
+
+    # Now generate and immediately verify a fresh token.
+    raw = await generate_and_store_verification_token(USER_ID, db)
+    await db.commit()
+    await verify_token(raw, db)
+    await db.commit()
+
+    # All three rows (2 stale + 1 consumed) must be gone.
+    from sqlalchemy import select
+    result = await db.execute(
+        select(EmailVerification).where(EmailVerification.user_id == user_uuid)
+    )
+    assert result.scalars().all() == []
+
+
+@pytest.mark.asyncio
+async def test_sweep_does_not_touch_other_users_expired_tokens(db):
+    """
+    The per-user sweep is scoped to the verifying user.
+    Another user's expired tokens must not be deleted.
+    """
+    import uuid as _uuid
+    other_user_id = _uuid.uuid4()
+    now = datetime.now(timezone.utc)
+
+    other_expired = EmailVerification(
+        user_id=other_user_id,
+        token_hash=_sha256("other-user-expired"),
+        expires_at=now - timedelta(hours=1),
+    )
+    db.add(other_expired)
+    await db.commit()
+
+    # Verify the primary user's token.
+    raw = await generate_and_store_verification_token(USER_ID, db)
+    await db.commit()
+    await verify_token(raw, db)
+    await db.commit()
+
+    # Other user's expired row must still be present.
+    from sqlalchemy import select
+    result = await db.execute(
+        select(EmailVerification).where(EmailVerification.id == other_expired.id)
+    )
+    assert result.scalar_one_or_none() is not None
 
 
 # ── T-19: Endpoint redirect shape tests ───────────────────────────────────────
