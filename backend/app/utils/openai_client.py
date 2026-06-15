@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import AsyncIterator
+from typing import AsyncIterator, Callable, Any
 
 from openai import AsyncOpenAI, APIStatusError, RateLimitError
 from openai.types.chat import ChatCompletionMessageParam
@@ -144,7 +144,7 @@ _RETRY_ATTEMPTS = 3
 _RETRY_BASE_DELAY = 5.0
 
 
-async def _guarded_call(coro_factory):
+async def _guarded_call(coro_factory: Callable[[], Any]) -> Any:
     if await _is_circuit_open():
         raise CircuitBreakerOpenError(
             "OpenAI circuit breaker is open. Try again shortly."
@@ -191,7 +191,7 @@ async def _guarded_call(coro_factory):
 # ---------------------------------------------------------------------------
 
 async def create_embeddings(texts: list[str]) -> list[list[float]]:
-    def _factory():
+    def _factory() -> Any:
         return get_client().embeddings.create(
             model="text-embedding-3-small",
             input=texts,
@@ -211,7 +211,7 @@ async def chat_complete(
     if stream:
         return _stream_chat(messages, model=model, max_tokens=max_tokens)
 
-    def _factory():
+    def _factory() -> Any:
         return get_client().chat.completions.create(
             model=model,
             messages=messages,

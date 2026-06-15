@@ -5,8 +5,9 @@ import uuid
 
 from rq.job import Job
 from redis import Redis
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, Engine
 from sqlalchemy.orm import Session
+from types import TracebackType
 
 from app.core.config import settings
 from app.models.document import Document
@@ -17,7 +18,7 @@ from app.models.job_log import JobLog
 _sync_engine = None
 
 
-def _get_engine():
+def _get_engine() -> Engine:
     global _sync_engine
     if _sync_engine is None:
         _sync_engine = create_engine(
@@ -34,7 +35,7 @@ def handle_ingest_failure(
     connection: Redis,
     type: type[BaseException],
     value: BaseException,
-    tb,
+    tb: TracebackType | None,
 ) -> None:
     """
     Called by RQ after max_retries are exhausted.

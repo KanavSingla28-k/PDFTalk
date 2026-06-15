@@ -1,6 +1,7 @@
 import asyncio
 import time
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -15,7 +16,7 @@ router = APIRouter(tags=["health"])
 TIMEOUT = 0.5  # seconds per dependency check
 
 
-async def _check_db() -> dict:
+async def _check_db() -> dict[str, Any]:
     start = time.monotonic()
     try:
         async with engine.connect() as conn:
@@ -27,7 +28,7 @@ async def _check_db() -> dict:
         return {"status": "error", "latency_ms": latency_ms, "detail": str(e)}
 
 
-async def _check_redis() -> dict:
+async def _check_redis() -> dict[str, Any]:
     start = time.monotonic()
     try:
         r = get_redis()
@@ -39,7 +40,7 @@ async def _check_redis() -> dict:
         return {"status": "error", "latency_ms": latency_ms, "detail": str(e)}
 
 
-async def _check_s3() -> dict:
+async def _check_s3() -> dict[str, Any]:
     start = time.monotonic()
     try:
         # head_bucket is a blocking boto3 call — run in a thread
@@ -55,12 +56,12 @@ async def _check_s3() -> dict:
 
 
 @router.get("/live")
-async def liveness_check():
+async def liveness_check() -> JSONResponse:
     return JSONResponse(content={"status": "ok"}, status_code=200)
 
 
 @router.get("/ready")
-async def readiness_check():
+async def readiness_check() -> JSONResponse:
     db_result, redis_result, s3_result = await asyncio.gather(
         _check_db(),
         _check_redis(),

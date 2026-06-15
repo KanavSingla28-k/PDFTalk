@@ -9,11 +9,12 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import AsyncIterator
+from typing import AsyncIterator, Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from openai import APITimeoutError
+from openai.types.chat import ChatCompletionMessageParam
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_verified_user
@@ -96,7 +97,7 @@ async def ask(
 
 
 async def _sse_generator(
-    messages: list,
+    messages: list[ChatCompletionMessageParam],
     user_id: str,
 ) -> AsyncIterator[str]:
     token_stream = stream_llm_response(messages=messages, user_id=user_id)

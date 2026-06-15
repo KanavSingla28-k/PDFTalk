@@ -1,5 +1,6 @@
 import math
 import uuid
+from typing import Any
 from rq import Retry, Callback
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status, Request
@@ -93,7 +94,7 @@ async def upload_document_endpoint(
         )
     return DocumentUploadResponse(
         document_id=document.id,
-        status=document.status,
+        status=DocumentStatus(document.status),
     )
 
 
@@ -209,7 +210,7 @@ async def _list_with_count(
     status: DocumentStatus | None,
     limit: int,
     offset: int,
-) -> tuple[list, int]:
+) -> tuple[list[Any], int]:
     """
     Run the paginated query then the COUNT query sequentially on the same session.
 

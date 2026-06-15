@@ -96,8 +96,8 @@ async def consume_reset_token(raw_token: str, new_password: str, db: AsyncSessio
 
     user_id = record.user_id
 
-    result = await db.execute(select(User).where(User.id == user_id))
-    user: User | None = result.scalar_one_or_none()
+    user_result = await db.execute(select(User).where(User.id == user_id))
+    user: User | None = user_result.scalar_one_or_none()
 
     if user is None:
         raise InvalidResetTokenError("Invalid or expired token")

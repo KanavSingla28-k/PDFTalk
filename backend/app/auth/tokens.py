@@ -24,7 +24,7 @@ import logging
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any
+from typing import Any, cast
 
 from jose import ExpiredSignatureError, JWTError, jwt
 from pydantic import BaseModel
@@ -87,7 +87,8 @@ def _decode_token_unverified(token: str) -> str | None:
                 "verify_aud": False,
             },
         )
-        return payload.get("sub")
+        sub = payload.get("sub")
+        return str(sub) if sub else None
     except Exception:
         return None
 # ---------------------------------------------------------------------------
@@ -132,11 +133,11 @@ def create_access_token(user_id: str) -> str:
         "jti": str(uuid.uuid4()),
         "type": "access",
     }
-    return jwt.encode(
+    return cast(str, jwt.encode(
         payload,
         settings.JWT_SECRET_KEY,
         algorithm=settings.JWT_ALGORITHM,
-    )
+    ))
 
 
 def decode_access_token(token: str) -> str:

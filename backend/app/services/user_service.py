@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
@@ -43,7 +44,7 @@ async def get_by_email_lower(db: AsyncSession, email_lower: str) -> User | None:
     return result.scalar_one_or_none()
 
 
-async def _delete_pending_verification(db: AsyncSession, user_id) -> None:
+async def _delete_pending_verification(db: AsyncSession, user_id: uuid.UUID | str) -> None:
     from app.models.auth import EmailVerification
     from sqlalchemy import delete
 

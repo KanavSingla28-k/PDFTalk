@@ -13,6 +13,7 @@ The /api/internal/ prefix is blocked at Nginx for external traffic
 import asyncio
 import logging
 from datetime import date
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -48,7 +49,7 @@ def _require_admin(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> Non
 # ---------------------------------------------------------------------------
 
 @router.post("/alerts/webhook", dependencies=[Depends(_require_admin)], status_code=204)
-async def alertmanager_webhook(payload: dict) -> None:
+async def alertmanager_webhook(payload: dict[str, Any]) -> None:
     """
     Alertmanager POSTs here when an alert fires or resolves.
     Dispatch is fire-and-forget — the webhook ACKs immediately (204)
@@ -64,7 +65,7 @@ async def alertmanager_webhook(payload: dict) -> None:
 @router.get("/admin/stats", dependencies=[Depends(_require_admin)])
 async def admin_stats(
     db: AsyncSession = Depends(get_db),
-) -> dict:
+) -> dict[str, Any]:
     """
     Aggregated business metrics for the operator dashboard.
     All queries are read-only and use indexed columns.
@@ -119,7 +120,7 @@ async def admin_stats(
     # Acceptable at MVP user counts (<1000). Each key = O(1) GET.
     redis = get_redis()
     today_str = date.today().strftime("%Y%m%d")
-    token_data: list[dict] = []
+    token_data: list[dict[str, Any]] = []
     async for key in redis.scan_iter(f"quota:tokens:*:{today_str}"):
         val = await redis.get(key)
         if val:

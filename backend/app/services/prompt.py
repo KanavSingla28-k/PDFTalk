@@ -1,4 +1,6 @@
 import tiktoken
+from typing import Any, cast
+from openai.types.chat import ChatCompletionMessageParam
 
 from app.services.retrieval import RetrievedChunk
 
@@ -69,7 +71,7 @@ def build_context_block(chunks: list[RetrievedChunk]) -> tuple[str, list[Retriev
 def build_messages(
     chunks: list[RetrievedChunk],
     question: str,
-) -> tuple[list[dict], list[RetrievedChunk]]:
+) -> tuple[list[ChatCompletionMessageParam], list[RetrievedChunk]]:
     """
     Assemble the OpenAI messages list for the chat completion call.
 
@@ -90,9 +92,9 @@ def build_messages(
 
 Question: {question}"""
 
-    messages = [
+    messages = cast(list[ChatCompletionMessageParam], [
         {"role": "system", "content": SYSTEM_PROMPT},
         {"role": "user", "content": user_message},
-    ]
+    ])
 
     return messages, included_chunks

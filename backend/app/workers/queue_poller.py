@@ -14,6 +14,8 @@ import logging
 import threading
 import time
 
+from redis import Redis
+
 from rq import Queue
 from rq.registry import FailedJobRegistry
 
@@ -24,7 +26,7 @@ log = logging.getLogger(__name__)
 _POLL_INTERVAL = 15  # seconds
 
 
-def _poll(redis_conn, interval: int) -> None:
+def _poll(redis_conn: Redis, interval: int) -> None:
     ingest_q        = Queue("ingest", connection=redis_conn)
     failed_registry = FailedJobRegistry("ingest", connection=redis_conn)
 
@@ -38,7 +40,7 @@ def _poll(redis_conn, interval: int) -> None:
         time.sleep(interval)
 
 
-def start_queue_poller(redis_conn, interval: int = _POLL_INTERVAL) -> None:
+def start_queue_poller(redis_conn: Redis, interval: int = _POLL_INTERVAL) -> None:
     """
     Start the queue depth poller as a daemon thread.
     Daemon=True means it exits automatically when the worker process exits.

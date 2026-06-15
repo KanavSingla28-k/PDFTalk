@@ -43,8 +43,7 @@ class Settings(BaseSettings):
     STREAM_CHUNK_TIMEOUT: int = 30
     LOG_FORMAT: Optional[Literal["json", "pretty"]] = None
     MAX_DAILY_QUERIES_PER_USER: int = 500
-    SLACK_WEBHOOK_URL: Optional[str] = None
 
     model_config = {"env_file": env_file}
 
-settings = Settings()
+settings: Settings = Settings()  # type: ignore[call-arg]

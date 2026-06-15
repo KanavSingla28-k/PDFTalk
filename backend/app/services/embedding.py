@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import math
+from typing import TypeVar
 
 from app.utils.openai_client import create_embeddings
 
@@ -100,7 +101,9 @@ async def _embed_texts_async(texts: list[str]) -> list[list[float]]:
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_batches(items: list, size: int) -> list[list]:
+T = TypeVar("T")
+
+def _make_batches(items: list[T], size: int) -> list[list[T]]:
     """Split a list into consecutive sublists of at most `size` elements."""
     return [items[i : i + size] for i in range(0, len(items), size)]
 

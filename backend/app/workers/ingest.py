@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 from sqlalchemy import delete
+from typing import TypeVar, Coroutine, Any
 
 from app.db.sync_session import SessionLocal
 from app.models.document import Document, DocumentStatus
@@ -27,7 +28,9 @@ from app.utils.metrics import (
 logger = logging.getLogger(__name__)
 
 
-def _run_async(coro):
+T = TypeVar("T")
+
+def _run_async(coro: Coroutine[Any, Any, T]) -> T:
     """
     Run an async coroutine from a synchronous RQ worker context.
     """

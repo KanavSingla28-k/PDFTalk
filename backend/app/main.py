@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from prometheus_fastapi_instrumentator import Instrumentator
+from typing import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +19,7 @@ from app.utils.logging import configure_logging
 from app.utils.redis_client import get_pool, get_redis
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # --- startup ---
     configure_logging()          # structlog must be configured before any log calls
 

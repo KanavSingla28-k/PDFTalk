@@ -114,7 +114,7 @@ def _ocr_page(page: fitz.Page, page_num: int, s3_key: str) -> str:
 
         img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
         text = pytesseract.image_to_string(img, lang="eng")
-        return text.strip()
+        return str(text).strip()
 
     except Exception as exc:
         logger.warning("OCR failed on page %d of %s: %s", page_num, s3_key, exc)
