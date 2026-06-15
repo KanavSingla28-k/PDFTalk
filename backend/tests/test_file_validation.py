@@ -16,7 +16,12 @@ Strategy:
 """
 
 import io
-import magic
+import sys
+
+if sys.platform == "win32":
+    from magic import magic
+else:
+    import magic
 import pytest
 
 from fastapi import UploadFile

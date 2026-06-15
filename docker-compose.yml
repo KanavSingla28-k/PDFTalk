@@ -8,6 +8,14 @@ volumes:
   postgres_data:
   redis_data:
   app_logs:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+
+  prometheus_multiproc:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
 
 services:
 
@@ -66,6 +74,10 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc
+    volumes:
+      - prometheus_multiproc:/tmp/prometheus_multiproc
     networks:
       - internal
     depends_on:
@@ -91,9 +103,12 @@ services:
       dockerfile: Dockerfile.worker
     container_name: pdftalk-worker-prod
     restart: unless-stopped
-    command: rq worker ingest default --with-scheduler
     env_file:
       - .env
+    environment:
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc
+    volumes:
+      - prometheus_multiproc:/tmp/prometheus_multiproc
     networks:
       - internal
     depends_on:
@@ -125,8 +140,6 @@ services:
     depends_on:
       api:
         condition: service_healthy
-      frontend:
-        condition: service_started
     deploy:
       resources:
         limits:
@@ -151,3 +164,61 @@ services:
       resources:
         limits:
           memory: 128M
+
+  # ---------- Monitoring (Prometheus Stack) ----------
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+      - ./monitoring/prometheus_rules.yml:/etc/prometheus/prometheus_rules.yml:ro
+    networks: [internal]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+ 
+  grafana:
+    image: grafana/grafana:10.4.0
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD}
+      GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks: [internal]
+    depends_on: [prometheus]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    env_file:
+      - .env
+    entrypoint: ["/docker-entrypoint.sh"]
+    volumes:
+      - alertmanager_data:/alertmanager
+      - ./monitoring/alertmanager.yml.template:/etc/alertmanager/alertmanager.yml.template:ro
+      - ./monitoring/alertmanager-entrypoint.sh:/docker-entrypoint.sh:ro
+    networks:
+      - internal
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64M

@@ -57,11 +57,11 @@ async def test_full_ingestion_pipeline(
     # Actually, we should just mock extract_text and embed_texts to make this a fast and reliable test
     # instead of hitting PyMuPDF and OpenAI, since we're testing the integration flow of the worker & db.
     from unittest.mock import patch, AsyncMock
-    with patch("app.workers.ingest.extract_text", return_value="This is some extracted text from the PDF.") as mock_extract, \
-         patch("app.workers.ingest.chunk_text", return_value=[ChunkData(chunk_index=0, text="This is some extracted text from the PDF.", token_count=10)]) as mock_chunk, \
-         patch("app.workers.ingest.embed_texts", return_value=[[0.1]*1536]) as mock_embed, \
-         patch("app.workers.ingest.check_and_increment_token_usage", new_callable=AsyncMock) as mock_check, \
-         patch("app.workers.ingest._run_async") as mock_run_async:
+    with patch("app.workers.ingest.extract_text", return_value="This is some extracted text from the PDF."), \
+     patch("app.workers.ingest.chunk_text", return_value=[ChunkData(chunk_index=0, text="This is some extracted text from the PDF.", token_count=10)]), \
+     patch("app.workers.ingest.embed_texts", return_value=[[0.1] * 1536]), \
+     patch("app.workers.ingest.check_and_increment_token_usage", new_callable=AsyncMock), \
+     patch("app.workers.ingest._run_async"):
         
         # Run worker logic via run_sync to share the in-memory test DB session
         await db.run_sync(_run, uuid.UUID(doc_id))

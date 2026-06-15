@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.user import User
-from app.models.auth import EmailVerification
+# from app.models.auth import EmailVerification
 
 pytestmark = pytest.mark.integration
 
@@ -34,8 +34,8 @@ async def test_full_auth_lifecycle(async_client: AsyncClient, db: AsyncSession):
     assert login_fail.json()["error"] == "EMAIL_NOT_VERIFIED"
 
     # 2. Extract Token from DB to simulate email reception
-    token_result = await db.execute(select(EmailVerification).where(EmailVerification.user_id == user.id))
-    verification_entry = token_result.scalar_one()
+    # token_result = await db.execute(select(EmailVerification).where(EmailVerification.user_id == user.id))
+    # verification_entry = token_result.scalar_one()
     
     # We must generate the raw token. Wait, EmailVerification only stores the hashed token.
     # Because we patched out the email queue in conftest.py, we didn't capture the raw token.
@@ -73,7 +73,7 @@ async def test_full_auth_lifecycle(async_client: AsyncClient, db: AsyncSession):
     assert access_token is not None
     assert "refresh_token" in login_success.cookies
 
-    old_refresh_cookie = login_success.cookies.get("refresh_token")
+    # old_refresh_cookie = login_success.cookies.get("refresh_token")
 
     # 5. Refresh Token
     refresh_resp = await async_client.post("/auth/refresh")

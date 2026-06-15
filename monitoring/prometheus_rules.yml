@@ -1,0 +1,104 @@
+groups:
+  - name: pdftalk_ingestion
+    rules:
+      - alert: HighIngestionFailureRate
+        expr: |
+          rate(pdftalk_documents_failed_total[5m])
+          /
+          (rate(pdftalk_documents_processed_total[5m]) + rate(pdftalk_documents_failed_total[5m]) + 0.001)
+          > 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ingestion failure rate above 10%"
+          description: "{{ $value | humanizePercentage }} of documents are failing in the last 5 minutes."
+
+      - alert: DeadLetterQueueGrowing
+        expr: pdftalk_dead_letter_queue_length > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Failed jobs accumulating in dead-letter queue"
+          description: "{{ $value }} jobs have exhausted all retries. Check job_logs table."
+
+      - alert: IngestQueueBacklog
+        expr: pdftalk_queue_length > 50
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ingest queue backlog: {{ $value }} jobs waiting"
+          description: "Queue has been above 50 jobs for 10+ minutes. Worker may be down or overwhelmed."
+
+      - alert: WorkerAppearsDead
+        expr: pdftalk_queue_length > 10 and rate(pdftalk_documents_processed_total[10m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Worker is not processing jobs"
+          description: "Queue is growing but no documents completed in the last 10 minutes."
+
+      - alert: SlowIngestion
+        expr: histogram_quantile(0.95, rate(pdftalk_processing_duration_seconds_bucket[10m])) > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 ingestion latency above 5 minutes"
+          description: "95th percentile processing time: {{ $value | humanizeDuration }}."
+
+  - name: pdftalk_external_services
+    rules:
+      - alert: OpenAIErrorSpike
+        expr: rate(pdftalk_openai_errors_total[5m]) > 0.5
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OpenAI API errors: {{ $value | humanize }} errors/sec"
+          description: "Error type breakdown available in Grafana ingestion dashboard."
+
+      - alert: S3ErrorSpike
+        expr: rate(pdftalk_s3_errors_total[5m]) > 0.2
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "S3 errors: {{ $value | humanize }} errors/sec on {{ $labels.operation }}"
+
+  - name: pdftalk_quota
+    rules:
+      - alert: HighDailyQuotaBreaches
+        expr: increase(pdftalk_daily_quota_breaches_total[1h]) > 5
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "5+ users hit daily token quota in the last hour"
+          description: "Consider raising MAX_DAILY_TOKENS_PER_USER or adding a paid tier."
+
+  - name: pdftalk_api
+    rules:
+      - alert: High5xxRate
+        expr: |
+          rate(http_requests_total{status=~"5.."}[5m])
+          /
+          rate(http_requests_total[5m])
+          > 0.05
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API 5xx rate above 5%"
+          description: "{{ $value | humanizePercentage }} of requests returning 5xx."
+
+      - alert: APIDown
+        expr: up{job="pdftalk_api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API container is not reachable by Prometheus"

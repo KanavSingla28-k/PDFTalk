@@ -23,7 +23,6 @@ from __future__ import annotations
 import uuid
 from unittest.mock import patch
 
-import pytest
 from botocore.exceptions import ClientError
 from httpx import AsyncClient
 from sqlalchemy import select

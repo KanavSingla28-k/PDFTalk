@@ -2,9 +2,9 @@
 ## Lightsail · Docker Compose · PostgreSQL + pgvector · Redis · FastAPI · Next.js
 
 > **Stack:** Everything self-hosted on a single AWS Lightsail instance via Docker Compose.
-> PostgreSQL (with pgvector), Redis, FastAPI, RQ worker, Nginx — all in containers.
+> PostgreSQL (with pgvector), Redis, FastAPI, RQ worker, Nginx, Prometheus, Grafana — all in containers.
 > S3 for document storage. No ECS, no EFS, no ElastiCache, no NAT Gateway.
-> **Total tasks:** 63 | **Estimated solo pace:** 3–4 weeks to first real deployment
+> **Total tasks:** 71 | **Estimated solo pace:** 3–4 weeks to first real deployment
 
 ---
 
@@ -24,14 +24,19 @@ INTERNET
 │  │  - Rate limiting (nginx limit_req)       │   │
 │  │  - Static frontend (Next.js out/)        │   │
 │  │  - Reverse proxy → api:8000              │   │
+│  │  - Proxy /grafana/ → grafana:3000        │   │
 │  └────────────────┬─────────────────────────┘   │
 │                   │ internal Docker network      │
 │  ┌────────────────┼────────────────────────┐    │
 │  │                ▼                        │    │
 │  │  api (FastAPI · uvicorn)                │    │
+│  │    └── /metrics (Prometheus scrape)     │    │
 │  │  worker (RQ · ingest queue)             │    │
+│  │    └── prometheus_multiproc_dir         │    │
 │  │  postgres (PG 15 + pgvector)            │    │
 │  │  redis (Redis 7, AUTH required)         │    │
+│  │  prometheus (scrapes api:8000/metrics)  │    │
+│  │  grafana (reads from prometheus)        │    │
 │  │                                         │    │
 │  │  All on isolated internal network       │    │
 │  │  Zero ports exposed to host             │    │
@@ -1699,6 +1704,7 @@ echo "Backup completed: $BACKUP_FILE"
 | 10 — Frontend | T-46 → T-53 | CI/CD, launch |
 | 11 — Docker + CI/CD | T-54 → T-59 | Launch |
 | 12 — Testing + Launch | T-60 → T-63 | Ship |
+| 13 — Observability + Admin | T-69 → T-71 | Production visibility |
 
 ---
 
@@ -1736,3 +1742,961 @@ Migrate to managed services when you hit these specific triggers — not before:
 
 > **Review cadence:** Before each phase begins
 > **Next review trigger:** Before Phase 11 (Docker + CI/CD)
+
+---
+
+# Phase 13 — Observability, Alerting & Admin Dashboard
+
+> **Why this phase exists:** Without observability you discover problems from users. With observability you discover them before users do. This phase adds three things: (1) a Prometheus metrics endpoint on the API + worker that records every meaningful event as it happens, (2) Grafana dashboards that visualise those metrics so degradation is visible before it becomes an outage, and (3) a secured admin API + frontend dashboard for business metrics (sign-ups, email volume, token spend by user) with Resend + Slack alerts for threshold breaches.
+
+> **ADR-005: Prometheus + Grafana in Docker, not a managed service**
+> Grafana Cloud is free up to 10k series, but adds an external dependency and ships your internal metrics off-box. At MVP scale (one instance, one operator), running both in the same Docker Compose file is correct. Total memory overhead: ~150MB. When you exceed the Lightsail instance limits, moving Grafana to a managed service is a two-line config change.
+
+> **ADR-006: prometheus-fastapi-instrumentator for automatic HTTP metrics**
+> Writing `Counter`, `Histogram`, and `Gauge` calls by hand for every endpoint is tedious and error-prone. `prometheus-fastapi-instrumentator` auto-instruments every route for latency, request count, and status code distribution in five lines of code. Custom business metrics (queue depth, OpenAI errors, document states) are added on top with explicit `Counter`/`Gauge` objects registered in a single `utils/metrics.py` module.
+
+> **ADR-007: Multiprocess mode for worker metrics**
+> Prometheus's default `CollectorRegistry` is per-process. The worker is a separate process from the API. To expose worker metrics through the same `/metrics` endpoint, use `prometheus_client`'s multiprocess mode: set `PROMETHEUS_MULTIPROC_DIR` to a shared `tmpfs` volume. Both the API process and the worker process write `.db` files to that directory; the API's `/metrics` handler aggregates and exposes them all. Zero extra ports, zero extra scrape targets.
+
+---
+
+### T-69 · Prometheus metrics instrumentation
+
+**What to build:** Add `prometheus_client` and `prometheus-fastapi-instrumentator` to `pyproject.toml`. Create `app/utils/metrics.py` defining all custom metrics as module-level singletons. Instrument the FastAPI app and the RQ worker. Expose `/metrics` on the API. Wire multiprocess mode so worker metrics flow through the same endpoint.
+
+**Tech:** `prometheus-fastapi-instrumentator`, `prometheus_client`, Docker `tmpfs` volume
+
+**Depends on:** T-12, T-28, T-31, T-32, T-56
+
+**New env vars:**
+```
+PROMETHEUS_MULTIPROC_DIR=/tmp/prometheus_multiproc   # shared tmpfs in Docker
+```
+
+**`app/utils/metrics.py` — define all metrics here and nowhere else:**
+```python
+from prometheus_client import Counter, Histogram, Gauge, CollectorRegistry
+from prometheus_client import multiprocess
+
+# ── Ingestion pipeline ──────────────────────────────────────────────────────
+documents_processed_total = Counter(
+    "pdftalk_documents_processed_total",
+    "Documents that completed ingestion successfully",
+    ["user_id"],          # label: per-user breakdowns in Grafana
+)
+documents_failed_total = Counter(
+    "pdftalk_documents_failed_total",
+    "Documents that exhausted all retries and entered FAILED state",
+    ["reason"],           # label: "extraction_error" | "embedding_error" | "quota_exceeded" | "unknown"
+)
+processing_duration_seconds = Histogram(
+    "pdftalk_processing_duration_seconds",
+    "Wall-clock time for the full ingest pipeline (extract→chunk→embed→store)",
+    buckets=[5, 10, 30, 60, 120, 300, 600],
+)
+queue_length = Gauge(
+    "pdftalk_queue_length",
+    "Current number of jobs waiting in the RQ ingest queue",
+    # Updated by a background thread in the worker every 15s
+)
+dead_letter_queue_length = Gauge(
+    "pdftalk_dead_letter_queue_length",
+    "Jobs in the RQ FailedJobRegistry (exhausted all retries)",
+)
+
+# ── External service errors ─────────────────────────────────────────────────
+openai_errors_total = Counter(
+    "pdftalk_openai_errors_total",
+    "Errors returned by the OpenAI API",
+    ["error_type"],       # "rate_limit" | "timeout" | "server_error" | "quota_exceeded"
+)
+s3_errors_total = Counter(
+    "pdftalk_s3_errors_total",
+    "Errors returned by AWS S3",
+    ["operation"],        # "upload" | "download" | "delete"
+)
+
+# ── Auth & user activity ────────────────────────────────────────────────────
+user_registrations_total = Counter(
+    "pdftalk_user_registrations_total",
+    "Total user registrations (includes unverified)",
+)
+user_logins_total = Counter(
+    "pdftalk_user_logins_total",
+    "Successful logins",
+)
+login_failures_total = Counter(
+    "pdftalk_login_failures_total",
+    "Failed login attempts (wrong password, locked, unverified)",
+    ["reason"],           # "wrong_password" | "locked" | "unverified" | "not_found"
+)
+emails_sent_total = Counter(
+    "pdftalk_emails_sent_total",
+    "Emails dispatched via Resend",
+    ["type"],             # "verification" | "password_reset"
+)
+
+# ── Token quota ─────────────────────────────────────────────────────────────
+openai_tokens_used_total = Counter(
+    "pdftalk_openai_tokens_used_total",
+    "Cumulative OpenAI tokens consumed (embedding + completion)",
+    ["kind"],             # "embedding" | "completion"
+)
+daily_quota_breaches_total = Counter(
+    "pdftalk_daily_quota_breaches_total",
+    "Times a user hit their daily token quota ceiling",
+)
+
+# ── Query / streaming ───────────────────────────────────────────────────────
+queries_total = Counter(
+    "pdftalk_queries_total",
+    "Total RAG queries submitted",
+)
+stream_errors_total = Counter(
+    "pdftalk_stream_errors_total",
+    "SSE stream errors (timeout, OpenAI error mid-stream, etc.)",
+    ["error_code"],
+)
+```
+
+**Instrument FastAPI in `main.py`:**
+```python
+from prometheus_fastapi_instrumentator import Instrumentator
+
+# After app creation, before router registration:
+Instrumentator(
+    should_group_status_codes=True,      # 2xx, 4xx, 5xx — not 201/204/422 separately
+    should_ignore_untemplated=True,      # drop /metrics itself, health spam, etc.
+    excluded_handlers=["/health", "/metrics"],
+).instrument(app).expose(app, endpoint="/metrics")
+```
+
+**Worker — queue depth poller (run in a daemon thread inside `workers/worker.py`):**
+```python
+import threading
+import time
+from rq import Queue
+from rq.registry import FailedJobRegistry
+from app.utils.metrics import queue_length, dead_letter_queue_length
+
+def _poll_queue_metrics(redis_conn, interval: int = 15) -> None:
+    """Background daemon thread — updates queue depth Gauges every `interval` seconds."""
+    ingest_q = Queue("ingest", connection=redis_conn)
+    failed_registry = FailedJobRegistry("ingest", connection=redis_conn)
+    while True:
+        try:
+            queue_length.set(ingest_q.count)
+            # FailedJobRegistry.count is the RQ aggregated count across all
+            # jobs in the dead-letter registry — no manual iteration needed.
+            dead_letter_queue_length.set(failed_registry.count)
+        except Exception:
+            pass   # Never crash the worker over a metrics update
+        time.sleep(interval)
+
+# In worker entrypoint, before rq.Worker(...).work():
+t = threading.Thread(target=_poll_queue_metrics, args=(redis_conn,), daemon=True)
+t.start()
+```
+
+**Multiprocess mode — `docker-compose.yml` additions:**
+```yaml
+services:
+  api:
+    environment:
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc
+    volumes:
+      - prometheus_multiproc:/tmp/prometheus_multiproc   # tmpfs shared with worker
+
+  worker:
+    environment:
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc
+    volumes:
+      - prometheus_multiproc:/tmp/prometheus_multiproc
+
+volumes:
+  prometheus_multiproc:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs     # lives in RAM, auto-wiped on restart — correct for ephemeral counters
+```
+
+> 🎓 **Senior Insight — label cardinality:** Never use `user_id` as a label on high-frequency metrics like `queries_total` or `stream_errors_total`. Prometheus stores one time series per unique label combination; 10,000 users × one metric = 10,000 series, which will OOM a small Prometheus instance. Use `user_id` only on low-frequency metrics like `documents_processed_total` where the per-user breakdown is operationally important. For aggregate token spend, use the existing Redis counters and expose them as a Gauge scraped periodically.
+
+> 🎓 **Senior Insight — `FailedJobRegistry.count` vs manual scan:** RQ's `FailedJobRegistry` maintains a sorted set in Redis keyed by job ID and score = enqueue timestamp. `registry.count` is a single `ZCARD` call — O(1), safe to call on every poll cycle. Never iterate `get_job_ids()` on the dead-letter queue in a hot path; at scale it returns thousands of IDs and serialises all of them.
+
+---
+
+### T-70 · Prometheus + Grafana containers + dashboards
+
+**What to build:** Add `prometheus` and `grafana` services to `docker-compose.yml`. Write `monitoring/prometheus.yml` scrape config targeting `api:8000/metrics`. Write a provisioned Grafana datasource config and three pre-built dashboard JSON files (ingestion pipeline, auth/users, system health) so dashboards exist on first boot — no manual clicking in the UI. Proxy Grafana through Nginx at `/grafana/` so it is accessible over HTTPS without exposing a new port.
+
+**Tech:** `prom/prometheus:v2.51`, `grafana/grafana:10.4-alpine`, Nginx sub-path proxy
+
+**Depends on:** T-57, T-69
+
+**New env vars:**
+```
+GF_SECURITY_ADMIN_PASSWORD=<strong-random>   # Grafana admin password
+GF_SERVER_ROOT_URL=https://pdftalk.com/grafana
+GF_SERVER_SERVE_FROM_SUB_PATH=true
+```
+
+**`monitoring/prometheus.yml`:**
+```yaml
+global:
+  scrape_interval: 15s      # How often to collect metrics
+  evaluation_interval: 15s  # How often to evaluate alert rules
+
+scrape_configs:
+  - job_name: pdftalk_api
+    static_configs:
+      - targets: ["api:8000"]    # Internal Docker hostname — no auth needed on /metrics
+    metrics_path: /metrics
+
+  # Optional: scrape Prometheus's own health metrics
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
+```
+
+**`monitoring/grafana/provisioning/datasources/prometheus.yml`:**
+```yaml
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+```
+
+**`monitoring/grafana/provisioning/dashboards/dashboards.yml`:**
+```yaml
+apiVersion: 1
+providers:
+  - name: PDFTalk
+    folder: PDFTalk
+    type: file
+    options:
+      path: /var/lib/grafana/dashboards
+```
+
+**Three dashboard JSON files to provision** (place in `monitoring/grafana/dashboards/`):
+
+*Dashboard 1 — `ingestion_pipeline.json`:* Panels:
+- Documents processed/min (rate of `pdftalk_documents_processed_total`)
+- Documents failed/min (rate of `pdftalk_documents_failed_total` by `reason` label)
+- Failure rate % (`failed / (failed + processed)` — alert when >10%)
+- Processing duration P50/P95/P99 (histogram quantiles of `pdftalk_processing_duration_seconds`)
+- Queue depth over time (`pdftalk_queue_length` — alert when >50)
+- Dead-letter queue depth (`pdftalk_dead_letter_queue_length` — alert when >0)
+- OpenAI error rate by type (`pdftalk_openai_errors_total` by `error_type`)
+- S3 error rate by operation (`pdftalk_s3_errors_total` by `operation`)
+
+*Dashboard 2 — `auth_users.json`:* Panels:
+- New registrations/hour (rate of `pdftalk_user_registrations_total`)
+- Successful logins/min (rate of `pdftalk_user_logins_total`)
+- Login failure rate by reason (rate of `pdftalk_login_failures_total` by `reason`)
+- Emails sent by type (rate of `pdftalk_emails_sent_total` by `type`)
+- Token consumption rate — embedding vs completion (rate of `pdftalk_openai_tokens_used_total` by `kind`)
+- Daily quota breach count (rate of `pdftalk_daily_quota_breaches_total`)
+- Total queries/min (rate of `pdftalk_queries_total`)
+- Stream errors by code (rate of `pdftalk_stream_errors_total` by `error_code`)
+
+*Dashboard 3 — `system_health.json`:* Panels:
+- HTTP request rate by endpoint (from `http_requests_total` auto-instrumented by `prometheus-fastapi-instrumentator`)
+- HTTP error rate (5xx/total)
+- HTTP latency P95 by route
+- Prometheus scrape health (is the target up?)
+
+**`docker-compose.yml` — add monitoring services:**
+```yaml
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"   # Keep 30 days of metrics locally
+      - "--web.enable-lifecycle"               # Allows POST /-/reload to hot-reload config
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks: [internal]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  grafana:
+    image: grafana/grafana:10.4-alpine
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD}
+      GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"     # Never allow anonymous access
+      GF_USERS_ALLOW_SIGN_UP: "false"        # Only the admin account exists
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks: [internal]
+    depends_on: [prometheus]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+volumes:
+  prometheus_data:    # Persists metric history across restarts
+  grafana_data:       # Persists Grafana users, custom dashboards, annotations
+```
+
+**Nginx — add Grafana proxy block** (add before the `/api/` block in `nginx.conf`):
+```nginx
+# Grafana — accessible at https://pdftalk.com/grafana/
+# Protected by Grafana's own login — do NOT add public access
+location /grafana/ {
+    proxy_pass http://grafana:3000/;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # Rewrite sub-path headers so Grafana knows it's behind a prefix
+    proxy_set_header X-Forwarded-Prefix /grafana;
+
+    # WebSocket support — Grafana uses WS for live dashboard updates
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+
+# Block direct access to Prometheus — internal only, never expose to internet
+# (prometheus has no auth — protect it via network isolation only)
+location /prometheus/ {
+    deny all;
+    return 404;
+}
+```
+
+> 🔒 **Security:** Prometheus has no built-in authentication. It is on the `internal` Docker network only and must never be reachable from outside the instance. Grafana is exposed through Nginx but requires a login. Set a strong `GF_SECURITY_ADMIN_PASSWORD` (use `openssl rand -base64 24`). The admin credentials go in `.env` — never committed.
+
+> 🎓 **Senior Insight — dashboard-as-code:** Provisioned dashboards (JSON files in the repo) are the correct approach for a solo-operated service. If you build dashboards by clicking in the Grafana UI and the `grafana_data` volume is lost, those dashboards are gone forever. With provisioned dashboards, a `docker compose up` restores everything. The trade-off: you can't save edits from the UI back to JSON automatically — use Grafana's "Export → Save to file" when you iterate on a dashboard, and commit the updated JSON.
+
+---
+
+### T-71 · Alerting service (Prometheus rules + Resend email + Slack webhook)
+
+**What to build:** Write Prometheus alerting rules that fire on the conditions below. Create `app/services/alerting.py` — a thin service that receives fired alerts via a Prometheus Alertmanager webhook and dispatches notifications to both Resend (email) and Slack (webhook). Add `alertmanager` to Docker Compose. Protect the admin dashboard API endpoints with `ADMIN_TOKEN`. Build the `/admin/*` API routes and the Next.js `/admin` page.
+
+**Tech:** Prometheus Alertmanager, `prom/alertmanager:v0.27`, Resend SDK, Slack Incoming Webhooks, FastAPI, Next.js
+
+**Depends on:** T-17, T-56, T-70
+
+**New env vars:**
+```
+ADMIN_TOKEN=<openssl rand -hex 32>      # Bearer token for /admin/* API routes
+SLACK_WEBHOOK_URL=https://hooks.slack.com/services/...
+ALERT_EMAIL_TO=you@yourdomain.com       # Where alert emails go
+```
+
+---
+
+#### Part A — Prometheus alert rules
+
+**`monitoring/prometheus_rules.yml`:**
+```yaml
+groups:
+  - name: pdftalk_ingestion
+    rules:
+      - alert: HighIngestionFailureRate
+        expr: |
+          rate(pdftalk_documents_failed_total[5m])
+          /
+          (rate(pdftalk_documents_processed_total[5m]) + rate(pdftalk_documents_failed_total[5m]) + 0.001)
+          > 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ingestion failure rate above 10%"
+          description: "{{ $value | humanizePercentage }} of documents are failing in the last 5 minutes."
+
+      - alert: DeadLetterQueueGrowing
+        expr: pdftalk_dead_letter_queue_length > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Failed jobs accumulating in dead-letter queue"
+          description: "{{ $value }} jobs have exhausted all retries. Check job_logs table."
+
+      - alert: IngestQueueBacklog
+        expr: pdftalk_queue_length > 50
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Ingest queue backlog: {{ $value }} jobs waiting"
+          description: "Queue has been above 50 jobs for 10+ minutes. Worker may be down or overwhelmed."
+
+      - alert: WorkerAppearsDead
+        expr: pdftalk_queue_length > 10 and rate(pdftalk_documents_processed_total[10m]) == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Worker is not processing jobs"
+          description: "Queue is growing but no documents completed in the last 10 minutes."
+
+      - alert: SlowIngestion
+        expr: histogram_quantile(0.95, rate(pdftalk_processing_duration_seconds_bucket[10m])) > 300
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 ingestion latency above 5 minutes"
+          description: "95th percentile processing time: {{ $value | humanizeDuration }}."
+
+  - name: pdftalk_external_services
+    rules:
+      - alert: OpenAIErrorSpike
+        expr: rate(pdftalk_openai_errors_total[5m]) > 0.5
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "OpenAI API errors: {{ $value | humanize }} errors/sec"
+          description: "Error type breakdown available in Grafana ingestion dashboard."
+
+      - alert: S3ErrorSpike
+        expr: rate(pdftalk_s3_errors_total[5m]) > 0.2
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "S3 errors: {{ $value | humanize }} errors/sec on {{ $labels.operation }}"
+
+  - name: pdftalk_quota
+    rules:
+      - alert: HighDailyQuotaBreaches
+        expr: increase(pdftalk_daily_quota_breaches_total[1h]) > 5
+        for: 0m
+        labels:
+          severity: warning
+        annotations:
+          summary: "5+ users hit daily token quota in the last hour"
+          description: "Consider raising MAX_DAILY_TOKENS_PER_USER or adding a paid tier."
+
+  - name: pdftalk_api
+    rules:
+      - alert: High5xxRate
+        expr: |
+          rate(http_requests_total{status=~"5.."}[5m])
+          /
+          rate(http_requests_total[5m])
+          > 0.05
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API 5xx rate above 5%"
+          description: "{{ $value | humanizePercentage }} of requests returning 5xx."
+
+      - alert: APIDown
+        expr: up{job="pdftalk_api"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API container is not reachable by Prometheus"
+```
+
+Add to `prometheus.yml`:
+```yaml
+rule_files:
+  - /etc/prometheus/rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+```
+
+---
+
+#### Part B — Alertmanager + webhook receiver
+
+**`monitoring/alertmanager.yml`:**
+```yaml
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ["alertname", "severity"]
+  group_wait: 30s          # Wait 30s to batch alerts that fire together
+  group_interval: 5m       # Re-notify every 5m while alert is active
+  repeat_interval: 4h      # Don't spam — re-notify max every 4h for the same alert
+  receiver: pdftalk_alerts
+
+  routes:
+    - match:
+        severity: critical
+      receiver: pdftalk_alerts
+      repeat_interval: 1h  # Critical alerts re-notify every hour until resolved
+
+receivers:
+  - name: pdftalk_alerts
+    webhook_configs:
+      - url: http://api:8000/internal/alerts/webhook
+        send_resolved: true   # Also notify when the alert clears
+        http_config:
+          bearer_token: ${ADMIN_TOKEN}   # Alertmanager calls our API with admin token
+```
+
+**`docker-compose.yml` — add alertmanager:**
+```yaml
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    environment:
+      ADMIN_TOKEN: ${ADMIN_TOKEN}   # Injected into alertmanager.yml via env substitution
+    networks: [internal]
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+
+volumes:
+  alertmanager_data:
+```
+
+---
+
+#### Part C — Alert dispatch service + webhook receiver
+
+**`app/services/alerting.py`:**
+```python
+"""
+Receives fired Prometheus alerts from Alertmanager and dispatches
+notifications to Resend (email) and Slack.
+"""
+import logging
+from typing import Any
+import httpx
+import resend
+from app.core.config import settings
+
+log = logging.getLogger(__name__)
+
+
+async def dispatch_alert(payload: dict[str, Any]) -> None:
+    """Called from the /internal/alerts/webhook endpoint for each Alertmanager POST."""
+    alerts = payload.get("alerts", [])
+    if not alerts:
+        return
+
+    for alert in alerts:
+        name        = alert["labels"].get("alertname", "UnknownAlert")
+        severity    = alert["labels"].get("severity", "unknown")
+        summary     = alert["annotations"].get("summary", name)
+        description = alert["annotations"].get("description", "")
+        status      = alert["status"]           # "firing" | "resolved"
+        emoji       = "🔴" if status == "firing" else "✅"
+
+        subject = f"{emoji} [{severity.upper()}] {summary}"
+        body    = f"{description}\n\nStatus: {status}\nAlert: {name}"
+
+        # ── Resend (email) ────────────────────────────────────────────────
+        if settings.ALERT_EMAIL_TO and settings.RESEND_API_KEY:
+            try:
+                resend.api_key = settings.RESEND_API_KEY
+                resend.Emails.send({
+                    "from":    f"PDFTalk Alerts <alerts@{settings.EMAIL_FROM_DOMAIN}>",
+                    "to":      [settings.ALERT_EMAIL_TO],
+                    "subject": subject,
+                    "text":    body,
+                })
+            except Exception as e:
+                log.warning("alert_email_failed", error=str(e), alert=name)
+
+        # ── Slack (webhook) ───────────────────────────────────────────────
+        if settings.SLACK_WEBHOOK_URL:
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    await client.post(
+                        settings.SLACK_WEBHOOK_URL,
+                        json={
+                            "text": f"{emoji} *{subject}*\n{description}",
+                            "username": "PDFTalk Monitor",
+                            "icon_emoji": ":bell:",
+                        },
+                    )
+            except Exception as e:
+                log.warning("alert_slack_failed", error=str(e), alert=name)
+```
+
+**`app/routers/internal.py` — webhook receiver + admin API routes:**
+```python
+"""
+Internal-only routes:
+  POST /internal/alerts/webhook  — Alertmanager fires here
+  GET  /admin/stats              — Executive dashboard data
+All protected by ADMIN_TOKEN bearer auth.
+"""
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+import redis.asyncio as aioredis
+
+from app.core.config import settings
+from app.db.session import get_db
+from app.models.auth import User, EmailVerification
+from app.models.documents import Document
+from app.models.job_logs import JobLog
+from app.services.alerting import dispatch_alert
+from app.utils.redis_client import get_redis
+
+router = APIRouter(prefix="/internal", tags=["internal"])
+bearer = HTTPBearer()
+
+
+def _require_admin(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> None:
+    if creds.credentials != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+
+@router.post("/alerts/webhook", dependencies=[Depends(_require_admin)], status_code=204)
+async def alertmanager_webhook(payload: dict) -> None:
+    """Alertmanager calls this. Fire and forget — don't block on dispatch."""
+    import asyncio
+    asyncio.create_task(dispatch_alert(payload))
+
+
+@router.get("/admin/stats", dependencies=[Depends(_require_admin)])
+async def admin_stats(
+    db: AsyncSession = Depends(get_db),
+    redis: aioredis.Redis = Depends(get_redis),
+) -> dict:
+    """
+    Aggregated business metrics for the executive dashboard.
+    All queries are read-only and use indexed columns — safe to call on production DB.
+    """
+    from datetime import date, timedelta
+    today = date.today()
+
+    # ── User signups (last 30 days, daily buckets) ────────────────────────
+    signups_row = await db.execute(
+        text("""
+            SELECT DATE(created_at) AS day, COUNT(*) AS count
+            FROM users
+            WHERE created_at >= NOW() - INTERVAL '30 days'
+            GROUP BY day
+            ORDER BY day
+        """)
+    )
+    signups_by_day = [{"day": str(r.day), "count": r.count} for r in signups_row]
+
+    # ── Aggregate counts ──────────────────────────────────────────────────
+    total_users        = (await db.execute(select(func.count()).select_from(User))).scalar()
+    verified_users     = (await db.execute(
+        select(func.count()).select_from(User).where(User.is_verified)
+    )).scalar()
+    total_documents    = (await db.execute(select(func.count()).select_from(Document))).scalar()
+    documents_by_status = (await db.execute(
+        select(Document.status, func.count()).group_by(Document.status)
+    )).all()
+    failed_jobs_7d     = (await db.execute(
+        text("SELECT COUNT(*) FROM job_logs WHERE created_at >= NOW() - INTERVAL '7 days'")
+    )).scalar()
+
+    # ── Emails sent (count rows in email_verifications created, all time) ─
+    # email_verifications rows are deleted on use, so count job_logs proxy or
+    # use the Prometheus counter. Here we count from the Prometheus TSDB via
+    # a separate scrape — but for the DB-only path, we track a simple counter
+    # table. For MVP, return the total from the emails_sent_total Prometheus
+    # metric via the admin API; the frontend fetches Grafana for graphs.
+    emails_verification = (await db.execute(
+        text("SELECT COUNT(*) FROM email_verifications")
+    )).scalar()
+
+    # ── Token utilization (today, from Redis) ─────────────────────────────
+    # Scan all quota keys for today. Acceptable at MVP user counts (<1000).
+    today_str = today.strftime("%Y%m%d")
+    token_data: list[dict] = []
+    async for key in redis.scan_iter(f"quota:tokens:*:{today_str}"):
+        val = await redis.get(key)
+        if val:
+            user_id = key.decode().split(":")[2]
+            token_data.append({"user_id": user_id, "tokens_today": int(val)})
+    token_data.sort(key=lambda x: x["tokens_today"], reverse=True)
+
+    # ── Dead-letter queue count (RQ FailedJobRegistry) ───────────────────
+    from rq import Queue
+    from rq.registry import FailedJobRegistry
+    from app.utils.redis_client import get_sync_redis   # sync client for RQ
+    sync_redis = get_sync_redis()
+    failed_registry = FailedJobRegistry("ingest", connection=sync_redis)
+    dead_letter_count = failed_registry.count   # O(1) ZCARD — safe
+
+    return {
+        "users": {
+            "total": total_users,
+            "verified": verified_users,
+            "unverified": total_users - verified_users,
+            "signups_by_day": signups_by_day,
+        },
+        "documents": {
+            "total": total_documents,
+            "by_status": {row[0]: row[1] for row in documents_by_status},
+        },
+        "emails": {
+            "verification_tokens_active": emails_verification,
+            # Resend/Prometheus totals available via Grafana dashboard
+        },
+        "tokens": {
+            "top_users_today": token_data[:20],    # Top 20 consumers today
+        },
+        "queue": {
+            "dead_letter_count": dead_letter_count,
+            "failed_jobs_7d": failed_jobs_7d,
+        },
+    }
+```
+
+Register the router in `main.py`:
+```python
+from app.routers.internal import router as internal_router
+app.include_router(internal_router)
+```
+
+---
+
+#### Part D — Next.js admin dashboard page
+
+**`frontend/app/admin/page.tsx`** — a `"use client"` page protected by checking `ADMIN_TOKEN` in a cookie (set manually by the operator, never by the app — operator pastes it into browser storage once):
+
+```typescript
+// app/admin/page.tsx
+"use client";
+import { useEffect, useState } from "react";
+
+// The operator sets this token in the browser manually:
+// localStorage.setItem("admin_token", "<ADMIN_TOKEN value>")
+// This is intentional — the admin page is for the operator only,
+// not for regular users, so a full auth flow is unnecessary.
+function getAdminToken(): string {
+  return typeof window !== "undefined"
+    ? localStorage.getItem("admin_token") ?? ""
+    : "";
+}
+
+type Stats = {
+  users: {
+    total: number;
+    verified: number;
+    unverified: number;
+    signups_by_day: { day: string; count: number }[];
+  };
+  documents: { total: number; by_status: Record<string, number> };
+  emails: { verification_tokens_active: number };
+  tokens: { top_users_today: { user_id: string; tokens_today: number }[] };
+  queue: { dead_letter_count: number; failed_jobs_7d: number };
+};
+
+export default function AdminDashboard() {
+  const [stats, setStats]     = useState<Stats | null>(null);
+  const [error, setError]     = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch(`${process.env.NEXT_PUBLIC_API_URL}/internal/admin/stats`, {
+      headers: { Authorization: `Bearer ${getAdminToken()}` },
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(`${r.status} — check ADMIN_TOKEN in localStorage`);
+        return r.json();
+      })
+      .then(setStats)
+      .catch((e) => setError(e.message))
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <p className="p-8 text-gray-500">Loading…</p>;
+  if (error)   return <p className="p-8 text-red-600 font-mono">{error}</p>;
+  if (!stats)  return null;
+
+  const { users, documents, tokens, queue } = stats;
+  const maxQuota = Number(process.env.NEXT_PUBLIC_MAX_DAILY_TOKENS ?? 100000);
+
+  return (
+    <main className="p-8 max-w-5xl mx-auto space-y-8">
+      <h1 className="text-2xl font-bold">PDFTalk Admin</h1>
+
+      {/* ── Users ───────────────────────────────────────────────────── */}
+      <section>
+        <h2 className="text-lg font-semibold mb-3">Users</h2>
+        <div className="grid grid-cols-3 gap-4">
+          <Stat label="Total"      value={users.total} />
+          <Stat label="Verified"   value={users.verified} />
+          <Stat label="Unverified" value={users.unverified} />
+        </div>
+        <p className="mt-4 text-sm text-gray-500">
+          Sign-ups last 30 days:{" "}
+          {users.signups_by_day.map((d) => `${d.day}: ${d.count}`).join(" · ")}
+        </p>
+      </section>
+
+      {/* ── Documents ───────────────────────────────────────────────── */}
+      <section>
+        <h2 className="text-lg font-semibold mb-3">Documents</h2>
+        <div className="grid grid-cols-4 gap-4">
+          {Object.entries(documents.by_status).map(([status, count]) => (
+            <Stat key={status} label={status} value={count as number} />
+          ))}
+        </div>
+      </section>
+
+      {/* ── Queue health ────────────────────────────────────────────── */}
+      <section>
+        <h2 className="text-lg font-semibold mb-3">Queue Health</h2>
+        <div className="grid grid-cols-2 gap-4">
+          <Stat
+            label="Dead-letter jobs"
+            value={queue.dead_letter_count}
+            alert={queue.dead_letter_count > 0}
+          />
+          <Stat
+            label="Failed jobs (7d)"
+            value={queue.failed_jobs_7d}
+            alert={queue.failed_jobs_7d > 10}
+          />
+        </div>
+      </section>
+
+      {/* ── Token utilization ───────────────────────────────────────── */}
+      <section>
+        <h2 className="text-lg font-semibold mb-3">
+          Token Utilization Today (Top 20 Users)
+        </h2>
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="border-b text-left text-gray-500">
+              <th className="py-2 pr-4">User ID</th>
+              <th className="py-2 pr-4">Tokens Used</th>
+              <th className="py-2">% of Daily Quota</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tokens.top_users_today.map((u) => {
+              const pct = ((u.tokens_today / maxQuota) * 100).toFixed(1);
+              return (
+                <tr key={u.user_id} className="border-b hover:bg-gray-50">
+                  <td className="py-1 pr-4 font-mono text-xs">{u.user_id}</td>
+                  <td className="py-1 pr-4">{u.tokens_today.toLocaleString()}</td>
+                  <td className="py-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-32 bg-gray-200 rounded-full h-1.5">
+                        <div
+                          className={`h-1.5 rounded-full ${
+                            Number(pct) > 80 ? "bg-red-500" : "bg-blue-500"
+                          }`}
+                          style={{ width: `${Math.min(Number(pct), 100)}%` }}
+                        />
+                      </div>
+                      <span className={Number(pct) > 80 ? "text-red-600 font-medium" : ""}>
+                        {pct}%
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </section>
+
+      {/* ── Grafana link ────────────────────────────────────────────── */}
+      <section className="border-t pt-4">
+        <a
+          href="/grafana"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 underline text-sm"
+        >
+          → Open Grafana dashboards (ingestion pipeline, system health)
+        </a>
+      </section>
+    </main>
+  );
+}
+
+function Stat({
+  label,
+  value,
+  alert = false,
+}: {
+  label: string;
+  value: number;
+  alert?: boolean;
+}) {
+  return (
+    <div className={`rounded-lg border p-4 ${alert ? "border-red-400 bg-red-50" : "bg-white"}`}>
+      <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
+      <p className={`text-2xl font-bold mt-1 ${alert ? "text-red-600" : ""}`}>
+        {value.toLocaleString()}
+      </p>
+    </div>
+  );
+}
+```
+
+> 🎓 **Senior Insight — admin token in localStorage:** Using `localStorage` for the admin token is intentional and appropriate here. This page is only for you (the operator), not end users. There is no signup flow, no session management, no cookie. You paste the token once into the browser console: `localStorage.setItem("admin_token", "...")`. If your laptop is compromised, an attacker with access to your browser already has everything — the token is not the meaningful risk surface. This is operationally equivalent to storing a kubeconfig or AWS credentials file locally.
+
+> 🎓 **Senior Insight — why not APScheduler for alert polling:** The T-44 stub mentioned a cron-based approach. This phase replaces it with the correct architecture: metrics are emitted by the application as events happen (pull model via Prometheus), not polled by a scheduler (push model). This means you get sub-minute alert latency instead of hourly batch checks, and you don't need a separate scheduler process or cron job. The only scheduled check that remains is the Redis quota scan in `GET /admin/stats`, which runs on-demand when you open the dashboard.
+
+> 🔒 **Security:** The `/internal/alerts/webhook` endpoint is called by Alertmanager (internal Docker network only) using the `ADMIN_TOKEN` as a Bearer token. It is also reachable at the Nginx level because `/internal/` is under `/api/`. Add an Nginx deny rule to block external access:
+> ```nginx
+> location /api/internal/ {
+>     allow 172.0.0.0/8;   # Docker internal networks
+>     deny all;
+>     proxy_pass http://api:8000/internal/;
+> }
+> ```
+> This means even if someone knows the URL and the token, they cannot reach the endpoint from outside the instance. Defence in depth.
+
+---
+
+#### Instrumentation call sites — where to add metric increments
+
+After T-69 defines the metric objects, add `.inc()` / `.observe()` calls in the service layer. Key locations:
+
+| File | Where | Call |
+|---|---|---|
+| `workers/ingest.py` | On successful completion | `documents_processed_total.labels(user_id=user_id).inc()` |
+| `workers/ingest.py` | In the `except` block before `status=FAILED` | `documents_failed_total.labels(reason=classify_error(e)).inc()` |
+| `workers/ingest.py` | Around the full pipeline | `with processing_duration_seconds.time():` |
+| `services/embedding.py` | After each OpenAI call | `openai_tokens_used_total.labels(kind="embedding").inc(token_count)` |
+| `services/llm.py` | After stream completes | `openai_tokens_used_total.labels(kind="completion").inc(token_count)` |
+| `utils/openai_client.py` | In each except branch | `openai_errors_total.labels(error_type="rate_limit").inc()` |
+| `utils/s3_client.py` | In each except branch | `s3_errors_total.labels(operation="upload").inc()` |
+| `services/auth.py` (register) | After user insert | `user_registrations_total.inc()` |
+| `services/auth.py` (login) | On success | `user_logins_total.inc()` |
+| `services/auth.py` (login) | On each failure path | `login_failures_total.labels(reason=...).inc()` |
+| `services/email_verification.py` | After `resend.Emails.send()` | `emails_sent_total.labels(type="verification").inc()` |
+| `services/password_reset.py` | After `resend.Emails.send()` | `emails_sent_total.labels(type="password_reset").inc()` |
+| `utils/openai_client.py` | In `check_and_increment_token_usage` | `daily_quota_breaches_total.inc()` on quota exceeded |
+| `routers/query.py` | Before stream begins | `queries_total.inc()` |
+| `routers/query.py` | In SSE error paths | `stream_errors_total.labels(error_code=...).inc()` |
+
+> 🎓 **Senior Insight:** Import the metric objects from `app.utils.metrics` at the top of each file. Never instantiate `Counter(...)` or `Gauge(...)` inside a function — Prometheus raises a `ValueError` if you register the same metric name twice, which happens the moment the module is imported more than once. Module-level singletons in `utils/metrics.py` prevent this entirely.

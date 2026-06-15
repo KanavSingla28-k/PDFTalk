@@ -27,7 +27,7 @@ NOTE ON PATCHING:
 import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch, call
+from unittest.mock import MagicMock, patch
 
 import pytest
 import pytest_asyncio

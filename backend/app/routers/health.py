@@ -1,6 +1,7 @@
 import asyncio
 import time
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
@@ -9,20 +10,13 @@ from sqlalchemy import text
 from app.db.session import engine          # async engine, not get_db()
 from app.utils.redis_client import get_redis
 from app.utils.s3_client import s3_client
-from importlib.metadata import version as pkg_version
-from importlib.metadata import PackageNotFoundError
 
 router = APIRouter(tags=["health"])
-
-try:
-    __version__ = pkg_version("pdftalk")
-except PackageNotFoundError:
-    __version__ = "1.0.0"
 
 TIMEOUT = 0.5  # seconds per dependency check
 
 
-async def _check_db() -> dict:
+async def _check_db() -> dict[str, Any]:
     start = time.monotonic()
     try:
         async with engine.connect() as conn:
@@ -34,7 +28,7 @@ async def _check_db() -> dict:
         return {"status": "error", "latency_ms": latency_ms, "detail": str(e)}
 
 
-async def _check_redis() -> dict:
+async def _check_redis() -> dict[str, Any]:
     start = time.monotonic()
     try:
         r = get_redis()
@@ -46,7 +40,7 @@ async def _check_redis() -> dict:
         return {"status": "error", "latency_ms": latency_ms, "detail": str(e)}
 
 
-async def _check_s3() -> dict:
+async def _check_s3() -> dict[str, Any]:
     start = time.monotonic()
     try:
         # head_bucket is a blocking boto3 call — run in a thread
@@ -62,12 +56,12 @@ async def _check_s3() -> dict:
 
 
 @router.get("/live")
-async def liveness_check():
+async def liveness_check() -> JSONResponse:
     return JSONResponse(content={"status": "ok"}, status_code=200)
 
 
 @router.get("/ready")
-async def readiness_check():
+async def readiness_check() -> JSONResponse:
     db_result, redis_result, s3_result = await asyncio.gather(
         _check_db(),
         _check_redis(),
@@ -81,7 +75,7 @@ async def readiness_check():
 
     body = {
         "status": "ok" if all_ok else "degraded",
-        "version": __version__,
+        "version": "1.0.0",
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "checks": {
             "db": db_result,

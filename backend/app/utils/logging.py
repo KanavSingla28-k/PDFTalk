@@ -28,6 +28,7 @@ Fields never logged (scrubbed at the processor level):
 
 import logging
 import sys
+from typing import Any, cast
 import structlog
 from structlog.typing import EventDict, WrappedLogger
 from app.core.config import settings
@@ -98,7 +99,7 @@ def configure_logging() -> None:
     log_format = _resolve_format()
 
     # Shared processors applied regardless of format
-    shared_processors: list = [
+    shared_processors: list[Any] = [
         structlog.contextvars.merge_contextvars,   # picks up bind_contextvars()
         structlog.stdlib.add_log_level,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
@@ -145,6 +146,6 @@ def _resolve_format() -> str:
     """Return 'json' or 'pretty' based on settings."""
     fmt = getattr(settings, "LOG_FORMAT", None)
     if fmt in ("json", "pretty"):
-        return fmt
+        return cast(str, fmt)
     # Infer from APP_URL when LOG_FORMAT is not set
     return "pretty" if "localhost" in settings.APP_URL else "json"

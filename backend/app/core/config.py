@@ -28,14 +28,22 @@ class Settings(BaseSettings):
 
     APP_URL: str
 
+    GRAFANA_ADMIN_PASSWORD: str | None = None
+    GRAFANA_SERVER_ROOT_URL: str | None = None
+    GF_SERVER_SERVE_FROM_SUB_PATH: bool = True
+    
+    ADMIN_TOKEN: str | None = None
+    SLACK_WEBHOOK_URL: Optional[str] = None
+    ALERT_EMAIL_TO: str | None = None
+    EMAIL_FROM_DOMAIN: str | None = None
+
     MAX_DOCS_PER_USER: int = 20
     MAX_DAILY_TOKENS_PER_USER: int = 100000
     RETRIEVAL_TOP_K: int = 5
     STREAM_CHUNK_TIMEOUT: int = 30
     LOG_FORMAT: Optional[Literal["json", "pretty"]] = None
     MAX_DAILY_QUERIES_PER_USER: int = 500
-    SLACK_WEBHOOK_URL: Optional[str] = None
 
     model_config = {"env_file": env_file}
 
-settings = Settings()
+settings: Settings = Settings()  # type: ignore[call-arg]

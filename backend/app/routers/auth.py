@@ -3,8 +3,6 @@ from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
 
-logger = logging.getLogger(__name__)
-
 from app.utils.rate_limit import RateLimiter
 from app.auth.tokens import (
     TokenInvalidError,
@@ -14,15 +12,14 @@ from app.auth.tokens import (
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.auth import RegisterRequest, RegisterResponse, LoginRequest, LoginResponse, UserInfo, RefreshResponse, ResendVerificationRequest, ForgotPasswordRequest, ResetPasswordRequest
+from app.models.user import User
 from app.services import user_service
-from app.services.email_verification import verify_token
+from app.services.email_verification import verify_token, send_verification_email_for_user
 from app.services.password_reset import initiate_password_reset, consume_reset_token
 from app.services.user_service import login as login_user
 from app.auth.dependencies import get_verified_user
-from app.exceptions import (
-    InvalidCredentialsError,
-    UnverifiedEmailError
-)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -120,7 +117,7 @@ async def resend_verification(
             try:
                 # Delete the stale verification row first so we don't accumulate orphaned tokens
                 await user_service._delete_pending_verification(db, existing.id)
-                await user_service.send_verification_email_for_user(str(existing.id), existing.email, db)
+                await send_verification_email_for_user(str(existing.id), existing.email, db)
                 await db.commit()
             except Exception as exc:
                 logger.warning(
@@ -394,7 +391,7 @@ async def logout(
     summary="Get current logged-in user",
 )
 async def get_me(
-    user=Depends(get_verified_user),
+    user: User = Depends(get_verified_user),
 ) -> UserInfo:
     return UserInfo.model_validate(user)
 

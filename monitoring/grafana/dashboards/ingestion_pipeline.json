@@ -1,0 +1,141 @@
+{
+  "uid": "pdftalk-ingestion",
+  "title": "PDFTalk — Ingestion Pipeline",
+  "tags": ["pdftalk"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "id": 1,
+      "title": "Documents Processed / min",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(pdftalk_documents_processed_total[1m]) * 60",
+          "legendFormat": "processed/min"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Documents Failed / min",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(pdftalk_documents_failed_total[1m]) * 60",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Failure Rate %",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 8, "w": 6, "h": 4 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "100 * rate(pdftalk_documents_failed_total[5m]) / (rate(pdftalk_documents_processed_total[5m]) + rate(pdftalk_documents_failed_total[5m]) + 0.001)",
+          "legendFormat": "failure %"
+        }
+      ],
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Processing Duration P50 / P95 / P99",
+      "type": "timeseries",
+      "gridPos": { "x": 6, "y": 8, "w": 18, "h": 4 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "histogram_quantile(0.50, rate(pdftalk_processing_duration_seconds_bucket[5m]))",
+          "legendFormat": "P50"
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "histogram_quantile(0.95, rate(pdftalk_processing_duration_seconds_bucket[5m]))",
+          "legendFormat": "P95"
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "histogram_quantile(0.99, rate(pdftalk_processing_duration_seconds_bucket[5m]))",
+          "legendFormat": "P99"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 5,
+      "title": "Queue Depth",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "pdftalk_queue_length",
+          "legendFormat": "ingest queue"
+        },
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "pdftalk_dead_letter_queue_length",
+          "legendFormat": "dead-letter queue"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red", "value": 50 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "OpenAI Errors / min by Type",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(pdftalk_openai_errors_total[1m]) * 60",
+          "legendFormat": "{{error_type}}"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "S3 Errors / min by Operation",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(pdftalk_s3_errors_total[1m]) * 60",
+          "legendFormat": "{{operation}}"
+        }
+      ]
+    }
+  ]
+}

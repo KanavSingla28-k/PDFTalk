@@ -28,6 +28,7 @@ Execution order in the middleware stack (last added = outermost):
 
 import time
 import uuid
+from typing import Callable, Awaitable
 
 import structlog
 from fastapi import Request
@@ -40,7 +41,7 @@ log = structlog.get_logger(__name__)
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next) -> Response:
+    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
         request_id = str(uuid.uuid4())
         start = time.perf_counter()
 
