@@ -1,6 +1,6 @@
 import boto3
 from botocore.exceptions import ClientError
-from typing import BinaryIO
+from typing import BinaryIO, cast
 from app.core.config import settings
 import structlog
 from pathlib import Path
@@ -9,7 +9,7 @@ logger = structlog.get_logger()
 
 
 class S3Client:
-    def __init__(self):
+    def __init__(self) -> None:
         self._client = boto3.client(
             "s3",
             region_name=settings.AWS_REGION,
@@ -36,7 +36,7 @@ class S3Client:
         """Download an object and return its content as bytes."""
         try:
             response = self._client.get_object(Bucket=self.bucket, Key=s3_key)
-            return response["Body"].read()
+            return cast(bytes, response["Body"].read())
         except ClientError as e:
             logger.error("s3_download_failed", key=s3_key, error=str(e))
             raise
@@ -57,11 +57,11 @@ class S3Client:
 
     def generate_presigned_download_url(self, s3_key: str, expires_in: int = 3600) -> str:
         """Generate a time-limited URL for direct client download."""
-        return self._client.generate_presigned_url(
+        return cast(str, self._client.generate_presigned_url(
             "get_object",
             Params={"Bucket": self.bucket, "Key": s3_key},
             ExpiresIn=expires_in,
-        )
+        ))
 
 def build_document_s3_key(user_id: str, document_id: str, filename: str) -> str:
     # Sanitise filename — strip any path components an attacker might sneak in

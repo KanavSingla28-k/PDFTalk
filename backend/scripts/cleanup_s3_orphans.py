@@ -20,17 +20,17 @@ import logging
 import os
 import sys
 from datetime import datetime, timezone, timedelta
+from sqlalchemy import select
+from app.core.config import settings
+from app.db.session import AsyncSessionLocal
+from app.models.document import Document
+from app.utils.s3_client import s3_client
 
 # Bootstrap — resolve project root so imports work when run as a module
 _BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _BACKEND_ROOT not in sys.path:
     sys.path.insert(0, _BACKEND_ROOT)
 
-from sqlalchemy import select
-from app.core.config import settings
-from app.db.session import AsyncSessionLocal
-from app.models.document import Document
-from app.utils.s3_client import s3_client
 
 logging.basicConfig(
     level=logging.INFO,

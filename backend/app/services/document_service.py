@@ -28,7 +28,7 @@ from sqlalchemy.orm import selectinload
 from app.exceptions import QuotaExceededError, DocumentNotFoundError
 from app.models.user import User
 from app.models.document import Document, DocumentStatus, _ALLOWED_TRANSITIONS
-from app.services.file_validation import FileValidationError, validate_upload
+from app.services.file_validation import validate_upload
 from app.core.config import settings
 from app.utils.s3_client import build_document_s3_key, s3_client
 

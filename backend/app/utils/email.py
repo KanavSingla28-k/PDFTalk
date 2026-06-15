@@ -67,12 +67,12 @@ async def send_verification_email(to_email: str, verification_url: str) -> None:
             subject="Verify your PDFTalk account",
             verification_url=verification_url,
         )
-        print(f"\n==================================================")
-        print(f"EMAIL SENT (LOG_EMAILS_ONLY = True)")
+        print("\n==================================================")
+        print("EMAIL SENT (LOG_EMAILS_ONLY = True)")
         print(f"To: {to_email}")
-        print(f"Subject: Verify your PDFTalk account")
+        print("Subject: Verify your PDFTalk account")
         print(f"Verification URL: {verification_url}")
-        print(f"==================================================\n")
+        print("==================================================\n")
         return
 
     try:
@@ -124,12 +124,12 @@ async def send_password_reset_email(to_email: str, reset_url: str) -> None:
             subject="Reset your PDFTalk password",
             reset_url=reset_url,
         )
-        print(f"\n==================================================")
-        print(f"EMAIL SENT (LOG_EMAILS_ONLY = True)")
+        print("\n==================================================")
+        print("EMAIL SENT (LOG_EMAILS_ONLY = True)")
         print(f"To: {to_email}")
-        print(f"Subject: Reset your PDFTalk password")
+        print("Subject: Reset your PDFTalk password")
         print(f"Reset URL: {reset_url}")
-        print(f"==================================================\n")
+        print("==================================================\n")
         return
 
     try:

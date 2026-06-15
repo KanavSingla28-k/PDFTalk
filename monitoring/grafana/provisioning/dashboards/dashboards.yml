@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: PDFTalk
+    folder: PDFTalk
+    type: file
+    disableDeletion: true       # prevent UI deletions from breaking provisioning
+    updateIntervalSeconds: 30   # pick up JSON changes without restart
+    allowUiUpdates: false       # edits must go through git, not the UI
+    options:
+      path: /var/lib/grafana/dashboards

@@ -41,7 +41,7 @@ def hash_password(plain: str) -> str:
     """
     if not plain:
         raise ValueError("Password must not be empty")
-    return _pwd_context.hash(plain)
+    return str(_pwd_context.hash(plain))
 
 
 def verify_password(plain: str, hashed: str) -> bool:
@@ -61,7 +61,7 @@ def verify_password(plain: str, hashed: str) -> bool:
     if not plain:
         return False
     try:
-        return _pwd_context.verify(plain, hashed)
+        return bool(_pwd_context.verify(plain, hashed))
     except Exception:
         return False
 
@@ -79,4 +79,4 @@ def needs_rehash(hashed: str) -> bool:
     This gives you a zero-downtime cost-factor upgrade path — existing users
     are silently migrated as they log in, without any forced password reset.
     """
-    return _pwd_context.needs_update(hashed)
+    return bool(_pwd_context.needs_update(hashed))

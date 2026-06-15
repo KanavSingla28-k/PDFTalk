@@ -68,4 +68,4 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-CMD [".venv/bin/rq", "worker", "ingest", "default", "--with-scheduler"]
+CMD ["python", "-m", "app.workers.worker"]

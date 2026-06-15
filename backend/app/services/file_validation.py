@@ -22,7 +22,12 @@ Raises:
                           exceptions.py maps this to HTTP 422.
 """
 
-import magic
+import sys
+
+if sys.platform == "win32":
+    from magic import magic
+else:
+    import magic
 
 from fastapi import UploadFile
 

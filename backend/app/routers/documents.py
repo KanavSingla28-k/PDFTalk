@@ -1,5 +1,6 @@
 import math
 import uuid
+from typing import Any
 from rq import Retry, Callback
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status, Request
@@ -9,7 +10,6 @@ import structlog
 
 from app.auth.dependencies import get_verified_user
 from app.db.session import get_db
-from app.exceptions import FileValidationError, QuotaExceededError
 from app.models.document import (
     DocumentListResponse,
     DocumentStatus,
@@ -28,11 +28,12 @@ from app.services.document_service import (
 from app.utils.rate_limit import RateLimiter, user_id_from_request
 from app.workers.queues import ingest_queue
 from app.workers.failure_handler import handle_ingest_failure
-from app.workers.worker import RETRY_DELAYS
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
+
+RETRY_DELAYS = [60, 300, 900]
 
 logger = structlog.get_logger()
 
@@ -93,7 +94,7 @@ async def upload_document_endpoint(
         )
     return DocumentUploadResponse(
         document_id=document.id,
-        status=document.status,
+        status=DocumentStatus(document.status),
     )
 
 
@@ -209,7 +210,7 @@ async def _list_with_count(
     status: DocumentStatus | None,
     limit: int,
     offset: int,
-) -> tuple[list, int]:
+) -> tuple[list[Any], int]:
     """
     Run the paginated query then the COUNT query sequentially on the same session.
 

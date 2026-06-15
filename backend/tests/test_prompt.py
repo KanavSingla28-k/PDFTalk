@@ -1,9 +1,7 @@
 import uuid
-import pytest
-import math
 
 from app.services.retrieval import RetrievedChunk
-from app.services.prompt import build_context_block, build_messages, CONTEXT_TOKEN_BUDGET, ENCODER
+from app.services.prompt import build_context_block, build_messages, ENCODER
 
 def make_chunk(text: str, filename: str = "doc.pdf") -> RetrievedChunk:
     token_count = len(ENCODER.encode(text))

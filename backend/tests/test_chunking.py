@@ -1,4 +1,3 @@
-import pytest
 from app.services.chunking import chunk_text, CHUNK_SIZE, CHUNK_OVERLAP, CHUNK_STEP
 import tiktoken
 

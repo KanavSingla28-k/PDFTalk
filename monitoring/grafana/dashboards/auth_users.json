@@ -1,0 +1,115 @@
+{
+  "uid": "pdftalk-auth",
+  "title": "PDFTalk — Auth & Users",
+  "tags": ["pdftalk"],
+  "timezone": "browser",
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "id": 1,
+      "title": "New Registrations / hour",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(pdftalk_user_registrations_total[1h]) * 3600",
+          "legendFormat": "registrations/hr"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Logins / min",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(pdftalk_user_logins_total[1m]) * 60",
+          "legendFormat": "successful logins/min"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Login Failures / min by Reason",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(pdftalk_login_failures_total[1m]) * 60",
+          "legendFormat": "{{reason}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Emails Sent / hour by Type",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(pdftalk_emails_sent_total[1h]) * 3600",
+          "legendFormat": "{{type}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Token Consumption Rate (embedding vs completion)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(pdftalk_openai_tokens_used_total[5m])",
+          "legendFormat": "{{kind}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
+    },
+    {
+      "id": 6,
+      "title": "Daily Quota Breaches / hour",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(pdftalk_daily_quota_breaches_total[1h]) * 3600",
+          "legendFormat": "quota breaches/hr"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Queries / min",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 24, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(pdftalk_queries_total[1m]) * 60",
+          "legendFormat": "queries/min"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Stream Errors / min by Code",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 24, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(pdftalk_stream_errors_total[1m]) * 60",
+          "legendFormat": "{{error_code}}"
+        }
+      ]
+    }
+  ]
+}

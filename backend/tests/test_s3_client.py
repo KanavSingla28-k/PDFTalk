@@ -2,7 +2,6 @@ import pytest
 import boto3
 from moto import mock_aws
 from io import BytesIO
-from app.utils.s3_client import S3Client
 
 BUCKET = "test-bucket"
 REGION = "ap-south-1"

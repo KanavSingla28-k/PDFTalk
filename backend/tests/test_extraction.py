@@ -51,7 +51,7 @@ def test_extract_corrupt_pdf_raises():
 def test_extract_image_only_pdf_triggers_ocr():
     """A PDF page with no text layer should fall through to OCR."""
     import fitz
-    from unittest.mock import patch, MagicMock
+    from unittest.mock import patch
 
     # Build a PDF whose single page has no text (just a blank page)
     doc = fitz.open()

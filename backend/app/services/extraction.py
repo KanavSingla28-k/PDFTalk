@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 import structlog
 import unicodedata
 from dataclasses import dataclass
@@ -78,7 +77,7 @@ def _extract_pdf(raw: bytes, s3_key: str) -> str:
 
     try:
         pages: list[str] = []
-        for page_num, page in enumerate(doc, start=1):   # type: ignore[arg-type]
+        for page_num, page in enumerate(doc, start=1):   
             try:
                 text = page.get_text("text").strip()
             except Exception as exc:
@@ -115,7 +114,7 @@ def _ocr_page(page: fitz.Page, page_num: int, s3_key: str) -> str:
 
         img = Image.frombytes("RGB", (pix.width, pix.height), pix.samples)
         text = pytesseract.image_to_string(img, lang="eng")
-        return text.strip()
+        return str(text).strip()
 
     except Exception as exc:
         logger.warning("OCR failed on page %d of %s: %s", page_num, s3_key, exc)

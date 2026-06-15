@@ -6,7 +6,6 @@ Create Date: 2026-06-13 00:15:00.000000
 
 """
 from alembic import op
-import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '0004_add_email_verif_index'
