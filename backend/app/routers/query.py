@@ -23,7 +23,7 @@ from app.db.session import get_db
 from app.models.query import QueryRequest
 from app.models.user import User
 from app.services.query_validation import validate_documents_for_query
-from app.services.retrieval import retrieve_similar_chunks
+from app.services.retrieval import retrieve_similar_chunks, RetrievedChunk
 from app.services.prompt import build_messages
 from app.services.llm import stream_llm_response
 from app.utils.openai_client import (
@@ -86,6 +86,7 @@ async def ask(
         _sse_generator(
             messages=messages,
             user_id=str(current_user.id),
+            included_chunks=_included_chunks,
         ),
         media_type="text/event-stream",
         headers={
@@ -99,6 +100,7 @@ async def ask(
 async def _sse_generator(
     messages: list[ChatCompletionMessageParam],
     user_id: str,
+    included_chunks: list[RetrievedChunk],
 ) -> AsyncIterator[str]:
     token_stream = stream_llm_response(messages=messages, user_id=user_id)
 
@@ -112,6 +114,20 @@ async def _sse_generator(
             except StopAsyncIteration:
                 break
             yield f"data: {token}\n\n"
+
+        # Stream source citations before the terminal DONE event
+        sources_data = {
+            "type": "sources",
+            "chunks": [
+                {
+                    "document_id": str(c.document_id),
+                    "filename": c.filename,
+                    "chunk_index": c.chunk_index,
+                }
+                for c in included_chunks
+            ]
+        }
+        yield f"data: {json.dumps(sources_data)}\n\n"
 
         yield "data: [DONE]\n\n"
 

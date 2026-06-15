@@ -83,7 +83,18 @@ async def test_full_query_pipeline(
         assert "data: The" in events[0]
         assert "data:  main" in events[1]
         assert "data:  feature." in events[2]
-        assert "data: [DONE]" in events[3]
+        
+        # Verify custom sources event
+        import json
+        sources_line = events[3].replace("data: ", "", 1)
+        sources_data = json.loads(sources_line)
+        assert sources_data["type"] == "sources"
+        assert len(sources_data["chunks"]) == 1
+        assert sources_data["chunks"][0]["filename"] == "test_guide.pdf"
+        assert sources_data["chunks"][0]["chunk_index"] == 0
+        assert sources_data["chunks"][0]["document_id"] == str(doc_id)
+
+        assert "data: [DONE]" in events[4]
 
 @pytest.mark.asyncio
 async def test_query_document_not_ready(
