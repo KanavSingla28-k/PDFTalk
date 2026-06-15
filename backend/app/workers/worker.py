@@ -1,8 +1,8 @@
+import logging
 import threading
 import time
 
 import redis
-import structlog
 from rq import Queue, Worker
 from rq.registry import FailedJobRegistry
 
@@ -11,7 +11,8 @@ from app.utils.metrics import dead_letter_queue_length, queue_length
 from app.workers.queue_poller import start_queue_poller
 from app.utils.redis_client import get_sync_redis
 
-logger = structlog.get_logger(__name__)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 
 def _poll_queue_metrics(conn: redis.Redis, interval: int = 15) -> None:
@@ -61,10 +62,6 @@ def main() -> None:
     )
 
     logger.info("RQ worker starting — listening on 'ingest' and 'default' queues")
-    # Schedule the stale document cleanup job
-    from app.workers.tasks import setup_stale_document_cleanup
-    setup_stale_document_cleanup(conn)
-
     redis_conn = get_sync_redis()
     start_queue_poller(redis_conn)
     worker.work(with_scheduler=True)

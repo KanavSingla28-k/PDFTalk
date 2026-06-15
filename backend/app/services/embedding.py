@@ -17,13 +17,13 @@ The caller (workers/ingest.py) is responsible for:
 from __future__ import annotations
 
 import asyncio
-import structlog
+import logging
 import math
 from typing import TypeVar
 
 from app.utils.openai_client import create_embeddings
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 _BATCH_SIZE = 100  # OpenAI recommends <= 2048 inputs, 100 is a safe conservative default
 
@@ -77,9 +77,11 @@ async def _embed_texts_async(texts: list[str]) -> list[list[float]]:
     for batch_index, batch in enumerate(batches):
         logger.debug(
             "embedding.batch",
-            batch_index=batch_index,
-            batch_size=len(batch),
-            total_batches=len(batches),
+            extra={
+                "batch_index": batch_index,
+                "batch_size": len(batch),
+                "total_batches": len(batches),
+            },
         )
         batch_vectors = await create_embeddings(batch)
 
@@ -119,6 +121,6 @@ def _l2_normalize(vector: list[float]) -> list[float]:
     """
     norm = math.sqrt(sum(x * x for x in vector))
     if norm == 0.0:
-        logger.warning("embedding.zero_vector", note="L2 norm is 0 — vector left unnormalised")
+        logger.warning("embedding.zero_vector: L2 norm is 0 — vector left unnormalised.")
         return vector
     return [x / norm for x in vector]

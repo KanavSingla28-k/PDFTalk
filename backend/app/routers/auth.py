@@ -1,20 +1,14 @@
-import structlog
-import uuid
-
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status, Cookie
+from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
-from fastapi.responses import JSONResponse, RedirectResponse
-from typing import Literal
-
+import logging
+import uuid
 from starlette.responses import Response as StarletteResponse
+
 
 from app.utils.rate_limit import RateLimiter
 from app.auth.tokens import (
-    TokenExpiredError,
     TokenInvalidError,
-    decode_access_token,
-    revoke_all_refresh_tokens,
     revoke_refresh_token,
     validate_and_rotate_refresh_token,
 )
@@ -25,15 +19,13 @@ from app.models.auth import (
     UserInfo, MeResponse, RefreshResponse, ResendVerificationRequest,
     ForgotPasswordRequest, ResetPasswordRequest,
 )
-from app.auth.dependencies import get_verified_user
 from app.services import user_service
 from app.services.email_verification import verify_token, send_verification_email_for_user
 from app.services.password_reset import initiate_password_reset, consume_reset_token
 from app.services.user_service import login as login_user
-from app.models.user import User
 
 
-logger = structlog.get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -65,46 +57,6 @@ _reset_limiter = RateLimiter(
     window_seconds=3600,  # 3 password resets per IP per hour
     key_prefix="reset",
 )
-
-# ---------------------------------------------------------------------------
-# Cookie helpers — single source of truth for refresh-token cookie settings
-#
-# All attributes (secure, samesite, path, max_age) are defined ONCE here.
-# When TLS goes live (T-10) flip secure=False → True in _COOKIE_SECURE only.
-# ---------------------------------------------------------------------------
-
-_COOKIE_KEY = "refresh_token"
-_COOKIE_MAX_AGE = 60 * 60 * 24 * 7   # 7 days — matches REFRESH_TOKEN_EXPIRE_DAYS
-_COOKIE_SECURE = False                # TODO: flip to True once TLS cert is in place (T-10)
-_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "strict"
-_COOKIE_PATH = "/"
-
-
-def _set_refresh_cookie(response: Response, raw_token: str) -> None:
-    """Attach the refresh-token httpOnly cookie to *response*."""
-    response.set_cookie(
-        key=_COOKIE_KEY,
-        value=raw_token,
-        httponly=True,
-        secure=_COOKIE_SECURE,
-        samesite=_COOKIE_SAMESITE,
-        max_age=_COOKIE_MAX_AGE,
-        path=_COOKIE_PATH,
-    )
-
-
-def _clear_refresh_cookie(response: Response) -> None:
-    """Delete the refresh-token cookie from *response*.
-
-    Must use the same path/samesite/secure settings as _set_refresh_cookie,
-    or the browser will not remove the cookie.
-    """
-    response.delete_cookie(
-        key=_COOKIE_KEY,
-        path=_COOKIE_PATH,
-        samesite=_COOKIE_SAMESITE,
-        secure=_COOKIE_SECURE,
-    )
 
 # ---------------------------------------------------------------------------
 # T-18 — Registration
@@ -277,7 +229,24 @@ async def login(
         password=payload.password,
     )
 
-    _set_refresh_cookie(response, raw_refresh_token)
+    # ------------------------------------------------------------------
+    # Set the refresh token as an httpOnly cookie.
+    #
+    # Key settings:
+    #   httponly=True   — JS cannot read this cookie; XSS cannot steal it
+    #   secure=True     — only sent over HTTPS (enforced by Nginx in prod)
+    #   samesite="strict" — not sent on cross-site requests; CSRF mitigation
+    #   path="/auth"
+    # ------------------------------------------------------------------
+    response.set_cookie(
+        key="refresh_token",
+        value=raw_refresh_token,
+        httponly=True,
+        secure=False,        # TODO: change to true after domain cert certification
+        samesite="strict",
+        max_age=60 * 60 * 24 * 7,  # 7 days — matches REFRESH_TOKEN_EXPIRE_DAYS
+        path="/",
+    )
 
     return LoginResponse(
         access_token=access_token,
@@ -344,11 +313,26 @@ async def refresh(
             content={"detail": str(exc)},
             headers={"WWW-Authenticate": "Bearer"},
         )
-        _clear_refresh_cookie(resp)
+        resp.delete_cookie(
+            key="refresh_token",
+            path="/",
+            secure=False,    #TODO: change to true once domain cert certification is done
+            samesite="strict",  # Must match set_cookie samesite exactly
+        )
         return resp
 
-    # Overwrite the old cookie with the rotated refresh token.
-    _set_refresh_cookie(response, new_raw_refresh_token)
+    # Overwrite the old cookie with the new refresh token.
+    # All settings must mirror the login cookie exactly so the browser
+    # replaces rather than accumulates a second cookie.
+    response.set_cookie(
+        key="refresh_token",
+        value=new_raw_refresh_token,
+        httponly=True,
+        secure=False,        # TODO: flip to True once TLS cert is in place (T-10)
+        samesite="strict",
+        max_age=60 * 60 * 24 * 7,  # 7 days — matches REFRESH_TOKEN_EXPIRE_DAYS
+        path="/",
+    )
 
     expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     return RefreshResponse(
@@ -394,7 +378,14 @@ async def logout(
         await revoke_refresh_token(raw_token=refresh_token, db=db)
 
     # Always clear the cookie, even if it was absent or already revoked.
-    _clear_refresh_cookie(response)
+    # delete_cookie must use the same path/samesite/secure settings that
+    # set_cookie used, or the browser will not remove it.
+    response.delete_cookie(
+        key="refresh_token",
+        path="/",
+        samesite="strict",
+        secure=False,        # TODO: flip to True once TLS cert is in place (T-10)
+    )
 
 # ---------------------------------------------------------------------------
 # T-47 — GET /auth/me (with silent refresh fallback)
@@ -439,53 +430,20 @@ async def get_me(
     from app.models.user import User as UserModel
 
     # ── Path 1: try the Bearer token first ──────────────────────────────
-    # Only fall through to the cookie path if the token itself is invalid
-    # or expired. If the token is valid but the account is deactivated or
-    # unverified, we must return 401 immediately — not silently hand off to
-    # the cookie path, which would let a deactivated user restore a session
-    # via page reload (I-07).
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
         raw_token = auth_header.removeprefix("Bearer ").strip()
         try:
-            user_id_str = decode_access_token(raw_token)
+            from app.auth.tokens import decode_access_token as _decode
+            user_id_str = _decode(raw_token)
             result = await db.execute(
                 sa_select(UserModel).where(UserModel.id == uuid.UUID(user_id_str))
             )
             user = result.scalar_one_or_none()
-
-            if user is None:
-                # Token is valid but user no longer exists — treat as 401.
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Not authenticated",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-
-            if not user.is_active:
-                # Explicitly reject deactivated accounts — do not fall through.
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Not authenticated",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-
-            if not user.is_verified:
-                # Explicitly reject unverified accounts — do not fall through.
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Not authenticated",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-
-            return MeResponse(id=str(user.id), email=user.email)
-
-        except HTTPException:
-            raise  # propagate our explicit 401s above unchanged
-        except (TokenInvalidError, TokenExpiredError):
-            pass  # token is genuinely invalid/expired — fall through to cookie path
+            if user and user.is_active and user.is_verified:
+                return MeResponse(id=str(user.id), email=user.email)
         except Exception:
-            pass  # any other decode failure — fall through to cookie path
+            pass  # expired or invalid — fall through to cookie path
 
     # ── Path 2: silent refresh via cookie ───────────────────────────────
     if not refresh_token:
@@ -506,11 +464,17 @@ async def get_me(
             content={"detail": str(exc)},
             headers={"WWW-Authenticate": "Bearer"},
         )
-        _clear_refresh_cookie(resp)
+        resp.delete_cookie(
+            key="refresh_token",
+            path="/",
+            secure=False,   # TODO: flip to True once TLS is live (T-10)
+            samesite="strict",
+        )
         return resp
 
     # Decode the new access token to get user_id, then fetch user
-    user_id_str = decode_access_token(new_access_token)
+    from app.auth.tokens import decode_access_token as _decode
+    user_id_str = _decode(new_access_token)
     result = await db.execute(
         sa_select(UserModel).where(UserModel.id == uuid.UUID(user_id_str))
     )
@@ -522,8 +486,16 @@ async def get_me(
             detail="Not authenticated",
         )
 
-    # Set the rotated refresh token cookie
-    _set_refresh_cookie(response, new_raw_refresh)
+    # Set the rotated refresh token cookie — mirrors /auth/login exactly
+    response.set_cookie(
+        key="refresh_token",
+        value=new_raw_refresh,
+        httponly=True,
+        secure=False,       # TODO: flip to True once TLS is live (T-10)
+        samesite="strict",
+        max_age=60 * 60 * 24 * 7,
+        path="/",
+    )
 
     expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
     return MeResponse(
@@ -578,44 +550,3 @@ async def reset_password(
     )
     await db.commit()
     return RegisterResponse(message="Password updated. Please log in.")
-
-
-# ---------------------------------------------------------------------------
-# F-02 — DELETE /auth/sessions (revoke all sessions)
-# ---------------------------------------------------------------------------
-
-@router.delete(
-    "/sessions",
-    status_code=status.HTTP_204_NO_CONTENT,
-    summary="Revoke all active sessions",
-    description=(
-        "Immediately invalidates every refresh token for the authenticated user. "
-        "All devices (browser tabs, mobile apps, etc.) will be signed out on their "
-        "next token refresh. "
-        "The caller's own refresh-token cookie is also cleared. "
-        "Returns 204 on success."
-    ),
-)
-async def revoke_all_sessions(
-    response: Response,
-    db: AsyncSession = Depends(get_db),
-    current_user: User =Depends(get_verified_user),
-) -> None:
-    """
-    DELETE /auth/sessions
-
-    Security use-case
-    -----------------
-    A user who suspects their account is compromised can call this endpoint
-    to invalidate every active session in a single request. Any refresh token
-    that subsequently arrives (from an attacker's device) will not be found
-    in the DB and will receive a 401.
-
-    The caller's own access token remains valid until its 15-minute expiry
-    (stateless JWTs cannot be revoked without a denylist). The cookie is
-    cleared immediately so this browser tab also requires re-login on next
-    page load.
-    """
-    await revoke_all_refresh_tokens(user_id=current_user.id, db=db)
-    # Clear the caller's own cookie so this browser also requires re-login
-    _clear_refresh_cookie(response)
