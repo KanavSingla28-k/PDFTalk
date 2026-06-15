@@ -185,8 +185,9 @@ async def test_send_enqueues_job_on_default_queue(db):
 
     pos_args, kw_args = fake_queue.enqueue.call_args
 
-    # First positional arg is the import-path string of the worker function.
-    assert pos_args[0] == "app.utils.email.send_verification_email_sync"
+    from app.utils.email import send_verification_email_sync
+    # First positional arg is the worker function object.
+    assert pos_args[0] == send_verification_email_sync
 
     # kwargs must carry to_email and a verification_url containing the token.
     job_kwargs = kw_args.get("kwargs", {})

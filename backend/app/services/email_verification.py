@@ -71,8 +71,9 @@ async def send_verification_email_for_user(
 ) -> None:
     raw_token = await generate_and_store_verification_token(user_id, db)
     verification_url = _build_verification_url(raw_token)
+    from app.utils.email import send_verification_email_sync
     default_queue.enqueue(
-        "app.utils.email.send_verification_email_sync",
+        send_verification_email_sync,
         kwargs={"to_email": email, "verification_url": verification_url},
     )
     emails_sent_total.labels(type="verification").inc()

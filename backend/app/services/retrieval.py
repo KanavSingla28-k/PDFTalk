@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.embedding import embed_texts
+from app.utils.openai_client import create_embeddings
 from app.core.config import settings
 
 logger = structlog.get_logger(__name__)
@@ -97,11 +97,7 @@ async def retrieve_similar_chunks(
         k=effective_k,
     )
 
-    # embed_texts() is sync (uses asyncio.run() internally).
-    # We call it here via run_in_executor so we don't block the event loop.
-    import asyncio
-    loop = asyncio.get_running_loop()
-    vectors = await loop.run_in_executor(None, embed_texts, [query])
+    vectors = await create_embeddings([query])
     query_vector = vectors[0]  # single query → single vector
 
     rows = await _run_similarity_search(

@@ -40,6 +40,12 @@ bearer = HTTPBearer()
 # ---------------------------------------------------------------------------
 
 def _require_admin(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> None:
+    if settings.ADMIN_TOKEN is None:
+        log.error("internal.admin_token_missing", reason="ADMIN_TOKEN is not configured in settings")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Admin token is not configured on the server."
+        )
     if creds.credentials != settings.ADMIN_TOKEN:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 

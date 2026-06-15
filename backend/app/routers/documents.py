@@ -70,8 +70,9 @@ async def upload_document_endpoint(
     document = await upload_document(current_user=current_user, file=file, db=db)
 
     try:
+        from app.workers.ingest import run_ingest
         ingest_queue.enqueue(
-            "app.workers.ingest.run_ingest",
+            run_ingest,
             kwargs={"document_id": str(document.id)},
             retry=Retry(max=3, interval=RETRY_DELAYS),
             on_failure=Callback(handle_ingest_failure),
@@ -234,8 +235,9 @@ async def retry_document_endpoint(
     await db.commit()
 
     try:
+        from app.workers.ingest import run_ingest
         ingest_queue.enqueue(
-            "app.workers.ingest.run_ingest",
+            run_ingest,
             kwargs={"document_id": str(document.id)},
             retry=Retry(max=3, interval=RETRY_DELAYS),
             on_failure=Callback(handle_ingest_failure),
