@@ -19,13 +19,12 @@ from app.models.auth import (
     UserInfo, MeResponse, RefreshResponse, ResendVerificationRequest,
     ForgotPasswordRequest, ResetPasswordRequest,
 )
-from app.models.user import User
-from app.models.auth import MeResponse
+# from app.models.user import User
 from app.services import user_service
 from app.services.email_verification import verify_token, send_verification_email_for_user
 from app.services.password_reset import initiate_password_reset, consume_reset_token
 from app.services.user_service import login as login_user
-from app.auth.dependencies import get_verified_user
+# from app.auth.dependencies import get_verified_user
 
 
 logger = logging.getLogger(__name__)
