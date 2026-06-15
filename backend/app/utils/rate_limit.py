@@ -52,7 +52,7 @@ falls out of the window) so well-behaved clients know when to retry.
 """
 
 import time
-import logging
+import structlog
 from typing import Callable
 import uuid
 from fastapi import Request, HTTPException
@@ -61,7 +61,7 @@ from redis.exceptions import RedisError
 from app.exceptions import RateLimitExceededError
 from app.utils.redis_client import get_redis
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class RateLimiter:
@@ -152,13 +152,11 @@ class RateLimiter:
                     retry_after = self.window_seconds
 
                 logger.warning(
-                    "Rate limit exceeded",
-                    extra={
-                        "key_prefix": self.key_prefix,
-                        "identifier": identifier,
-                        "limit": self.limit,
-                        "window_seconds": self.window_seconds,
-                    },
+                    "rate_limit.exceeded",
+                    key_prefix=self.key_prefix,
+                    identifier=identifier,
+                    limit=self.limit,
+                    window_seconds=self.window_seconds,
                 )
 
                 raise RateLimitExceededError(retry_after)
@@ -169,7 +167,7 @@ class RateLimiter:
                 pipe.expire(redis_key, self.window_seconds)
                 await pipe.execute()
         except RedisError as exc:
-            logger.error("Redis error in rate limiter: %s", exc)
+            logger.error("rate_limiter.redis_error", error=str(exc))
             raise HTTPException(status_code=503, detail="Service Unavailable")
 
     # ------------------------------------------------------------------

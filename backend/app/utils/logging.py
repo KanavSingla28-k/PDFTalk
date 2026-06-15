@@ -95,25 +95,33 @@ def configure_logging() -> None:
     If LOG_FORMAT is not set, format is inferred from APP_URL:
         localhost → pretty
         anything else → json
+
+    stdlib logging is routed through structlog's ProcessorFormatter (I-03)
+    so that all log output — including uvicorn, SQLAlchemy, openai SDK, and
+    any remaining logging.getLogger() calls — goes through the same pipeline
+    (PII scrubbing, JSON rendering).
     """
     log_format = _resolve_format()
+    stdlib_level = logging.INFO if log_format == "json" else logging.DEBUG
 
     # Shared processors applied regardless of format
     shared_processors: list[Any] = [
         structlog.contextvars.merge_contextvars,   # picks up bind_contextvars()
         structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level_number,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         _scrub_pii,
         structlog.processors.StackInfoRenderer(),
     ]
 
     if log_format == "json":
-        # Production: machine-readable JSON, one object per line
+        renderer: Any = structlog.processors.JSONRenderer()
         structlog.configure(
             processors=shared_processors
             + [
                 structlog.processors.dict_tracebacks,
-                structlog.processors.JSONRenderer(),
+                renderer,
             ],
             wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
             context_class=dict,
@@ -121,11 +129,11 @@ def configure_logging() -> None:
             cache_logger_on_first_use=True,
         )
     else:
-        # Development: coloured, human-friendly output
+        renderer = structlog.dev.ConsoleRenderer(colors=True)
         structlog.configure(
             processors=shared_processors
             + [
-                structlog.dev.ConsoleRenderer(colors=True),
+                renderer,
             ],
             wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG),
             context_class=dict,
@@ -133,13 +141,43 @@ def configure_logging() -> None:
             cache_logger_on_first_use=False,  # reflect config changes without restart
         )
 
-    # Route stdlib logging (uvicorn, sqlalchemy, etc.) through structlog
-    logging.basicConfig(
-        format="%(message)s",
-        stream=sys.stdout,
-        level=logging.INFO if log_format == "json" else logging.DEBUG,
+    # ---------------------------------------------------------------------------
+    # Route stdlib logging through structlog's processor chain (I-03)
+    #
+    # Without this, any logging.getLogger(__name__).warning() call (uvicorn,
+    # SQLAlchemy, openai SDK, our own workers) bypasses PII scrubbing and JSON
+    # rendering, emitting raw plain-text lines that corrupt structured log streams.
+    #
+    # ProcessorFormatter bridges stdlib → structlog:
+    #   1. A stdlib StreamHandler wraps ProcessorFormatter
+    #   2. ProcessorFormatter runs foreign_pre_chain then the same renderer
+    #   3. The root logger is set to the same level as structlog
+    # ---------------------------------------------------------------------------
+
+    # foreign_pre_chain: processors run on records that arrive via stdlib logging.
+    # add_logger_name injects {"logger": "uvicorn.error"} so the source is visible.
+    foreign_pre_chain: list[Any] = [
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.stdlib.add_log_level_number,
+        structlog.processors.TimeStamper(fmt="iso", utc=True),
+        _scrub_pii,
+    ]
+
+    formatter = structlog.stdlib.ProcessorFormatter(
+        foreign_pre_chain=foreign_pre_chain,
+        processor=renderer,
     )
-    logging.getLogger("uvicorn.access").propagate = False  # avoid double-logging requests
+
+    handler = logging.StreamHandler(sys.stdout)
+    handler.setFormatter(formatter)
+
+    root_logger = logging.getLogger()
+    root_logger.handlers = [handler]   # replace any handlers added by earlier basicConfig calls
+    root_logger.setLevel(stdlib_level)
+
+    # Suppress uvicorn's access log — RequestLoggingMiddleware owns request logs
+    logging.getLogger("uvicorn.access").propagate = False
 
 
 def _resolve_format() -> str:

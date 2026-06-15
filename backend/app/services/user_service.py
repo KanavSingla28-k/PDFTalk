@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import logging
+import structlog
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -21,7 +21,7 @@ from app.utils.metrics import (
     login_failures_total,
 )
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -167,8 +167,8 @@ async def login(
             user.locked_until = _now_utc() + timedelta(minutes=_LOCKOUT_DURATION_MINUTES)
             user.failed_login_attempts = 0
             logger.warning(
-                "Account locked due to repeated failed logins",
-                extra={"user_id": str(user.id)},
+                "account.locked",
+                user_id=str(user.id),
             )
 
         await db.commit()
@@ -186,6 +186,6 @@ async def login(
     )
 
     user_logins_total.inc()
-    logger.info("User logged in", extra={"user_id": str(user.id)})
+    logger.info("user.login", user_id=str(user.id))
 
     return access_token, raw_refresh_token, expires_in, user

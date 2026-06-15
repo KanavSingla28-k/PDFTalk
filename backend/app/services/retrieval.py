@@ -26,7 +26,7 @@ Design notes:
 
 from __future__ import annotations
 
-import logging
+import structlog
 import uuid
 from dataclasses import dataclass
 
@@ -36,7 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.services.embedding import embed_texts
 from app.core.config import settings
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -92,11 +92,9 @@ async def retrieve_similar_chunks(
 
     logger.debug(
         "retrieval.start",
-        extra={
-            "user_id": str(user_id),
-            "document_count": len(document_ids),
-            "k": effective_k,
-        },
+        user_id=str(user_id),
+        document_count=len(document_ids),
+        k=effective_k,
     )
 
     # embed_texts() is sync (uses asyncio.run() internally).
@@ -116,7 +114,8 @@ async def retrieve_similar_chunks(
 
     logger.debug(
         "retrieval.complete",
-        extra={"user_id": str(user_id), "results_returned": len(rows)},
+        user_id=str(user_id),
+        results_returned=len(rows),
     )
 
     return rows

@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status, Cookie
-from fastapi.responses import RedirectResponse, JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
-import logging
+import structlog
 import uuid
-from starlette.responses import Response as StarletteResponse
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import JSONResponse, RedirectResponse
+from typing import Literal
+
+from starlette.responses import Response as StarletteResponse
 
 from app.utils.rate_limit import RateLimiter
 from app.auth.tokens import (
@@ -27,9 +30,10 @@ from app.services import user_service
 from app.services.email_verification import verify_token, send_verification_email_for_user
 from app.services.password_reset import initiate_password_reset, consume_reset_token
 from app.services.user_service import login as login_user
+from app.models.user import User
 
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -72,7 +76,7 @@ _reset_limiter = RateLimiter(
 _COOKIE_KEY = "refresh_token"
 _COOKIE_MAX_AGE = 60 * 60 * 24 * 7   # 7 days — matches REFRESH_TOKEN_EXPIRE_DAYS
 _COOKIE_SECURE = False                # TODO: flip to True once TLS cert is in place (T-10)
-_COOKIE_SAMESITE = "strict"
+_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "strict"
 _COOKIE_PATH = "/"
 
 
@@ -595,7 +599,7 @@ async def reset_password(
 async def revoke_all_sessions(
     response: Response,
     db: AsyncSession = Depends(get_db),
-    current_user=Depends(get_verified_user),
+    current_user: User =Depends(get_verified_user),
 ) -> None:
     """
     DELETE /auth/sessions

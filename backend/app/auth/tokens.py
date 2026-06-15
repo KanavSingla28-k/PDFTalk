@@ -20,7 +20,7 @@ Design (from T-16 spec):
 """
 
 import hashlib
-import logging
+import structlog
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -34,7 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.models.auth import RefreshToken  # SQLAlchemy model matching T-04 schema
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -133,11 +133,11 @@ def create_access_token(user_id: str) -> str:
         "jti": str(uuid.uuid4()),
         "type": "access",
     }
-    return jwt.encode(
+    return cast(str, jwt.encode(
         payload,
         settings.JWT_SECRET_KEY,
         algorithm=settings.JWT_ALGORITHM,
-    )
+    ))
 
 
 def decode_access_token(token: str) -> str:

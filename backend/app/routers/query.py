@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-import logging
+import structlog
 from typing import AsyncIterator
 
 from fastapi import APIRouter, Depends, Request
@@ -36,7 +36,7 @@ from app.utils.openai_client import (
 from app.utils.rate_limit import RateLimiter, user_id_from_request
 from app.utils.metrics import queries_total, stream_errors_total
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/query", tags=["query"])
 
@@ -117,9 +117,9 @@ async def _sse_generator(
 
     except asyncio.TimeoutError:
         logger.error(
-            "SSE stream timed out for user %s — no token received within %ds.",
-            user_id,
-            settings.STREAM_CHUNK_TIMEOUT,
+            "sse.stream_timeout",
+            user_id=user_id,
+            timeout_seconds=settings.STREAM_CHUNK_TIMEOUT,
         )
         stream_errors_total.labels(error_code="STREAM_TIMEOUT").inc()
         yield _error_event(
@@ -128,7 +128,7 @@ async def _sse_generator(
         )
 
     except APITimeoutError:
-        logger.error("OpenAI APITimeoutError mid-stream for user %s.", user_id)
+        logger.error("sse.openai_api_timeout", user_id=user_id)
         stream_errors_total.labels(error_code="STREAM_TIMEOUT").inc()
         yield _error_event(
             "STREAM_TIMEOUT",
@@ -136,7 +136,7 @@ async def _sse_generator(
         )
 
     except DailyQuotaExceededError:
-        logger.warning("Daily token quota exceeded mid-stream for user %s.", user_id)
+        logger.warning("sse.daily_token_quota_exceeded", user_id=user_id)
         stream_errors_total.labels(error_code="DAILY_QUOTA_EXCEEDED").inc()
         yield _error_event(
             "DAILY_QUOTA_EXCEEDED",
@@ -144,7 +144,7 @@ async def _sse_generator(
         )
 
     except DailyQueryQuotaExceededError:
-        logger.warning("Daily query quota exceeded mid-stream for user %s.", user_id)
+        logger.warning("sse.daily_query_quota_exceeded", user_id=user_id)
         stream_errors_total.labels(error_code="DAILY_QUOTA_EXCEEDED").inc()
         yield _error_event(
             "DAILY_QUOTA_EXCEEDED",
@@ -153,9 +153,9 @@ async def _sse_generator(
 
     except (CircuitBreakerOpenError, OpenAIRetryExhaustedError) as exc:
         logger.error(
-            "OpenAI unavailable mid-stream for user %s: %s",
-            user_id,
-            type(exc).__name__,
+            "sse.openai_unavailable",
+            user_id=user_id,
+            exc_type=type(exc).__name__,
         )
         stream_errors_total.labels(error_code="AI_SERVICE_UNAVAILABLE").inc()
         yield _error_event(
@@ -165,7 +165,9 @@ async def _sse_generator(
 
     except Exception as exc:
         logger.exception(
-            "Unexpected error in SSE stream for user %s: %s", user_id, exc
+            "sse.unexpected_error",
+            user_id=user_id,
+            exc_type=type(exc).__name__,
         )
         stream_errors_total.labels(error_code="STREAM_ERROR").inc()
         yield _error_event(

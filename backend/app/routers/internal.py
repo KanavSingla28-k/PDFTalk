@@ -11,7 +11,7 @@ The /api/internal/ prefix is blocked at Nginx for external traffic
 """
 
 import asyncio
-import logging
+import structlog
 from datetime import date
 from typing import Any
 
@@ -29,7 +29,7 @@ from app.models.user import User
 from app.services.alerting import dispatch_alert
 from app.utils.redis_client import get_redis, get_sync_redis
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 bearer = HTTPBearer()

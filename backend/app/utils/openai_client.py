@@ -7,7 +7,7 @@ Single entry point for all OpenAI API calls.
 from __future__ import annotations
 
 import asyncio
-import logging
+import structlog
 import time
 from typing import AsyncIterator, Callable, Any
 
@@ -19,7 +19,7 @@ from app.core.config import settings
 from app.utils import redis_client as rc
 from app.utils.metrics import openai_errors_total, daily_quota_breaches_total
 
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
