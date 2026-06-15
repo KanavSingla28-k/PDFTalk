@@ -50,12 +50,8 @@ async def test_returns_mapped_dataclasses():
     mock_result.fetchall.return_value = [_make_mock_row()]
     mock_db.execute.return_value = mock_result
 
-    with (
-        patch("app.services.retrieval.embed_texts", return_value=[FAKE_VECTOR]),
-        patch("asyncio.get_running_loop") as mock_loop,
-    ):
-        # run_in_executor should return the embed result directly in tests
-        mock_loop.return_value.run_in_executor = AsyncMock(return_value=[FAKE_VECTOR])
+    with patch("app.services.retrieval.create_embeddings", new_callable=AsyncMock) as mock_create:
+        mock_create.return_value = [FAKE_VECTOR]
 
         results = await retrieve_similar_chunks(
             user_id=FAKE_USER_ID,
@@ -82,8 +78,8 @@ async def test_empty_result_returns_empty_list():
     mock_result.fetchall.return_value = []
     mock_db.execute.return_value = mock_result
 
-    with patch("asyncio.get_running_loop") as mock_loop:
-        mock_loop.return_value.run_in_executor = AsyncMock(return_value=[FAKE_VECTOR])
+    with patch("app.services.retrieval.create_embeddings", new_callable=AsyncMock) as mock_create:
+        mock_create.return_value = [FAKE_VECTOR]
 
         results = await retrieve_similar_chunks(
             user_id=FAKE_USER_ID,
@@ -120,8 +116,8 @@ async def test_respects_custom_k():
     mock_result.fetchall.return_value = []
     mock_db.execute.return_value = mock_result
 
-    with patch("asyncio.get_running_loop") as mock_loop:
-        mock_loop.return_value.run_in_executor = AsyncMock(return_value=[FAKE_VECTOR])
+    with patch("app.services.retrieval.create_embeddings", new_callable=AsyncMock) as mock_create:
+        mock_create.return_value = [FAKE_VECTOR]
 
         await retrieve_similar_chunks(
             user_id=FAKE_USER_ID,
@@ -149,8 +145,8 @@ async def test_results_ordered_by_distance():
     mock_result.fetchall.return_value = rows
     mock_db.execute.return_value = mock_result
 
-    with patch("asyncio.get_running_loop") as mock_loop:
-        mock_loop.return_value.run_in_executor = AsyncMock(return_value=[FAKE_VECTOR])
+    with patch("app.services.retrieval.create_embeddings", new_callable=AsyncMock) as mock_create:
+        mock_create.return_value = [FAKE_VECTOR]
 
         results = await retrieve_similar_chunks(
             user_id=FAKE_USER_ID,

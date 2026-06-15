@@ -10,6 +10,16 @@ any app module is imported.
 """
 
 import os
+import uuid
+import pytest
+import pytest_asyncio
+import tempfile
+import shutil
+import atexit
+import fakeredis.aioredis
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
 
 # ---------------------------------------------------------------------------
 # Environment setup — MUST be first, before any app.* import
@@ -28,19 +38,13 @@ os.environ.setdefault("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEX
 os.environ.setdefault("S3_BUCKET_NAME", "pdftalk-test-bucket")
 
 os.environ.setdefault("APP_URL", "http://localhost")
+_temp_dir = tempfile.mkdtemp(prefix="pdftalk_prometheus_")
+os.environ["PROMETHEUS_MULTIPROC_DIR"] = _temp_dir
+atexit.register(lambda: shutil.rmtree(_temp_dir, ignore_errors=True))
 
 # ---------------------------------------------------------------------------
 # App imports — safe after env vars are in place
 # ---------------------------------------------------------------------------
-
-import uuid
-
-import pytest
-import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import sessionmaker
-import fakeredis.aioredis
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app

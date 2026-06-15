@@ -57,8 +57,9 @@ async def initiate_password_reset(email: str, db: AsyncSession) -> None:
     db.add(reset_record)
     await db.flush()
 
+    from app.utils.email import send_password_reset_email_sync
     default_queue.enqueue(
-        "app.utils.email.send_password_reset_email_sync",
+        send_password_reset_email_sync,
         kwargs={"to_email": user.email, "raw_token": raw_token},
     )
     emails_sent_total.labels(type="password_reset").inc()
