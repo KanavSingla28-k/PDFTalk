@@ -198,6 +198,27 @@ class UserInfo(BaseModel):
     model_config = ConfigDict(from_attributes=True)  # allows construction from a SQLAlchemy User model
 
 
+class MeResponse(BaseModel):
+    """
+    GET /auth/me response body.
+
+    When the request carried a valid Bearer token, `access_token` and
+    `expires_in` are None — the caller already has a valid token.
+
+    When the request had no Bearer token but a valid refresh cookie,
+    the endpoint silently rotates the refresh token and returns a fresh
+    access token here so the frontend can restore its in-memory auth state
+    in a single round trip.
+    """
+    id: str
+    email: str
+    access_token: str | None = None
+    token_type: str = "bearer"
+    expires_in: int | None = None  # seconds, only present on silent refresh
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class RefreshResponse(BaseModel):
     """
     Returned by POST /auth/refresh.

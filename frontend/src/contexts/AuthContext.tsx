@@ -113,24 +113,51 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function restoreSession() {
       try {
-        const data = await refreshToken();
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_URL}/auth/me`,
+          {
+            credentials: 'include',
+            headers: accessTokenRef.current
+              ? { Authorization: `Bearer ${accessTokenRef.current}` }
+              : {},
+          }
+        );
+
+        if (!res.ok) {
+          throw new Error('Not authenticated');
+        }
+
+        const data = await res.json();
+
         if (!mounted) return;
 
-        accessTokenRef.current = data.access_token;
-        
-        // Restore user from sessionStorage as per T-49 design decision
-        const storedUser = sessionStorage.getItem('pdftalk_user');
-        const user = storedUser ? JSON.parse(storedUser) : null;
+        const user = {
+          id: data.id,
+          email: data.email,
+        };
 
-        setState({ user, accessToken: data.access_token, isLoading: false });
-        scheduleRefresh(data.expires_in);
-        
-      } catch (err) {
+        accessTokenRef.current = data.access_token ?? null;
+
+        setState({
+          user,
+          accessToken: data.access_token ?? null,
+          isLoading: false,
+        });
+
+        sessionStorage.setItem('pdftalk_user', JSON.stringify(user));
+
+        if (data.expires_in) {
+          scheduleRefresh(data.expires_in);
+        }
+      } catch {
         clearSession();
+
         if (!mounted) return;
-        
-        // Only redirect to login if we're on a protected route
-        const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname?.startsWith(route));
+
+        const isPublicRoute = PUBLIC_ROUTES.some((route) =>
+          pathname?.startsWith(route)
+        );
+
         if (!isPublicRoute && pathname !== '/') {
           router.push('/auth/login');
         }
