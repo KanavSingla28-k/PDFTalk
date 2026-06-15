@@ -2,6 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from fastapi.responses import RedirectResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 import logging
+import uuid
+from starlette.responses import Response as StarletteResponse
+
 
 from app.utils.rate_limit import RateLimiter
 from app.auth.tokens import (
@@ -11,13 +14,19 @@ from app.auth.tokens import (
 )
 from app.core.config import settings
 from app.db.session import get_db
-from app.models.auth import RegisterRequest, RegisterResponse, LoginRequest, LoginResponse, UserInfo, RefreshResponse, ResendVerificationRequest, ForgotPasswordRequest, ResetPasswordRequest
+from app.models.auth import (
+    RegisterRequest, RegisterResponse, LoginRequest, LoginResponse,
+    UserInfo, MeResponse, RefreshResponse, ResendVerificationRequest,
+    ForgotPasswordRequest, ResetPasswordRequest,
+)
 from app.models.user import User
+from app.models.auth import MeResponse
 from app.services import user_service
 from app.services.email_verification import verify_token, send_verification_email_for_user
 from app.services.password_reset import initiate_password_reset, consume_reset_token
 from app.services.user_service import login as login_user
 from app.auth.dependencies import get_verified_user
+
 
 logger = logging.getLogger(__name__)
 
@@ -382,19 +391,123 @@ async def logout(
     )
 
 # ---------------------------------------------------------------------------
-# T-47 — Get Current User
+# T-47 — GET /auth/me (with silent refresh fallback)
 # ---------------------------------------------------------------------------
 
 @router.get(
     "/me",
-    response_model=UserInfo,
-    summary="Get current logged-in user",
+    response_model=MeResponse,
+    summary="Get current user — silently refreshes session if access token is absent",
+    description=(
+        "Primary path: Bearer token present → validates it → returns user (no new tokens).\n"
+        "Fallback path: no/expired Bearer token + valid refresh cookie → "
+        "rotates refresh token, sets new cookie, returns user + fresh access token.\n"
+        "Returns 401 if neither is valid."
+    ),
 )
 async def get_me(
-    user: User = Depends(get_verified_user),
-) -> UserInfo:
-    return UserInfo.model_validate(user)
+    response: Response,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    refresh_token: str | None = Cookie(default=None),
+) -> MeResponse | StarletteResponse:
+    """
+    Page-reload auth state restoration.
 
+    On every hard reload the frontend calls this endpoint before rendering
+    protected pages. Two paths:
+
+    1. Valid Bearer token in Authorization header
+       → decode it → fetch user → return UserInfo (no token rotation).
+       Fast path — no cookie touched, no DB write.
+
+    2. No/expired Bearer token + refresh cookie present
+       → validate_and_rotate_refresh_token()
+       → set new refresh cookie (same settings as /auth/login)
+       → return user + new access_token so the frontend can restore
+         its in-memory token without a second round trip.
+
+    401 if both are absent or invalid.
+    """
+    from sqlalchemy import select as sa_select
+    from app.models.user import User as UserModel
+
+    # ── Path 1: try the Bearer token first ──────────────────────────────
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        raw_token = auth_header.removeprefix("Bearer ").strip()
+        try:
+            from app.auth.tokens import decode_access_token as _decode
+            user_id_str = _decode(raw_token)
+            result = await db.execute(
+                sa_select(UserModel).where(UserModel.id == uuid.UUID(user_id_str))
+            )
+            user = result.scalar_one_or_none()
+            if user and user.is_active and user.is_verified:
+                return MeResponse(id=str(user.id), email=user.email)
+        except Exception:
+            pass  # expired or invalid — fall through to cookie path
+
+    # ── Path 2: silent refresh via cookie ───────────────────────────────
+    if not refresh_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    try:
+        new_access_token, new_raw_refresh = await validate_and_rotate_refresh_token(
+            raw_token=refresh_token,
+            db=db,
+        )
+    except TokenInvalidError as exc:
+        resp = JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": str(exc)},
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+        resp.delete_cookie(
+            key="refresh_token",
+            path="/",
+            secure=False,   # TODO: flip to True once TLS is live (T-10)
+            samesite="strict",
+        )
+        return resp
+
+    # Decode the new access token to get user_id, then fetch user
+    from app.auth.tokens import decode_access_token as _decode
+    user_id_str = _decode(new_access_token)
+    result = await db.execute(
+        sa_select(UserModel).where(UserModel.id == uuid.UUID(user_id_str))
+    )
+    user = result.scalar_one_or_none()
+
+    if not user or not user.is_active or not user.is_verified:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+
+    # Set the rotated refresh token cookie — mirrors /auth/login exactly
+    response.set_cookie(
+        key="refresh_token",
+        value=new_raw_refresh,
+        httponly=True,
+        secure=False,       # TODO: flip to True once TLS is live (T-10)
+        samesite="strict",
+        max_age=60 * 60 * 24 * 7,
+        path="/",
+    )
+
+    expires_in = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    return MeResponse(
+        id=str(user.id),
+        email=user.email,
+        access_token=new_access_token,
+        token_type="bearer",
+        expires_in=expires_in,
+    )
 
 # ---------------------------------------------------------------------------
 # T-66 — Password Reset
