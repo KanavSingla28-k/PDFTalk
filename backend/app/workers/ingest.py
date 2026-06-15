@@ -130,6 +130,14 @@ def _run(db: Session, document_id: uuid.UUID) -> None:
     _check_token_budget(total_tokens)
 
     # ------------------------------------------------------------------ #
+    # 4b. Per-user daily token quota — charged BEFORE calling OpenAI      #
+    #     so we never bill the account if the user is already over quota. #
+    # ------------------------------------------------------------------ #
+    _run_async(
+        check_and_increment_token_usage(str(doc.user_id), total_tokens)
+    )
+
+    # ------------------------------------------------------------------ #
     # 5. Embed                                                            #
     # ------------------------------------------------------------------ #
     texts = [c.text for c in chunks_data]
@@ -139,13 +147,6 @@ def _run(db: Session, document_id: uuid.UUID) -> None:
         raise ValueError(
             f"Embedding count mismatch: got {len(embeddings)}, expected {len(chunks_data)}"
         )
-
-    # ------------------------------------------------------------------ #
-    # 5b. Per-user daily token quota — charged AFTER embedding succeeds   #
-    # ------------------------------------------------------------------ #
-    _run_async(
-        check_and_increment_token_usage(str(doc.user_id), total_tokens)
-    )
 
     # ------------------------------------------------------------------ #
     # 6. Bulk-insert chunks + embeddings                                  #
