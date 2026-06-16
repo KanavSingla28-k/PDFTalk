@@ -1,22 +1,23 @@
 """
 app/routers/internal.py
 
-Internal-only routes — all protected by ADMIN_TOKEN bearer auth.
+Internal-only routes.
 
-  POST /internal/alerts/webhook   Alertmanager fires here on alert state changes.
-  GET  /internal/admin/stats      Aggregated business metrics for the admin dashboard.
-
-The /api/internal/ prefix is blocked at Nginx for external traffic
-(allow 172.0.0.0/8; deny all) so the token is a secondary defence.
+  POST /internal/admin/login      Sets httpOnly admin session cookie
+  POST /internal/admin/logout     Clears the cookie
+  POST /internal/alerts/webhook   Alertmanager webhook (Bearer auth — server-to-server)
+  GET  /internal/admin/stats      Business metrics (cookie auth)
 """
 
 import asyncio
-import logging
+import secrets
+import structlog
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from pydantic import BaseModel
 from rq.registry import FailedJobRegistry
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,48 +30,150 @@ from app.models.user import User
 from app.services.alerting import dispatch_alert
 from app.utils.redis_client import get_redis, get_sync_redis
 
-log = logging.getLogger(__name__)
+log = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 bearer = HTTPBearer()
 
-
-# ---------------------------------------------------------------------------
-# Auth dependency
-# ---------------------------------------------------------------------------
-
-def _require_admin(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> None:
-    if creds.credentials != settings.ADMIN_TOKEN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+_COOKIE_NAME = "admin_session"
+_COOKIE_MAX_AGE = 60 * 60 * 8  # 8 hours
 
 
 # ---------------------------------------------------------------------------
-# Alertmanager webhook receiver
+# Auth dependencies — two separate ones for the two auth surfaces
 # ---------------------------------------------------------------------------
 
-@router.post("/alerts/webhook", dependencies=[Depends(_require_admin)], status_code=204)
+def _require_admin_cookie(
+    admin_session: str | None = Cookie(default=None),
+) -> None:
+    """
+    Protects browser-facing endpoints (stats, future admin routes).
+    Reads the httpOnly cookie set by /internal/admin/login.
+    """
+    if not admin_session:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+        )
+    if settings.ADMIN_TOKEN is None:
+        log.error("admin_token_not_configured")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="ADMIN_TOKEN is not configured on the server.",
+        )
+    # Constant-time comparison — prevents timing attacks
+    if not secrets.compare_digest(admin_session, settings.ADMIN_TOKEN):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden",
+        )
+
+
+def _require_admin_bearer(
+    creds: HTTPAuthorizationCredentials = Depends(bearer),
+) -> None:
+    """
+    Protects server-to-server endpoints (Alertmanager webhook).
+    Bearer token in Authorization header — never touches a browser.
+    """
+    if settings.ADMIN_TOKEN is None:
+        log.error("admin_token_not_configured")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="ADMIN_TOKEN is not configured on the server.",
+        )
+    if not secrets.compare_digest(creds.credentials, settings.ADMIN_TOKEN):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden",
+        )
+
+
+# ---------------------------------------------------------------------------
+# Login / logout
+# ---------------------------------------------------------------------------
+
+class AdminLoginRequest(BaseModel):
+    token: str
+
+
+@router.post("/admin/login")
+async def admin_login(
+    body: AdminLoginRequest,
+    response: Response,
+) -> dict[str, str]:
+    """
+    Validate the admin token and set an httpOnly session cookie.
+    The token never touches localStorage — it goes directly into
+    a cookie that JavaScript cannot read.
+    """
+    if settings.ADMIN_TOKEN is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="ADMIN_TOKEN is not configured on the server.",
+        )
+    if not secrets.compare_digest(body.token, settings.ADMIN_TOKEN):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Invalid token",
+        )
+
+    response.set_cookie(
+        key=_COOKIE_NAME,
+        value=settings.ADMIN_TOKEN,
+        httponly=True,
+        secure=False,        # TODO: flip to True once TLS is live (T-10)
+        samesite="strict",
+        max_age=_COOKIE_MAX_AGE,
+        path="/",
+    )
+    log.info("admin_login_success")
+    return {"detail": "ok"}
+
+
+@router.post("/admin/logout")
+async def admin_logout(response: Response) -> dict[str, str]:
+    """Clear the admin session cookie."""
+    response.delete_cookie(
+        key=_COOKIE_NAME,
+        path="/",
+        secure=False,        # TODO: flip to True once TLS is live (T-10)
+        samesite="strict",
+    )
+    return {"detail": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Alertmanager webhook — Bearer auth (server-to-server only)
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/alerts/webhook",
+    dependencies=[Depends(_require_admin_bearer)],
+    status_code=204,
+)
 async def alertmanager_webhook(payload: dict[str, Any]) -> None:
     """
     Alertmanager POSTs here when an alert fires or resolves.
-    Dispatch is fire-and-forget — the webhook ACKs immediately (204)
-    and notification delivery runs in the background.
+    Fire-and-forget — ACK immediately, dispatch in background.
     """
     asyncio.create_task(dispatch_alert(payload))
 
 
 # ---------------------------------------------------------------------------
-# Admin stats
+# Admin stats — cookie auth
 # ---------------------------------------------------------------------------
 
-@router.get("/admin/stats", dependencies=[Depends(_require_admin)])
+@router.get(
+    "/admin/stats",
+    dependencies=[Depends(_require_admin_cookie)],
+)
 async def admin_stats(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    """
-    Aggregated business metrics for the operator dashboard.
-    All queries are read-only and use indexed columns.
-    """
-    # ── User signups (last 30 days, daily buckets) ────────────────────────
+    """Aggregated business metrics for the operator dashboard."""
+
+    # ── User signups (last 30 days) ───────────────────────────────────────
     signups_result = await db.execute(
         text("""
             SELECT DATE(created_at) AS day, COUNT(*) AS count
@@ -82,7 +185,7 @@ async def admin_stats(
     )
     signups_by_day = [{"day": str(r.day), "count": r.count} for r in signups_result]
 
-    # ── Aggregate user counts ─────────────────────────────────────────────
+    # ── User counts ───────────────────────────────────────────────────────
     total_users = (
         await db.execute(select(func.count()).select_from(User))
     ).scalar() or 0
@@ -93,7 +196,7 @@ async def admin_stats(
         )
     ).scalar() or 0
 
-    # ── Document counts by status ─────────────────────────────────────────
+    # ── Document counts ───────────────────────────────────────────────────
     total_documents = (
         await db.execute(select(func.count()).select_from(Document))
     ).scalar() or 0
@@ -107,7 +210,10 @@ async def admin_stats(
     # ── Failed jobs last 7 days ───────────────────────────────────────────
     failed_jobs_7d = (
         await db.execute(
-            text("SELECT COUNT(*) FROM job_logs WHERE created_at >= NOW() - INTERVAL '7 days'")
+            text(
+                "SELECT COUNT(*) FROM job_logs "
+                "WHERE created_at >= NOW() - INTERVAL '7 days'"
+            )
         )
     ).scalar() or 0
 
@@ -117,20 +223,17 @@ async def admin_stats(
     ).scalar() or 0
 
     # ── Token utilization today (Redis scan) ─────────────────────────────
-    # Acceptable at MVP user counts (<1000). Each key = O(1) GET.
     redis = get_redis()
     today_str = date.today().strftime("%Y%m%d")
     token_data: list[dict[str, Any]] = []
     async for key in redis.scan_iter(f"quota:tokens:*:{today_str}"):
         val = await redis.get(key)
         if val:
-            # Key format: quota:tokens:{user_id}:{date}
             user_id = key.split(":")[2]
             token_data.append({"user_id": user_id, "tokens_today": int(val)})
     token_data.sort(key=lambda x: x["tokens_today"], reverse=True)
 
-    # ── Dead-letter queue count ───────────────────────────────────────────
-    # get_sync_redis() returns a plain redis.Redis for RQ compatibility.
+    # ── Dead-letter queue ─────────────────────────────────────────────────
     sync_redis = get_sync_redis()
     failed_registry = FailedJobRegistry("ingest", connection=sync_redis)
     dead_letter_count = failed_registry.count  # O(1) ZCARD
