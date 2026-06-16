@@ -9,6 +9,7 @@
  */
 
 import { apiRequest, apiFetch } from '@/lib/api';
+import { env } from '@/env';
 
 // ---------------------------------------------------------------------------
 // Request / Response shapes
@@ -121,7 +122,7 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
 export async function refreshToken(): Promise<RefreshResponse> {
   // We bypass apiFetch's auth-retry entirely — fetch directly with credentials.
   // This prevents infinite loops when the refresh itself returns 401.
-  const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ?? '';
+  const baseUrl = env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
   const response = await fetch(`${baseUrl}/auth/refresh`, {
     method: 'POST',
     credentials: 'include',

@@ -133,6 +133,7 @@ jobs:
 
             echo "==> Pruning old images (keeping images newer than 72h)"
             docker image prune -f --filter "until=72h"
+            docker builder prune -af --filter "until=72h"
 
             echo "==> Deploy complete"
 

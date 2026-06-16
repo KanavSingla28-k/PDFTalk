@@ -76,7 +76,7 @@ _reset_limiter = RateLimiter(
 _COOKIE_KEY = "refresh_token"
 _COOKIE_MAX_AGE = 60 * 60 * 24 * 7   # 7 days — matches REFRESH_TOKEN_EXPIRE_DAYS
 _COOKIE_SECURE = False                # TODO: flip to True once TLS cert is in place (T-10)
-_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "strict"
+_COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
 _COOKIE_PATH = "/"
 
 

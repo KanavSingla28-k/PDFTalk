@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState, useRef, useCallb
 import { useRouter, usePathname } from 'next/navigation';
 import { refreshToken, logout as apiLogout } from '@/lib/auth.api';
 import { configureApiClient } from '@/lib/api';
+import { env } from '@/env';
 import type { LoginResponse } from '@/lib/auth.api';
 
 interface User {
@@ -114,7 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     async function restoreSession() {
       try {
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/auth/me`,
+          `${env.NEXT_PUBLIC_API_URL}/auth/me`,
           {
             credentials: 'include',
             headers: accessTokenRef.current
