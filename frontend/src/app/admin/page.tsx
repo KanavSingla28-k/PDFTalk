@@ -1,13 +1,9 @@
 "use client";
 import { useEffect, useState } from "react";
 
-// The operator sets this once in the browser console:
-// localStorage.setItem("admin_token", "<ADMIN_TOKEN value>")
-function getAdminToken(): string {
-  return typeof window !== "undefined"
-    ? localStorage.getItem("admin_token") ?? ""
-    : "";
-}
+const API = process.env.NEXT_PUBLIC_API_URL ?? "";
+
+// ── Types ──────────────────────────────────────────────────────────────────
 
 type Stats = {
   users: {
@@ -22,23 +18,103 @@ type Stats = {
   queue: { dead_letter_count: number; failed_jobs_7d: number };
 };
 
-export default function AdminDashboard() {
-  const [stats, setStats]     = useState<Stats | null>(null);
-  const [error, setError]     = useState<string | null>(null);
+type View = "login" | "dashboard";
+
+// ── Login form ─────────────────────────────────────────────────────────────
+
+function LoginForm({ onSuccess }: { onSuccess: () => void }) {
+  const [token, setToken]   = useState("");
+  const [error, setError]   = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  async function handleSubmit() {
+    if (!token.trim()) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/internal/admin/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",   // receive the httpOnly cookie
+        body: JSON.stringify({ token }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.detail ?? `${res.status}`);
+      }
+      onSuccess();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Login failed");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <main className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="bg-white border rounded-xl p-8 w-full max-w-sm space-y-4 shadow-sm">
+        <h1 className="text-xl font-bold">PDFTalk Admin</h1>
+        <p className="text-sm text-gray-500">Enter your admin token to continue.</p>
+
+        <input
+          type="password"
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+          placeholder="Admin token"
+          className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-300"
+          autoFocus
+        />
+
+        {error && (
+          <p className="text-sm text-red-600 font-mono">{error}</p>
+        )}
+
+        <button
+          onClick={handleSubmit}
+          disabled={loading || !token.trim()}
+          className="w-full bg-gray-900 text-white rounded-lg py-2 text-sm font-medium
+                     hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          {loading ? "Signing in…" : "Sign in"}
+        </button>
+      </div>
+    </main>
+  );
+}
+
+// ── Dashboard ──────────────────────────────────────────────────────────────
+
+function Dashboard({ onLogout }: { onLogout: () => void }) {
+  const [stats, setStats]   = useState<Stats | null>(null);
+  const [error, setError]   = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_API_URL}/internal/admin/stats`, {
-      headers: { Authorization: `Bearer ${getAdminToken()}` },
+    fetch(`${API}/internal/admin/stats`, {
+      credentials: "include",   // send the httpOnly cookie — no token in JS
     })
       .then((r) => {
-        if (!r.ok) throw new Error(`${r.status} — check ADMIN_TOKEN in localStorage`);
+        if (r.status === 401 || r.status === 403) {
+          // Cookie expired or missing — go back to login
+          onLogout();
+          return null;
+        }
+        if (!r.ok) throw new Error(`${r.status}`);
         return r.json();
       })
-      .then(setStats)
+      .then((data) => data && setStats(data))
       .catch((e: Error) => setError(e.message))
       .finally(() => setLoading(false));
-  }, []);
+  }, [onLogout]);
+
+  async function handleLogout() {
+    await fetch(`${API}/internal/admin/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+    onLogout();
+  }
 
   if (loading) return <p className="p-8 text-gray-500">Loading…</p>;
   if (error)   return <p className="p-8 text-red-600 font-mono">{error}</p>;
@@ -49,7 +125,15 @@ export default function AdminDashboard() {
 
   return (
     <main className="p-8 max-w-5xl mx-auto space-y-8">
-      <h1 className="text-2xl font-bold">PDFTalk Admin</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">PDFTalk Admin</h1>
+        <button
+          onClick={handleLogout}
+          className="text-sm text-gray-500 hover:text-gray-800 underline"
+        >
+          Sign out
+        </button>
+      </div>
 
       {/* Users */}
       <section>
@@ -141,12 +225,33 @@ export default function AdminDashboard() {
           rel="noopener noreferrer"
           className="text-blue-600 underline text-sm"
         >
-          → Open Grafana dashboards (ingestion pipeline, system health)
+          → Open Grafana dashboards
         </a>
       </section>
     </main>
   );
 }
+
+// ── Root ───────────────────────────────────────────────────────────────────
+
+export default function AdminPage() {
+  const [view, setView] = useState<View>("login");
+
+  // On mount, probe the stats endpoint — if the cookie is already valid
+  // (e.g., page refresh within the 8-hour window) skip the login screen.
+  useEffect(() => {
+    fetch(`${API}/internal/admin/stats`, { credentials: "include" })
+      .then((r) => { if (r.ok) setView("dashboard"); })
+      .catch(() => {});
+  }, []);
+
+  if (view === "dashboard")
+    return <Dashboard onLogout={() => setView("login")} />;
+
+  return <LoginForm onSuccess={() => setView("dashboard")} />;
+}
+
+// ── Shared components ──────────────────────────────────────────────────────
 
 function Stat({
   label,
@@ -158,7 +263,11 @@ function Stat({
   alert?: boolean;
 }) {
   return (
-    <div className={`rounded-lg border p-4 ${alert ? "border-red-400 bg-red-50" : "bg-white"}`}>
+    <div
+      className={`rounded-lg border p-4 ${
+        alert ? "border-red-400 bg-red-50" : "bg-white"
+      }`}
+    >
       <p className="text-xs text-gray-500 uppercase tracking-wide">{label}</p>
       <p className={`text-2xl font-bold mt-1 ${alert ? "text-red-600" : ""}`}>
         {value.toLocaleString()}
