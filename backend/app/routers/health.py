@@ -1,5 +1,6 @@
 import asyncio
 import time
+import importlib.metadata
 from datetime import datetime, timezone
 from typing import Any
 
@@ -75,7 +76,7 @@ async def readiness_check() -> JSONResponse:
 
     body = {
         "status": "ok" if all_ok else "degraded",
-        "version": "1.0.0",
+        "version": importlib.metadata.version("pdftalk"),
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "checks": {
             "db": db_result,

@@ -1,10 +1,10 @@
-import logging
 import uuid
 from datetime import datetime, timezone
+from typing import TypeVar, Coroutine, Any
 
+import structlog
 from sqlalchemy.orm import Session
 from sqlalchemy import delete
-from typing import TypeVar, Coroutine, Any
 
 from app.db.sync_session import SessionLocal
 from app.models.document import Document, DocumentStatus
@@ -12,6 +12,7 @@ from app.models.chunk import Chunk
 from app.services.extraction import extract_text
 from app.services.chunking import chunk_text
 from app.services.embedding import embed_texts
+from app.exceptions import ExtractionError, ChunkingError
 from app.utils.openai_client import (
     check_and_increment_token_usage,
     CircuitBreakerOpenError,
@@ -25,10 +26,10 @@ from app.utils.metrics import (
     openai_tokens_used_total,
 )
 
-logger = logging.getLogger(__name__)
-
+logger = structlog.get_logger(__name__)
 
 T = TypeVar("T")
+
 
 def _run_async(coro: Coroutine[Any, Any, T]) -> T:
     """
@@ -51,14 +52,11 @@ def _run_async(coro: Coroutine[Any, Any, T]) -> T:
 
 def _classify_error(exc: Exception) -> str:
     """Map an exception to a label string for documents_failed_total."""
-    if isinstance(exc, (DailyQuotaExceededError,)):
+    if isinstance(exc, DailyQuotaExceededError):
         return "quota_exceeded"
     if isinstance(exc, (CircuitBreakerOpenError, OpenAIRetryExhaustedError)):
         return "embedding_error"
-    # ValueError from extraction ("no chunks", corrupt PDF, etc.)
-    if isinstance(exc, ValueError) and any(
-        kw in str(exc).lower() for kw in ("extract", "chunk", "empty", "corrupt")
-    ):
+    if isinstance(exc, (ExtractionError, ChunkingError)):
         return "extraction_error"
     return "unknown"
 
@@ -121,7 +119,7 @@ def _run(db: Session, document_id: uuid.UUID) -> None:
     chunks_data = chunk_text(raw_text)
 
     if not chunks_data:
-        raise ValueError("Extraction produced no chunks — document may be empty.")
+        raise ChunkingError("Extraction produced no chunks — document may be empty.")
 
     # ------------------------------------------------------------------ #
     # 4. Cost check (token budget)                                        #
@@ -236,7 +234,7 @@ MAX_TOKENS_PER_DOCUMENT = 500_000
 
 def _check_token_budget(total_tokens: int) -> None:
     if total_tokens > MAX_TOKENS_PER_DOCUMENT:
-        raise ValueError(
+        raise ChunkingError(
             f"Document has {total_tokens:,} tokens; limit is {MAX_TOKENS_PER_DOCUMENT:,}. "
             "Split the document into smaller files."
         )

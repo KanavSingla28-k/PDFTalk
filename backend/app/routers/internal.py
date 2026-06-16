@@ -10,7 +10,6 @@ Internal-only routes.
 """
 
 import asyncio
-import secrets
 import structlog
 from datetime import date
 from typing import Any
@@ -93,54 +92,15 @@ def _require_admin_bearer(
 # Login / logout
 # ---------------------------------------------------------------------------
 
-class AdminLoginRequest(BaseModel):
-    token: str
-
-
-@router.post("/admin/login")
-async def admin_login(
-    body: AdminLoginRequest,
-    response: Response,
-) -> dict[str, str]:
-    """
-    Validate the admin token and set an httpOnly session cookie.
-    The token never touches localStorage — it goes directly into
-    a cookie that JavaScript cannot read.
-    """
+def _require_admin(creds: HTTPAuthorizationCredentials = Depends(bearer)) -> None:
     if settings.ADMIN_TOKEN is None:
+        log.error("internal.admin_token_missing", reason="ADMIN_TOKEN is not configured in settings")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="ADMIN_TOKEN is not configured on the server.",
+            detail="Admin token is not configured on the server."
         )
-    if not secrets.compare_digest(body.token, settings.ADMIN_TOKEN):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid token",
-        )
-
-    response.set_cookie(
-        key=_COOKIE_NAME,
-        value=settings.ADMIN_TOKEN,
-        httponly=True,
-        secure=False,        # TODO: flip to True once TLS is live (T-10)
-        samesite="strict",
-        max_age=_COOKIE_MAX_AGE,
-        path="/",
-    )
-    log.info("admin_login_success")
-    return {"detail": "ok"}
-
-
-@router.post("/admin/logout")
-async def admin_logout(response: Response) -> dict[str, str]:
-    """Clear the admin session cookie."""
-    response.delete_cookie(
-        key=_COOKIE_NAME,
-        path="/",
-        secure=False,        # TODO: flip to True once TLS is live (T-10)
-        samesite="strict",
-    )
-    return {"detail": "ok"}
+    if creds.credentials != settings.ADMIN_TOKEN:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
 
 # ---------------------------------------------------------------------------

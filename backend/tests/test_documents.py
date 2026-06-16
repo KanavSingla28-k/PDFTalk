@@ -513,3 +513,119 @@ class TestDeleteDocument:
         resp = await async_client.delete(f"/documents/{doc.id}")
 
         assert resp.status_code == 401
+
+
+# --------------------------------------------------------------------------- #
+# POST /documents/{document_id}/retry                                         #
+# --------------------------------------------------------------------------- #
+
+class TestRetryDocument:
+
+    async def test_retry_success(
+        self,
+        async_client: AsyncClient,
+        db: AsyncSession,
+        auth_headers: dict,
+        verified_user,
+    ) -> None:
+        doc = await _seed_document(db, verified_user.id, status=DocumentStatus.FAILED)
+
+        with patch("app.routers.documents.ingest_queue.enqueue") as mock_enqueue:
+            resp = await async_client.post(
+                f"/documents/{doc.id}/retry",
+                headers=auth_headers,
+            )
+
+            assert resp.status_code == 202
+            body = resp.json()
+            assert body["document_id"] == str(doc.id)
+            assert body["status"] == DocumentStatus.PROCESSING.value
+            mock_enqueue.assert_called_once()
+
+            # Verify status in database
+            await db.refresh(doc)
+            assert doc.status == DocumentStatus.PROCESSING.value
+
+    async def test_retry_nonexistent_returns_404(
+        self,
+        async_client: AsyncClient,
+        auth_headers: dict,
+    ) -> None:
+        resp = await async_client.post(
+            f"/documents/{uuid.uuid4()}/retry",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_retry_other_users_document_returns_404(
+        self,
+        async_client: AsyncClient,
+        db: AsyncSession,
+        auth_headers: dict,
+    ) -> None:
+        other_user_id = uuid.uuid4()
+        doc = await _seed_document(db, other_user_id, status=DocumentStatus.FAILED)
+
+        resp = await async_client.post(
+            f"/documents/{doc.id}/retry",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 404
+
+    async def test_retry_non_failed_returns_400(
+        self,
+        async_client: AsyncClient,
+        db: AsyncSession,
+        auth_headers: dict,
+        verified_user,
+    ) -> None:
+        # READY state
+        doc_ready = await _seed_document(db, verified_user.id, status=DocumentStatus.READY)
+        resp = await async_client.post(
+            f"/documents/{doc_ready.id}/retry",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 400
+        assert "Only FAILED documents can be retried" in resp.json()["detail"]
+
+        # PROCESSING state
+        doc_processing = await _seed_document(db, verified_user.id, status=DocumentStatus.PROCESSING)
+        resp2 = await async_client.post(
+            f"/documents/{doc_processing.id}/retry",
+            headers=auth_headers,
+        )
+        assert resp2.status_code == 400
+        assert "Only FAILED documents can be retried" in resp2.json()["detail"]
+
+    async def test_retry_without_auth_returns_401(
+        self,
+        async_client: AsyncClient,
+        db: AsyncSession,
+        verified_user,
+    ) -> None:
+        doc = await _seed_document(db, verified_user.id, status=DocumentStatus.FAILED)
+        resp = await async_client.post(f"/documents/{doc.id}/retry")
+        assert resp.status_code == 401
+
+    async def test_retry_enqueue_failure_rolls_back_and_returns_503(
+        self,
+        async_client: AsyncClient,
+        db: AsyncSession,
+        auth_headers: dict,
+        verified_user,
+    ) -> None:
+        doc = await _seed_document(db, verified_user.id, status=DocumentStatus.FAILED)
+
+        with patch("app.routers.documents.ingest_queue.enqueue", side_effect=Exception("Queue down")):
+            resp = await async_client.post(
+                f"/documents/{doc.id}/retry",
+                headers=auth_headers,
+            )
+
+            assert resp.status_code == 503
+            assert "Processing queue unavailable" in resp.json()["detail"]
+
+            # Verify status rolled back to FAILED in DB
+            await db.refresh(doc)
+            assert doc.status == DocumentStatus.FAILED.value
+            assert "Processing queue unavailable" in doc.error_message

@@ -26,10 +26,11 @@ Fields never logged (scrubbed at the processor level):
     token_hash, email, email_lower, authorization, content (document text)
 """
 
+from typing import List
 import logging
-import sys
-from typing import Any, cast
+from typing import cast
 import structlog
+from structlog.types import Processor
 from structlog.typing import EventDict, WrappedLogger
 from app.core.config import settings
 
@@ -84,63 +85,37 @@ def _scrub_pii(
 # ---------------------------------------------------------------------------
 
 def configure_logging() -> None:
-    """
-    Configure structlog and stdlib logging.
-    Call exactly once, inside the FastAPI lifespan startup block.
-
-    Log format is controlled by the LOG_FORMAT env var (via settings):
-        "json"   → newline-delimited JSON  (production default)
-        "pretty" → coloured human output   (development default)
-
-    If LOG_FORMAT is not set, format is inferred from APP_URL:
-        localhost → pretty
-        anything else → json
-    """
-    log_format = _resolve_format()
-
-    # Shared processors applied regardless of format
-    shared_processors: list[Any] = [
-        structlog.contextvars.merge_contextvars,   # picks up bind_contextvars()
+    shared_processors: List[Processor] = [
+        structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
-        structlog.processors.TimeStamper(fmt="iso", utc=True),
-        _scrub_pii,
-        structlog.processors.StackInfoRenderer(),
+        structlog.stdlib.add_logger_name,   # safe once stdlib is wired
+        structlog.processors.TimeStamper(fmt="iso"),
     ]
 
-    if log_format == "json":
-        # Production: machine-readable JSON, one object per line
-        structlog.configure(
-            processors=shared_processors
-            + [
-                structlog.processors.dict_tracebacks,
-                structlog.processors.JSONRenderer(),
-            ],
-            wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
-            context_class=dict,
-            logger_factory=structlog.PrintLoggerFactory(sys.stdout),
-            cache_logger_on_first_use=True,
-        )
-    else:
-        # Development: coloured, human-friendly output
-        structlog.configure(
-            processors=shared_processors
-            + [
-                structlog.dev.ConsoleRenderer(colors=True),
-            ],
-            wrapper_class=structlog.make_filtering_bound_logger(logging.DEBUG),
-            context_class=dict,
-            logger_factory=structlog.PrintLoggerFactory(sys.stdout),
-            cache_logger_on_first_use=False,  # reflect config changes without restart
-        )
-
-    # Route stdlib logging (uvicorn, sqlalchemy, etc.) through structlog
-    logging.basicConfig(
-        format="%(message)s",
-        stream=sys.stdout,
-        level=logging.INFO if log_format == "json" else logging.DEBUG,
+    structlog.configure(
+        processors=shared_processors + [
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+        ],
+        logger_factory=structlog.stdlib.LoggerFactory(),   # ← THIS is the missing line
+        wrapper_class=structlog.stdlib.BoundLogger,
+        cache_logger_on_first_use=True,
     )
-    logging.getLogger("uvicorn.access").propagate = False  # avoid double-logging requests
 
+    formatter = structlog.stdlib.ProcessorFormatter(
+        processors=[
+            structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+            structlog.processors.JSONRenderer(),
+        ],
+        foreign_pre_chain=shared_processors,
+    )
+
+    handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+
+    root_logger = logging.getLogger()
+    root_logger.handlers.clear()
+    root_logger.addHandler(handler)
+    root_logger.setLevel(logging.INFO)
 
 def _resolve_format() -> str:
     """Return 'json' or 'pretty' based on settings."""
