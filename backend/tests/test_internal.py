@@ -13,7 +13,7 @@ async def test_admin_auth_missing_token(async_client: AsyncClient, monkeypatch):
         headers={"Authorization": "Bearer some-token"}
     )
     assert response.status_code == 500
-    assert "Admin token is not configured on the server." in response.json()["detail"]
+    assert "ADMIN_TOKEN is not configured on the server." in response.json()["detail"]
 
 
 @pytest.mark.asyncio
