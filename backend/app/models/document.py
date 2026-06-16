@@ -19,22 +19,28 @@ if TYPE_CHECKING:
 
 class DocumentStatus(str, enum.Enum):
     """
-    Valid state transitions:
-        PENDING → PROCESSING → READY
-        PENDING → PROCESSING → FAILED
+    Valid state transitions (presigned URL flow):
+        PENDING_UPLOAD → PENDING    (browser finished PUT to S3; confirm-upload called)
+        PENDING_UPLOAD → FAILED     (stale cleanup: browser never completed the upload)
+        PENDING        → PROCESSING
+        PROCESSING     → READY
+        PROCESSING     → FAILED
+        FAILED         → PROCESSING (retry)
     Never go backwards. Never skip PROCESSING.
     """
-    PENDING = "PENDING"
+    PENDING_UPLOAD = "PENDING_UPLOAD"  # Waiting for browser to PUT file to S3
+    PENDING    = "PENDING"             # File confirmed in S3; queued for ingest
     PROCESSING = "PROCESSING"
-    READY = "READY"
-    FAILED = "FAILED"
+    READY      = "READY"
+    FAILED     = "FAILED"
 
 # Valid forward-only transitions. Any move not in this map is illegal.
 _ALLOWED_TRANSITIONS: dict[DocumentStatus, set[DocumentStatus]] = {
-    DocumentStatus.PENDING: {DocumentStatus.PROCESSING},
-    DocumentStatus.PROCESSING: {DocumentStatus.READY, DocumentStatus.FAILED},
-    DocumentStatus.READY: set(),    # terminal
-    DocumentStatus.FAILED: {DocumentStatus.PROCESSING},   # allowed for retry
+    DocumentStatus.PENDING_UPLOAD: {DocumentStatus.PENDING, DocumentStatus.FAILED},
+    DocumentStatus.PENDING:        {DocumentStatus.PROCESSING},
+    DocumentStatus.PROCESSING:     {DocumentStatus.READY, DocumentStatus.FAILED},
+    DocumentStatus.READY:          set(),   # terminal
+    DocumentStatus.FAILED:         {DocumentStatus.PROCESSING},  # allowed for retry
 }
 
 class Document(Base):
@@ -120,3 +126,56 @@ class DocumentListResponse(BaseModel):
     limit: int
     offset: int
     pages: int          # math.ceil(total / limit)
+
+
+# ---------------------------------------------------------------------------
+# Presigned URL upload flow — Step 2
+# ---------------------------------------------------------------------------
+
+class InitiateUploadRequest(BaseModel):
+    """
+    Body for POST /documents/initiate-upload.
+
+    The client reports metadata only — no file bytes are sent to the API.
+    The server validates size and MIME type, then issues a presigned S3 PUT URL.
+    """
+    filename: str
+    file_size_bytes: int   # Validated server-side against the 50 MB limit
+    mime_type: str         # Validated server-side against ALLOWED_MIME_TYPES
+
+
+class InitiateUploadResponse(BaseModel):
+    """
+    Response for POST /documents/initiate-upload — 201 Created.
+
+    The client must:
+      1. PUT the file directly to `upload_url` with Content-Type = mime_type.
+      2. On S3 200 OK, call POST /documents/confirm-upload with `document_id`.
+    The presigned URL expires after `expires_in_seconds` (default 900 = 15 min).
+    """
+    document_id: uuid.UUID
+    upload_url: str          # Presigned S3 PUT URL — send file bytes here
+    s3_key: str              # Informational; needed if the client wants to verify
+    expires_in_seconds: int  # Frontend can show a timeout warning to the user
+
+
+class ConfirmUploadRequest(BaseModel):
+    """
+    Body for POST /documents/confirm-upload.
+
+    Called by the client after the S3 PUT succeeds. The server verifies the
+    object exists in S3 (HeadObject), transitions PENDING_UPLOAD → PENDING,
+    and enqueues the RQ ingest job.
+    """
+    document_id: uuid.UUID
+
+
+class ConfirmUploadResponse(BaseModel):
+    """
+    Response for POST /documents/confirm-upload — 202 Accepted.
+
+    Mirrors DocumentUploadResponse so the frontend can use the same
+    post-upload polling logic regardless of which upload path was used.
+    """
+    document_id: uuid.UUID
+    status: DocumentStatus   # Always PENDING at this point

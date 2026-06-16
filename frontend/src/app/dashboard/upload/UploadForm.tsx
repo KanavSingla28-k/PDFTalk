@@ -117,22 +117,54 @@ function SelectedFileRow({
 
 // ─── Upload progress overlay ──────────────────────────────────────────────────
 
-function UploadingOverlay({ filename }: { filename: string }) {
+type UploadPhase = 'uploading' | 'confirming';
+
+function UploadProgressOverlay({
+  filename,
+  phase,
+  percent,
+}: {
+  filename: string;
+  phase: UploadPhase;
+  percent: number; // 0–100, only meaningful during 'uploading'
+}) {
+  const label = phase === 'uploading' ? `Uploading… ${percent}%` : 'Finalising…';
+
   return (
     <div
-      className="flex flex-col items-center gap-4 rounded-2xl border-2 border-dashed p-12 text-center"
+      className="flex flex-col items-center gap-5 rounded-2xl border-2 border-dashed p-12 text-center"
       style={{ borderColor: 'var(--brand-300)', background: 'var(--brand-50)' }}
       aria-live="polite"
-      aria-label="Uploading file"
+      aria-label={label}
     >
       <Spinner size={36} className="text-[var(--brand-500)]" />
-      <div>
+      <div className="w-full max-w-xs">
         <p className="font-semibold" style={{ color: 'var(--brand-700)' }}>
-          Uploading…
+          {label}
         </p>
-        <p className="mt-1 text-sm" style={{ color: 'var(--brand-600)' }}>
+        <p className="mt-1 truncate text-sm" style={{ color: 'var(--brand-600)' }}>
           {filename}
         </p>
+
+        {/* Progress bar — only shown during S3 PUT phase */}
+        {phase === 'uploading' && (
+          <div
+            className="mt-4 h-2 w-full overflow-hidden rounded-full"
+            style={{ background: 'var(--brand-200)' }}
+            role="progressbar"
+            aria-valuenow={percent}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              className="h-full rounded-full transition-all duration-200"
+              style={{
+                width: `${percent}%`,
+                background: 'var(--brand-500)',
+              }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
@@ -146,6 +178,10 @@ export default function UploadForm() {
   const [clientError, setClientError] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  // uploadPhase: 'uploading' while file bytes travel to S3, 'confirming' while
+  // the backend runs HeadObject + enqueue (usually < 1s).
+  const [uploadPhase, setUploadPhase] = useState<'uploading' | 'confirming'>('uploading');
+  const [uploadPercent, setUploadPercent] = useState(0);
 
   // ── Dropzone ──────────────────────────────────────────────────────────────
 
@@ -199,9 +235,15 @@ export default function UploadForm() {
     if (!selectedFile || clientError) return;
     setUploadError(null);
     setIsUploading(true);
+    setUploadPhase('uploading');
+    setUploadPercent(0);
 
     try {
-      const result = await uploadDocument(selectedFile);
+      const result = await uploadDocument(selectedFile, (pct) => {
+        setUploadPercent(pct);
+        // Switch to 'confirming' phase once S3 PUT reaches 100%
+        if (pct >= 100) setUploadPhase('confirming');
+      });
 
       toast.success('Upload successful! Processing your document…');
 
@@ -225,7 +267,11 @@ export default function UploadForm() {
             break;
 
           default:
-            if (err.status === 503) {
+            if (err.status === 507) {
+              setUploadError('You have reached your document limit. Please delete some documents first.');
+            } else if (err.status === 409) {
+              setUploadError('Upload did not complete in time. Please try again.');
+            } else if (err.status === 503) {
               setUploadError('Upload queue is temporarily unavailable. Please try again shortly.');
             } else {
               setUploadError(err.message);
@@ -236,6 +282,7 @@ export default function UploadForm() {
       }
     } finally {
       setIsUploading(false);
+      setUploadPercent(0);
     }
   };
 
@@ -273,7 +320,11 @@ export default function UploadForm() {
 
       {/* Uploading state overlay */}
       {isUploading && selectedFile ? (
-        <UploadingOverlay filename={selectedFile.name} />
+        <UploadProgressOverlay
+          filename={selectedFile.name}
+          phase={uploadPhase}
+          percent={uploadPercent}
+        />
       ) : (
         <>
           {/* Dropzone */}

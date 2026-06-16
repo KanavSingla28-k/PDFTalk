@@ -6,11 +6,25 @@ Owns all business logic for the Document domain:
   - Document ownership verification
   - Convenience query helpers used by upload / status / delete endpoints
 
+Two upload paths are supported here simultaneously:
+
+  Legacy path  — upload_document()
+      Validates, uploads to S3, and inserts a PENDING DB row in one call.
+      Used by POST /documents/upload (multipart/form-data).
+
+  Presigned URL path — initiate_upload() + confirm_upload()
+      initiate_upload(): quota + metadata check → writes PENDING_UPLOAD row →
+                         returns presigned S3 PUT URL to the caller.
+      confirm_upload():  HeadObject verify → PENDING_UPLOAD → PENDING → enqueue job.
+      Used by POST /documents/initiate-upload and POST /documents/confirm-upload.
+
 State machine (transitions enforced here, not at the DB layer):
-    PENDING → PROCESSING → READY
-    PENDING → PROCESSING → FAILED
-    READY   → (terminal, no transitions)
-    FAILED  → (terminal, no transitions)
+    PENDING_UPLOAD → PENDING    (browser PUT confirmed)
+    PENDING_UPLOAD → FAILED     (stale cleanup)
+    PENDING        → PROCESSING
+    PROCESSING     → READY
+    PROCESSING     → FAILED
+    FAILED         → PROCESSING (retry)
 
 The DB stores status as Text. This layer is the authority on valid values
 and valid moves between them.
@@ -29,7 +43,7 @@ from sqlalchemy.orm import selectinload
 from app.exceptions import QuotaExceededError, DocumentNotFoundError, InvalidStatusTransitionError
 from app.models.user import User
 from app.models.document import Document, DocumentStatus, _ALLOWED_TRANSITIONS
-from app.services.file_validation import validate_upload
+from app.services.file_validation import validate_upload, validate_upload_metadata
 from app.core.config import settings
 from app.utils.s3_client import build_document_s3_key, s3_client
 
@@ -369,3 +383,230 @@ async def delete_document(
         user_id=str(user_id),
         document_id=str(document_id),
     )
+
+
+# ---------------------------------------------------------------------------
+# Presigned URL upload flow — Step 3
+# ---------------------------------------------------------------------------
+
+_PRESIGNED_URL_EXPIRES_IN: int = 900  # 15 minutes
+
+
+async def initiate_upload(
+    *,
+    current_user: User,
+    filename: str,
+    mime_type: str,
+    file_size_bytes: int,
+    db: AsyncSession,
+) -> tuple[Document, str]:
+    """
+    Phase 1 of the presigned URL upload flow.
+
+    Validates file metadata (size + MIME type — no bytes read), checks the
+    user's document quota, generates an S3 key, writes a PENDING_UPLOAD DB row,
+    and returns a presigned S3 PUT URL that the browser uses to upload the file
+    directly to S3 without proxying through this server.
+
+    Steps (in order — fail-fast):
+      1. Quota check  — COUNT non-FAILED docs for this user
+      2. Metadata validation — size ≤ 50 MB, MIME type in allowed list
+      3. DB insert    — status=PENDING_UPLOAD (file not yet in S3)
+      4. Generate presigned S3 PUT URL (no bytes transferred here)
+
+    Args:
+        current_user:    Authenticated user making the request.
+        filename:        Original filename as reported by the browser.
+        mime_type:       MIME type declared by the browser.
+        file_size_bytes: File size in bytes declared by the browser.
+        db:              Active async database session.
+
+    Returns:
+        (document, upload_url) — the newly created Document ORM object
+        (status=PENDING_UPLOAD) and the presigned PUT URL string.
+
+    Raises:
+        QuotaExceededError   — user is at or over MAX_DOCS_PER_USER
+        FileValidationError  — size too large or MIME type not allowed
+    """
+    # ------------------------------------------------------------------ #
+    # 1. Quota check — before touching S3 or writing any DB row           #
+    # ------------------------------------------------------------------ #
+    active_count = await count_user_documents(
+        db=db,
+        user_id=current_user.id,
+        exclude_failed=True,
+    )
+    if active_count >= settings.MAX_DOCS_PER_USER:
+        logger.warning(
+            "document_quota_exceeded",
+            user_id=str(current_user.id),
+            active_count=active_count,
+            limit=settings.MAX_DOCS_PER_USER,
+        )
+        raise QuotaExceededError(
+            f"Document limit reached ({settings.MAX_DOCS_PER_USER}). "
+            "Delete existing documents to upload more."
+        )
+
+    # ------------------------------------------------------------------ #
+    # 2. Metadata validation — no bytes read here                         #
+    # Magic-byte check is deferred to the ingest worker (extraction.py). #
+    # ------------------------------------------------------------------ #
+    validate_upload_metadata(
+        filename=filename,
+        mime_type=mime_type,
+        file_size_bytes=file_size_bytes,
+    )
+
+    # ------------------------------------------------------------------ #
+    # 3. Build key + DB insert (status=PENDING_UPLOAD)                    #
+    # The document row is created before the presigned URL is issued so   #
+    # the document_id is stable and can be referenced in confirm_upload.  #
+    # ------------------------------------------------------------------ #
+    document_id = uuid.uuid4()
+    s3_key = build_document_s3_key(
+        user_id=str(current_user.id),
+        document_id=str(document_id),
+        filename=filename,
+    )
+
+    document = Document(
+        id=document_id,
+        user_id=current_user.id,
+        filename=filename,
+        s3_key=s3_key,
+        file_size_bytes=file_size_bytes,
+        mime_type=mime_type,
+        status=DocumentStatus.PENDING_UPLOAD,
+    )
+    db.add(document)
+    await db.commit()
+    await db.refresh(document)
+
+    logger.info(
+        "document_initiate_upload_db_created",
+        user_id=str(current_user.id),
+        document_id=str(document_id),
+        s3_key=s3_key,
+        file_size_bytes=file_size_bytes,
+        mime_type=mime_type,
+    )
+
+    # ------------------------------------------------------------------ #
+    # 4. Generate presigned S3 PUT URL                                    #
+    # The URL is bound to the exact s3_key and content_type. S3 rejects  #
+    # any PUT that doesn't match both. No bytes travel through this       #
+    # server at any point.
+    # ------------------------------------------------------------------ #
+    upload_url = s3_client.generate_presigned_upload_url(
+        s3_key=s3_key,
+        content_type=mime_type,
+        expires_in=_PRESIGNED_URL_EXPIRES_IN,
+    )
+
+    logger.info(
+        "document_presigned_url_issued",
+        user_id=str(current_user.id),
+        document_id=str(document_id),
+        expires_in=_PRESIGNED_URL_EXPIRES_IN,
+    )
+
+    return document, upload_url
+
+
+async def confirm_upload(
+    *,
+    document_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+) -> Document:
+    """
+    Phase 2 of the presigned URL upload flow.
+
+    Called by the browser after the S3 PUT succeeds. Verifies the object
+    actually exists in S3 (guards against forged confirm requests), transitions
+    the document from PENDING_UPLOAD → PENDING, and returns the Document so
+    the router can enqueue the RQ ingest job.
+
+    Steps:
+      1. Fetch document + ownership check (404 if not found / not owned)
+      2. HeadObject — verify file exists in S3 (lightweight, no bytes)
+      3. Transition PENDING_UPLOAD → PENDING
+      4. Commit and return Document — router enqueues the ingest job
+
+    Args:
+        document_id: UUID of the document to confirm.
+        user_id:     ID of the authenticated user (ownership check).
+        db:          Active async database session.
+
+    Returns:
+        The updated Document ORM object (status=PENDING).
+
+    Raises:
+        DocumentNotFoundError — document not found or not owned by user_id.
+        HTTPException(409)    — document is not in PENDING_UPLOAD state
+                                (e.g. already confirmed, or already failed).
+        ClientError           — S3 HeadObject failed (object not in S3 yet;
+                                the router maps this to 409 / 502).
+    """
+    from botocore.exceptions import ClientError
+
+    # ------------------------------------------------------------------ #
+    # 1. Fetch + ownership check                                          #
+    # ------------------------------------------------------------------ #
+    doc = await get_document_for_user(
+        db=db,
+        document_id=document_id,
+        user_id=user_id,
+    )
+
+    if doc.status_enum != DocumentStatus.PENDING_UPLOAD:
+        # Already confirmed, processing, or failed — do not re-trigger.
+        # Raise a ValueError; the router maps it to 409 Conflict.
+        raise ValueError(
+            f"Document {document_id} is in status '{doc.status}' — "
+            "only PENDING_UPLOAD documents can be confirmed."
+        )
+
+    # ------------------------------------------------------------------ #
+    # 2. HeadObject — verify the file actually landed in S3               #
+    # Without this check, a malicious caller could confirm a document_id  #
+    # for which they never uploaded anything, causing the ingest worker   #
+    # to crash on a missing S3 object.                                   #
+    # ------------------------------------------------------------------ #
+    try:
+        head = s3_client.head_object(s3_key=doc.s3_key)
+        logger.info(
+            "document_confirm_s3_verified",
+            user_id=str(user_id),
+            document_id=str(document_id),
+            s3_key=doc.s3_key,
+            content_length=head.get("ContentLength"),
+        )
+    except ClientError as exc:
+        error_code = exc.response["Error"]["Code"]
+        logger.warning(
+            "document_confirm_s3_missing",
+            user_id=str(user_id),
+            document_id=str(document_id),
+            s3_key=doc.s3_key,
+            error_code=error_code,
+        )
+        # Re-raise; the router maps ClientError to 409 or 502 as appropriate.
+        raise
+
+    # ------------------------------------------------------------------ #
+    # 3. Transition PENDING_UPLOAD → PENDING                              #
+    # ------------------------------------------------------------------ #
+    await transition_status(db, doc, DocumentStatus.PENDING)
+    await db.commit()
+    await db.refresh(doc)
+
+    logger.info(
+        "document_confirm_upload_pending",
+        user_id=str(user_id),
+        document_id=str(document_id),
+    )
+
+    return doc

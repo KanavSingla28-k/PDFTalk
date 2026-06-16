@@ -63,6 +63,75 @@ class S3Client:
             ExpiresIn=expires_in,
         ))
 
+    def generate_presigned_upload_url(
+        self,
+        s3_key: str,
+        content_type: str,
+        expires_in: int = 900,  # 15 minutes — generous for slow connections
+    ) -> str:
+        """
+        Generate a time-limited presigned URL that allows the browser to PUT a
+        file directly to S3, bypassing the API server entirely.
+
+        The signed URL is bound to:
+          - The specific s3_key (any other key is rejected by S3)
+          - The declared content_type (S3 returns 403 on mismatch)
+          - The expiry window (default 15 min)
+
+        Encryption note:
+          Server-side encryption is NOT embedded in this signature because
+          presigned PUT URLs cannot carry SSE headers in the signature without
+          requiring the client to echo them back in the PUT request, which
+          complicates CORS. Instead, encryption must be enforced at the bucket
+          level via a default encryption policy (SSE-S3 / AES-256). This is
+          more secure than per-request headers because it is unconditional and
+          cannot be bypassed by any caller.
+
+        Args:
+            s3_key:       Full S3 object key (path) the client will PUT to.
+            content_type: MIME type the client must declare in its PUT request.
+            expires_in:   Seconds until the URL expires (default 900 = 15 min).
+
+        Returns:
+            A presigned HTTPS URL. Valid for a single PUT operation.
+        """
+        return cast(str, self._client.generate_presigned_url(
+            "put_object",
+            Params={
+                "Bucket": self.bucket,
+                "Key": s3_key,
+                "ContentType": content_type,
+            },
+            ExpiresIn=expires_in,
+        ))
+
+    def head_object(self, s3_key: str) -> dict:
+        """
+        Perform a lightweight S3 HeadObject call to verify an object exists
+        without downloading any bytes.
+
+        Used by the confirm-upload endpoint to guard against fake confirm
+        requests for objects that were never uploaded. A missing object raises
+        ClientError with code '404' or 'NoSuchKey'.
+
+        Args:
+            s3_key: The S3 object key to check.
+
+        Returns:
+            The HeadObject response dict (contains ContentLength, ETag, etc.).
+
+        Raises:
+            ClientError: If the object does not exist or access is denied.
+        """
+        try:
+            response = self._client.head_object(Bucket=self.bucket, Key=s3_key)
+            logger.info("s3_head_object_success", key=s3_key)
+            return response  # type: ignore[return-value]
+        except ClientError as e:
+            logger.error("s3_head_object_failed", key=s3_key, error=str(e))
+            raise
+
+
 def build_document_s3_key(user_id: str, document_id: str, filename: str) -> str:
     # Sanitise filename — strip any path components an attacker might sneak in
     safe_filename = Path(filename).name

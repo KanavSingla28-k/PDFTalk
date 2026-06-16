@@ -1,20 +1,18 @@
 """
 services/file_validation.py
 
-Validates an uploaded file before it touches S3 or the database.
+Two validation paths are provided here:
 
-Validation order (fail-fast):
-    1. Size     — stream-read with a byte counter; reject at 50 MB.
-                  Done first so we never buffer a huge file for subsequent checks.
-    2. MIME     — python-magic inspects the buffered bytes (not the
-                  Content-Type header, which the client controls and cannot
-                  be trusted).
-    3. Magic    — for PDFs, assert the first 4 bytes are b'%PDF'.
-                  TXT / MD have no standardised magic bytes; MIME check
-                  is sufficient for those types.
+  1. validate_upload(file: UploadFile) -> bytes
+       Legacy path used by POST /documents/upload.
+       Reads the entire file into memory, checks size, MIME (via libmagic),
+       and magic bytes. Returns raw bytes ready for S3 upload.
 
-Returns the raw file bytes on success so the caller (upload endpoint)
-does not need to re-read the already-consumed UploadFile stream.
+  2. validate_upload_metadata(filename, mime_type, file_size_bytes) -> None
+       Presigned URL path used by POST /documents/initiate-upload.
+       No file bytes are available — validates only client-reported metadata
+       (size and declared MIME type). Magic-byte verification is deferred to
+       the ingest worker, which runs it after downloading the file from S3.
 
 Raises:
     FileValidationError — with a stable `reason` code and a human-readable
@@ -74,6 +72,60 @@ async def validate_upload(file: UploadFile) -> bytes:
     _check_mime(raw)
     _check_magic_bytes(raw)
     return raw
+
+
+def validate_upload_metadata(
+    filename: str,
+    mime_type: str,
+    file_size_bytes: int,
+) -> None:
+    """
+    Validate file metadata reported by the client *before* any bytes are
+    transferred — used by the presigned URL initiate-upload endpoint.
+
+    Because no file content is available at this stage, only size and the
+    client-declared MIME type can be checked here. Magic-byte verification
+    (i.e. confirming the file content actually matches the declared type) is
+    deferred to the ingest worker, which runs it after downloading from S3.
+
+    Validation order (fail-fast):
+        1. Size  — reject if file_size_bytes > MAX_FILE_SIZE_BYTES (50 MB).
+        2. MIME  — reject if mime_type is not in ALLOWED_MIME_TYPES.
+
+    Args:
+        filename:        Original filename as reported by the browser.
+        mime_type:       MIME type as reported by the browser (e.g. "application/pdf").
+                         Cannot be trusted for content correctness — only used to
+                         pre-screen obviously wrong types before issuing the URL.
+        file_size_bytes: File size in bytes as reported by the browser.
+                         S3 enforces the actual size when the object is PUT;
+                         this check is a fast fail to catch obvious over-limit
+                         uploads without generating a presigned URL.
+
+    Returns:
+        None on success.
+
+    Raises:
+        FileValidationError(reason="file_too_large"):  file_size_bytes > 50 MB.
+        FileValidationError(reason="unsupported_mime"): mime_type not allowed.
+    """
+    if file_size_bytes > MAX_FILE_SIZE_BYTES:
+        raise FileValidationError(
+            reason="file_too_large",
+            message=(
+                f"File size {file_size_bytes // (1024 * 1024)} MB exceeds the "
+                f"maximum allowed size of {MAX_FILE_SIZE_BYTES // (1024 * 1024)} MB."
+            ),
+        )
+
+    if mime_type not in ALLOWED_MIME_TYPES:
+        raise FileValidationError(
+            reason="unsupported_mime",
+            message=(
+                f"File type '{mime_type}' is not supported. "
+                f"Allowed types: PDF, plain text, Markdown."
+            ),
+        )
 
 
 # ---------------------------------------------------------------------------

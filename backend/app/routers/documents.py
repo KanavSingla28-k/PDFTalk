@@ -11,18 +11,24 @@ import structlog
 from app.auth.dependencies import get_verified_user
 from app.db.session import get_db
 from app.models.document import (
+    ConfirmUploadRequest,
+    ConfirmUploadResponse,
     DocumentListResponse,
     DocumentStatus,
     DocumentStatusResponse,
     DocumentUploadResponse,
+    InitiateUploadRequest,
+    InitiateUploadResponse,
 )
 from app.models.user import User
 from app.exceptions import DocumentNotFoundError
 from app.services.document_service import (
+    confirm_upload,
     count_user_documents,
     delete_document,
     get_document_for_user,
     get_user_documents,
+    initiate_upload,
     upload_document,
     transition_status,
 )
@@ -267,6 +273,174 @@ async def retry_document_endpoint(
         status=DocumentStatus(document.status),
     )
 
+
+
+# --------------------------------------------------------------------------- #
+# Presigned URL upload endpoints — Step 4                                      #
+# --------------------------------------------------------------------------- #
+
+@router.post(
+    "/initiate-upload",
+    status_code=status.HTTP_201_CREATED,
+    response_model=InitiateUploadResponse,
+)
+async def initiate_upload_endpoint(
+    body: InitiateUploadRequest,
+    request: Request,
+    current_user: User = Depends(get_verified_user),
+    db: AsyncSession = Depends(get_db),
+    _rate: None = Depends(_upload_limiter),
+) -> InitiateUploadResponse:
+    """
+    Phase 1 of the presigned URL upload flow.
+
+    Accepts file metadata (name, size, MIME type) from the browser — **no file
+    bytes are sent here**. Returns a presigned S3 PUT URL the browser must use
+    to upload the file directly to S3, along with the `document_id` needed for
+    the follow-up call to POST /documents/confirm-upload.
+
+    The presigned URL expires in 15 minutes. If the browser does not complete
+    the S3 PUT within that window, the document row stays in PENDING_UPLOAD and
+    the stale cleanup job will mark it FAILED after 15 minutes.
+
+    Status codes:
+      201  Created    — presigned URL issued; document row in PENDING_UPLOAD
+      422  Unproc.    — file too large or MIME type not allowed
+      429  Too Many   — rate limit exceeded
+      507  Quota      — user is at MAX_DOCS_PER_USER
+    """
+    from app.exceptions import QuotaExceededError
+    from app.services.file_validation import FileValidationError  # type: ignore[attr-defined]
+
+    try:
+        document, upload_url = await initiate_upload(
+            current_user=current_user,
+            filename=body.filename,
+            mime_type=body.mime_type,
+            file_size_bytes=body.file_size_bytes,
+            db=db,
+        )
+    except QuotaExceededError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_507_INSUFFICIENT_STORAGE,
+            detail=str(exc),
+        )
+
+    logger.info(
+        "initiate_upload_endpoint_success",
+        user_id=str(current_user.id),
+        document_id=str(document.id),
+    )
+
+    return InitiateUploadResponse(
+        document_id=document.id,
+        upload_url=upload_url,
+        s3_key=document.s3_key,
+        expires_in_seconds=900,  # must match _PRESIGNED_URL_EXPIRES_IN in document_service
+    )
+
+
+@router.post(
+    "/confirm-upload",
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model=ConfirmUploadResponse,
+)
+async def confirm_upload_endpoint(
+    body: ConfirmUploadRequest,
+    current_user: User = Depends(get_verified_user),
+    db: AsyncSession = Depends(get_db),
+) -> ConfirmUploadResponse:
+    """
+    Phase 2 of the presigned URL upload flow.
+
+    Called by the browser **after** the S3 PUT to the presigned URL succeeds.
+    The server performs a lightweight HeadObject check to confirm the file
+    actually landed in S3, transitions the document to PENDING, and enqueues
+    the RQ ingest job.
+
+    Status codes:
+      202  Accepted   — document is now PENDING; ingest job enqueued
+      404  Not Found  — document_id not found or not owned by caller
+      409  Conflict   — document is not in PENDING_UPLOAD state (double-confirm
+                        or file was never uploaded to S3)
+      502  Bad Gateway — unexpected S3 error during HeadObject
+      503  Unavailable — RQ queue is down; document rolled back to PENDING_UPLOAD
+    """
+    from botocore.exceptions import ClientError
+    from app.exceptions import DocumentNotFoundError
+
+    try:
+        document = await confirm_upload(
+            document_id=body.document_id,
+            user_id=current_user.id,
+            db=db,
+        )
+    except DocumentNotFoundError:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    except ValueError as exc:
+        # Document is not in PENDING_UPLOAD (already confirmed or wrong state)
+        raise HTTPException(status_code=409, detail=str(exc))
+    except ClientError as exc:
+        error_code = exc.response["Error"]["Code"]
+        if error_code in ("404", "NoSuchKey"):
+            raise HTTPException(
+                status_code=409,
+                detail="File not found in storage. Complete the S3 upload before confirming.",
+            )
+        raise HTTPException(
+            status_code=502,
+            detail=f"Storage verification failed (code={error_code}). Please try again.",
+        )
+
+    # Enqueue the ingest job — same pattern as the legacy /upload endpoint
+    try:
+        _enqueue_ingest(document.id)
+    except Exception as e:
+        logger.exception(
+            "confirm_upload_enqueue_failed",
+            document_id=str(document.id),
+            error=str(e),
+        )
+        # The document is already PENDING at this point; PENDING → FAILED is a
+        # valid transition. The user can retry processing via POST /{id}/retry.
+        await transition_status(
+            db,
+            document,
+            DocumentStatus.FAILED,
+            error_message="Processing queue unavailable. Please retry.",
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=503,
+            detail="Processing queue unavailable. The document has been saved — use the retry option to reprocess.",
+        )
+
+    logger.info(
+        "confirm_upload_endpoint_success",
+        user_id=str(current_user.id),
+        document_id=str(document.id),
+    )
+
+    return ConfirmUploadResponse(
+        document_id=document.id,
+        status=DocumentStatus(document.status),
+    )
+
+
+def _enqueue_ingest(document_id: uuid.UUID) -> None:
+    """
+    Enqueue an RQ ingest job. Extracted into a helper so both the legacy
+    /upload endpoint and the new /confirm-upload endpoint share the same
+    enqueue configuration (timeout, retries, failure callback).
+    """
+    from app.workers.ingest import run_ingest
+    ingest_queue.enqueue(
+        run_ingest,
+        kwargs={"document_id": str(document_id)},
+        retry=Retry(max=3, interval=RETRY_DELAYS),
+        on_failure=Callback(handle_ingest_failure),
+        job_timeout=600,
+    )
 
 
 # --------------------------------------------------------------------------- #
