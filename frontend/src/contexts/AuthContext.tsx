@@ -30,6 +30,7 @@ const PUBLIC_ROUTES = [
   '/auth/verify-email',
   '/auth/forgot-password',
   '/auth/reset-password',
+  '/admin',
 ];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
