@@ -10,9 +10,12 @@ logger = structlog.get_logger()
 
 class S3Client:
     def __init__(self) -> None:
+        from botocore.client import Config
         self._client = boto3.client(
             "s3",
             region_name=settings.AWS_REGION,
+            endpoint_url=f"https://s3.{settings.AWS_REGION}.amazonaws.com",
+            config=Config(s3={'addressing_style': 'virtual'}),
             aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
             aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
         )
