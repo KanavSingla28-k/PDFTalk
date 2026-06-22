@@ -125,7 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         );
 
-        if (!res.ok) {
+        if (!res.ok || res.status === 204) {
           throw new Error('Not authenticated');
         }
 
@@ -161,7 +161,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
 
         if (!isPublicRoute && pathname !== '/') {
-          router.push('/auth/login');
+          window.location.href = '/auth/login';
         }
       }
     }

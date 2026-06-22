@@ -455,28 +455,16 @@ async def get_me(
             user = result.scalar_one_or_none()
 
             if user is None:
-                # Token is valid but user no longer exists — treat as 401.
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Not authenticated",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+                # Token is valid but user no longer exists — treat as unauthenticated.
+                return Response(status_code=status.HTTP_204_NO_CONTENT)
 
             if not user.is_active:
-                # Explicitly reject deactivated accounts — do not fall through.
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Not authenticated",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+                # Explicitly reject deactivated accounts.
+                return Response(status_code=status.HTTP_204_NO_CONTENT)
 
             if not user.is_verified:
-                # Explicitly reject unverified accounts — do not fall through.
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Not authenticated",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
+                # Explicitly reject unverified accounts.
+                return Response(status_code=status.HTTP_204_NO_CONTENT)
 
             return MeResponse(id=str(user.id), email=user.email)
 
@@ -489,11 +477,7 @@ async def get_me(
 
     # ── Path 2: silent refresh via cookie ───────────────────────────────
     if not refresh_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     try:
         new_access_token, new_raw_refresh = await validate_and_rotate_refresh_token(
@@ -501,11 +485,7 @@ async def get_me(
             db=db,
         )
     except TokenInvalidError as exc:
-        resp = JSONResponse(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            content={"detail": str(exc)},
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        resp = Response(status_code=status.HTTP_204_NO_CONTENT)
         _clear_refresh_cookie(resp)
         return resp
 
@@ -517,10 +497,7 @@ async def get_me(
     user = result.scalar_one_or_none()
 
     if not user or not user.is_active or not user.is_verified:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Not authenticated",
-        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     # Set the rotated refresh token cookie
     _set_refresh_cookie(response, new_raw_refresh)
