@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 import tiktoken
+from typing import Iterable
 
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 64
@@ -13,39 +14,48 @@ class ChunkData:
     token_count: int
 
 
-def chunk_text(text: str) -> list[ChunkData]:
+def chunk_text(text_stream: str | Iterable[str]) -> list[ChunkData]:
     """
     Split text into CHUNK_SIZE-token chunks with CHUNK_OVERLAP-token overlap.
     Uses cl100k_base encoding (matches text-embedding-3-small).
 
+    Accepts either a single string or an iterable of strings (for stream processing).
     Returns an empty list if text is empty or contains no tokens.
     """
-    if not text or not text.strip():
-        return []
+    if isinstance(text_stream, str):
+        text_stream = [text_stream]
 
     enc = tiktoken.get_encoding("cl100k_base")
-    tokens = enc.encode(text)
-
-    if not tokens:
-        return []
-
     chunks: list[ChunkData] = []
-    start = 0
+    buffer_tokens = []
 
-    while start < len(tokens):
-        end = min(start + CHUNK_SIZE, len(tokens))
-        window = tokens[start:end]
-        chunk_text_str = enc.decode(window)
+    for text_block in text_stream:
+        if not text_block or not text_block.strip():
+            continue
 
-        chunks.append(ChunkData(
-            chunk_index=len(chunks),
-            text=chunk_text_str,
-            token_count=len(window),
-        ))
+        tokens = enc.encode(text_block)
+        buffer_tokens.extend(tokens)
 
-        if end == len(tokens):
-            break
+        while len(buffer_tokens) >= CHUNK_SIZE:
+            window = buffer_tokens[:CHUNK_SIZE]
+            chunks.append(ChunkData(
+                chunk_index=len(chunks),
+                text=enc.decode(window),
+                token_count=len(window),
+            ))
+            buffer_tokens = buffer_tokens[CHUNK_STEP:]
 
-        start += CHUNK_STEP
+    # Emit a trailing chunk only if it contains tokens that were not already
+    # emitted as overlap from the previous chunk.
+    if buffer_tokens and (
+        not chunks or len(buffer_tokens) > CHUNK_OVERLAP
+    ):
+        chunks.append(
+            ChunkData(
+                chunk_index=len(chunks),
+                text=enc.decode(buffer_tokens),
+                token_count=len(buffer_tokens),
+            )
+        )   
 
     return chunks

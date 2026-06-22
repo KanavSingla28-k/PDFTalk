@@ -4,6 +4,7 @@ from enum import Enum
 import structlog
 import unicodedata
 import fitz  # PyMuPDF
+from typing import Iterator, Any
 from app.exceptions import ExtractionError
 from app.utils.s3_client import s3_client
 
@@ -15,15 +16,14 @@ class MimeType(str, Enum):
     MD = "text/markdown"
 
 
-def extract_text(s3_key: str, mime_type: str) -> str:
+
+def extract_text(s3_key: str, mime_type: str) -> Iterator[str]:
     """
     Download file from S3 and extract its full text content.
 
-    Returns a single cleaned string ready for chunking.
+    Returns an iterator of cleaned string chunks ready for chunking.
     Raises ExtractionError on any unrecoverable failure.
     """
-    raw: bytes = _download(s3_key)
-
     try:
         mime = MimeType(mime_type)
     except ValueError:
@@ -34,9 +34,11 @@ def extract_text(s3_key: str, mime_type: str) -> str:
 
     match mime:
         case MimeType.PDF:
-            return _extract_pdf(raw, s3_key)
+            raw: bytes = _download(s3_key)
+            yield _extract_pdf(raw, s3_key)
         case MimeType.TXT | MimeType.MD:
-            return _extract_plaintext(raw, s3_key)
+            body = s3_client.download_file_streaming(s3_key)
+            yield from _extract_plaintext_stream(body, s3_key)
         case _:
             raise ExtractionError(reason=f"Unsupported MIME type: {mime_type}", s3_key=s3_key)
 
@@ -108,16 +110,38 @@ def _ocr_page(page: fitz.Page, page_num: int, s3_key: str) -> str:
         logger.warning("OCR failed on page %d of %s: %s", page_num, s3_key, exc)
         return ""
 
-def _extract_plaintext(raw: bytes, s3_key: str) -> str:
-    """Decode TXT/MD bytes to a string with a safe UTF-8 fallback."""
+def _extract_plaintext_stream(body: Any, s3_key: str) -> Iterator[str]:
+    """Stream decode TXT/MD bytes to strings with a safe UTF-8 fallback."""
+    import codecs
+    decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    
+    text_buffer = []
+    buffer_len = 0
+    
     try:
-        text = raw.decode("utf-8", errors="replace")
+        # iter_chunks is provided by botocore StreamingBody
+        for chunk in body.iter_chunks(chunk_size=65536):
+            text_chunk = decoder.decode(chunk)
+            if text_chunk:
+                text_buffer.append(text_chunk)
+                buffer_len += len(text_chunk)
+                # Yield in ~1MB blocks to the chunker to minimise token boundary weirdness
+                if buffer_len > 1024 * 1024:
+                    yield _clean("".join(text_buffer), strip=False)
+                    text_buffer.clear()
+                    buffer_len = 0
+                    
+        final_chunk = decoder.decode(b"", final=True)
+        if final_chunk:
+            text_buffer.append(final_chunk)
+            
+        if text_buffer:
+            yield _clean("".join(text_buffer), strip=True)
     except Exception as exc:
-        raise ExtractionError(reason=f"Failed to decode file: {exc}", s3_key=s3_key) from exc
+        raise ExtractionError(reason=f"Failed to stream decode file: {exc}", s3_key=s3_key) from exc
 
-    return _clean(text)
 
-def _clean(text: str) -> str:
+def _clean(text: str, strip: bool = True) -> str:
     """
     Normalise whitespace and strip control characters.
     Keeps newlines (structurally meaningful) but collapses runs of blank lines.
@@ -135,4 +159,4 @@ def _clean(text: str) -> str:
     import re
     text = re.sub(r"\n{3,}", "\n\n", text)
 
-    return text.strip()
+    return text.strip() if strip else text

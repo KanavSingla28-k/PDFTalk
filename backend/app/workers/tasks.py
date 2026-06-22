@@ -47,6 +47,8 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import structlog
 from rq import Queue
+from sqlalchemy.orm import Session
+from typing import cast
 
 from app.db.sync_session import SessionLocal
 from app.models.document import Document, DocumentStatus
@@ -56,9 +58,9 @@ logger = structlog.get_logger(__name__)
 
 
 def _cleanup_stale_pending_uploads(
-    db,
+    db: Session,
     cutoff: datetime,
-) -> list:
+) -> list[Document]:
     """
     Find PENDING_UPLOAD documents older than *cutoff*, delete their S3 objects,
     then transition the DB rows to FAILED.
@@ -155,12 +157,12 @@ def _cleanup_stale_pending_uploads(
 
 
 def _mark_stale_batch(
-    db,
+    db: Session,
     statuses: list[str],
     cutoff: datetime,
     reason: str,
     traceback_detail: str,
-) -> list:
+) -> list[Document]:
     """
     Query documents whose status is in *statuses* and whose updated_at is older
     than *cutoff*, mark them FAILED, write a JobLog entry, and return the list

@@ -310,7 +310,7 @@ async def initiate_upload_endpoint(
       507  Quota      — user is at MAX_DOCS_PER_USER
     """
     from app.exceptions import QuotaExceededError
-    from app.services.file_validation import FileValidationError  # type: ignore[attr-defined]
+    # from app.services.file_validation import FileValidationError  # type: ignore[attr-defined]
 
     try:
         document, upload_url = await initiate_upload(

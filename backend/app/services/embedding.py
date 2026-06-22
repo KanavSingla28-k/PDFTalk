@@ -74,21 +74,17 @@ async def _embed_texts_async(texts: list[str]) -> list[list[float]]:
     batches = _make_batches(texts, _BATCH_SIZE)
     raw_vectors: list[list[float]] = []
 
-    for batch_index, batch in enumerate(batches):
-        logger.debug(
-            "embedding.batch",
-            batch_index=batch_index,
-            batch_size=len(batch),
-            total_batches=len(batches),
-        )
-        batch_vectors = await create_embeddings(batch)
+    batch_results = await asyncio.gather(
+        *[create_embeddings(batch) for batch in batches],
+        return_exceptions=False,
+    )
 
+    for batch_index, (batch, batch_vectors) in enumerate(zip(batches, batch_results)):
         if len(batch_vectors) != len(batch):
             raise ValueError(
                 f"Batch {batch_index}: expected {len(batch)} vectors, "
                 f"got {len(batch_vectors)} from OpenAI."
             )
-
         raw_vectors.extend(batch_vectors)
 
     # Normalise all vectors — done after all batches to keep the hot path simple

@@ -1,6 +1,6 @@
 import boto3
 from botocore.exceptions import ClientError
-from typing import BinaryIO, cast
+from typing import BinaryIO, cast, Any
 from app.core.config import settings
 import structlog
 from pathlib import Path
@@ -39,6 +39,15 @@ class S3Client:
             return cast(bytes, response["Body"].read())
         except ClientError as e:
             logger.error("s3_download_failed", key=s3_key, error=str(e))
+            raise
+
+    def download_file_streaming(self, s3_key: str) -> BinaryIO:
+        """Download an object and return its content as a streaming body."""
+        try:
+            response = self._client.get_object(Bucket=self.bucket, Key=s3_key)
+            return cast(BinaryIO, response["Body"])
+        except ClientError as e:
+            logger.error("s3_download_streaming_failed", key=s3_key, error=str(e))
             raise
 
     def delete_object(self, s3_key: str) -> None:
@@ -105,7 +114,7 @@ class S3Client:
             ExpiresIn=expires_in,
         ))
 
-    def head_object(self, s3_key: str) -> dict:
+    def head_object(self, s3_key: str) -> dict[str, Any]:
         """
         Perform a lightweight S3 HeadObject call to verify an object exists
         without downloading any bytes.
@@ -126,7 +135,7 @@ class S3Client:
         try:
             response = self._client.head_object(Bucket=self.bucket, Key=s3_key)
             logger.info("s3_head_object_success", key=s3_key)
-            return response  # type: ignore[return-value]
+            return cast(dict[str, Any], response)
         except ClientError as e:
             logger.error("s3_head_object_failed", key=s3_key, error=str(e))
             raise
