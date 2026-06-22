@@ -13,7 +13,7 @@ const cspHeader = `
   base-uri 'self';
   form-action 'self';
   frame-ancestors 'none';
-  connect-src 'self' ${apiUrl.endsWith('/') ? apiUrl : apiUrl + '/'};
+  connect-src 'self' ${apiUrl.endsWith('/') ? apiUrl : apiUrl + '/'} https://*.s3.amazonaws.com;
 `.replace(/\s{2,}/g, ' ').trim();
 
 const nextConfig: NextConfig = {
