@@ -12,7 +12,9 @@ from app.db.base import Base
 
 if TYPE_CHECKING:
     from app.models.user import User
-    from app.models.message import Message, MessageResponse
+    from app.models.message import Message
+
+from app.models.message import MessageResponse
 
 class Chat(Base):
     __tablename__ = "chats"
