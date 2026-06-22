@@ -1,4 +1,4 @@
-import { apiFetch } from '@/lib/api';
+import { apiRequest } from '@/lib/api';
 
 export interface MessageResponse {
   id: string;
@@ -30,29 +30,29 @@ export interface ChatListResponse {
 }
 
 export async function createChat(document_ids: string[]): Promise<ChatResponse> {
-  return apiFetch<ChatResponse>('/chats', {
+  return apiRequest<ChatResponse>('/chats', {
     method: 'POST',
     body: JSON.stringify({ document_ids }),
   });
 }
 
 export async function listChats(limit = 20, offset = 0): Promise<ChatListResponse> {
-  return apiFetch<ChatListResponse>(`/chats?limit=${limit}&offset=${offset}`);
+  return apiRequest<ChatListResponse>(`/chats?limit=${limit}&offset=${offset}`);
 }
 
 export async function getChat(chat_id: string): Promise<ChatDetailResponse> {
-  return apiFetch<ChatDetailResponse>(`/chats/${chat_id}`);
+  return apiRequest<ChatDetailResponse>(`/chats/${chat_id}`);
 }
 
 export async function renameChat(chat_id: string, title: string): Promise<ChatResponse> {
-  return apiFetch<ChatResponse>(`/chats/${chat_id}`, {
+  return apiRequest<ChatResponse>(`/chats/${chat_id}`, {
     method: 'PATCH',
     body: JSON.stringify({ title }),
   });
 }
 
 export async function deleteChat(chat_id: string): Promise<void> {
-  return apiFetch<void>(`/chats/${chat_id}`, {
+  return apiRequest<void>(`/chats/${chat_id}`, {
     method: 'DELETE',
   });
 }

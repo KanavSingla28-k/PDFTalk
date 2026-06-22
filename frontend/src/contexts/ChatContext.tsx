@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, Rea
 import { ChatResponse, ChatDetailResponse, MessageResponse, listChats, createChat, getChat, renameChat as renameChatApi, deleteChat as deleteChatApi } from '@/lib/chats.api';
 import { streamAnswer, StreamEvent } from '@/lib/query.api';
 import { useAuth } from './AuthContext';
-import { showToast } from '@/lib/toast';
+import { apiToast } from '@/lib/toast';
 
 interface ChatContextValue {
   chats: ChatResponse[];
@@ -38,7 +38,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setChats(res.items);
     } catch (e) {
       console.error(e);
-      showToast.error('Failed to load chats');
+      apiToast.error('Failed to load chats');
     } finally {
       setIsLoadingChats(false);
     }
@@ -62,7 +62,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setActiveChat(chat);
     } catch (e) {
       console.error(e);
-      showToast.error('Failed to load chat details');
+      apiToast.error('Failed to load chat details');
       throw e;
     }
   };
@@ -76,7 +76,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) {
       console.error(e);
-      showToast.error('Failed to rename chat');
+      apiToast.error('Failed to rename chat');
       throw e;
     }
   };
@@ -90,7 +90,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) {
       console.error(e);
-      showToast.error('Failed to delete chat');
+      apiToast.error('Failed to delete chat');
       throw e;
     }
   };
@@ -163,7 +163,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
             // Refresh chats list to get updated title/updated_at
             refreshChats();
           } else if (event.type === 'error') {
-            showToast.error(event.message);
+            apiToast.error(event.message);
             setIsStreaming(false);
             setAbortController(null);
           }
