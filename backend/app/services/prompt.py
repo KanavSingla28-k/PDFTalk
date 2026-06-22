@@ -1,9 +1,12 @@
 import tiktoken
-from typing import cast
+from typing import cast, TYPE_CHECKING
 from openai.types.chat import ChatCompletionMessageParam
 from prometheus_client import Counter
 
 from app.services.retrieval import RetrievedChunk
+
+if TYPE_CHECKING:
+    from app.models.message import Message
 
 context_truncated_total = Counter(
     "pdftalk_context_truncated_total",
@@ -77,9 +80,38 @@ def build_context_block(chunks: list[RetrievedChunk]) -> tuple[str, list[Retriev
     return context_block, included
 
 
+def build_history_block(messages: list["Message"], budget: int = 1500) -> list[dict[str, str]]:
+    """
+    Fit as many recent messages as possible within the budget.
+    Walks newest to oldest, keeping chronological order in the output.
+    If the most recent message alone exceeds the budget, it truncates the start
+    to keep the most recent context.
+    """
+    accumulated_tokens = 0
+    selected: list[dict[str, str]] = []
+
+    for message in reversed(messages):
+        if accumulated_tokens + message.token_count <= budget:
+            selected.insert(0, {"role": message.role.value, "content": message.content})
+            accumulated_tokens += message.token_count
+        elif not selected:
+            # This is the most recent message and it alone exceeds budget
+            # Truncate to fit remaining budget, keeping the end of the message
+            tokens = ENCODER.encode(message.content)
+            allowed_tokens = budget - accumulated_tokens
+            if allowed_tokens > 0:
+                truncated_content = ENCODER.decode(tokens[-allowed_tokens:])
+                selected.insert(0, {"role": message.role.value, "content": truncated_content})
+            break
+        else:
+            break   # older messages don't fit, stop here
+
+    return selected
+
 def build_messages(
     chunks: list[RetrievedChunk],
     question: str,
+    history_messages: list["Message"] | None = None,
 ) -> tuple[list[ChatCompletionMessageParam], list[RetrievedChunk]]:
     """
     Assemble the OpenAI messages list for the chat completion call.
@@ -101,9 +133,11 @@ def build_messages(
 
 Question: {question}"""
 
-    messages = cast(list[ChatCompletionMessageParam], [
-        {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": user_message},
-    ])
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+    
+    if history_messages:
+        messages.extend(build_history_block(history_messages))
 
-    return messages, included_chunks
+    messages.append({"role": "user", "content": user_message})
+
+    return cast(list[ChatCompletionMessageParam], messages), included_chunks

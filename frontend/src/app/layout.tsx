@@ -13,6 +13,8 @@ export const metadata: Metadata = {
     'Upload PDFs, text files, and markdown — then ask questions and get instant AI-powered answers.',
 };
 
+import { ChatProvider } from '@/contexts/ChatContext';
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
@@ -21,13 +23,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     >
       <body className="min-h-full flex flex-col">
         <AuthProvider>
-          {children}
-          <Toaster
-            position="top-right"
-            richColors
-            closeButton
-            toastOptions={{ duration: 5000 }}
-          />
+          <ChatProvider>
+            {children}
+            <Toaster
+              position="top-right"
+              richColors
+              closeButton
+              toastOptions={{ duration: 5000 }}
+            />
+          </ChatProvider>
         </AuthProvider>
       </body>
     </html>

@@ -17,6 +17,7 @@ from app.routers.health import router as health_router
 from app.routers.internal import router as internal_router
 from app.utils.logging import configure_logging
 from app.utils.redis_client import get_pool, get_redis
+from app.routers.chats import router as chat_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -46,6 +47,7 @@ register_exception_handlers(app)
 app.include_router(auth_router)
 app.include_router(document_router)
 app.include_router(query_router)
+app.include_router(chat_router)
 app.include_router(health_router)
 app.include_router(internal_router)
 
@@ -79,7 +81,8 @@ app.add_middleware(                          # added last = outermost
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "DELETE", "PATCH", "PUT"],
+
     allow_headers=["Authorization", "Content-Type"],
     max_age=600,
 )

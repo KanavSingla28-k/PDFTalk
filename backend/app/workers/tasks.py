@@ -48,7 +48,7 @@ from datetime import datetime, timezone, timedelta
 import structlog
 from rq import Queue
 from sqlalchemy.orm import Session
-from typing import cast
+# from typing import cast
 
 from app.db.sync_session import SessionLocal
 from app.models.document import Document, DocumentStatus

@@ -10,6 +10,9 @@ from app.models.auth import RefreshToken, EmailVerification
 from app.models.job_log import JobLog
 from app.models.query import QueryRequest
 
+from app.models.chat import Chat
+from app.models.message import Message, MessageRole, MessageStatus
+
 __all__ = [
     "Base",
     "User",
@@ -21,4 +24,8 @@ __all__ = [
     "EmailVerification",
     "JobLog",
     "QueryRequest",
+    "Chat",
+    "Message",
+    "MessageRole",
+    "MessageStatus",
 ]

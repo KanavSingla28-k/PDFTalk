@@ -20,13 +20,11 @@ import { apiFetch, ApiError, ERROR_CODES, ERROR_MESSAGES } from '@/lib/api';
 // ---------------------------------------------------------------------------
 
 export interface AskRequest {
-  /** 1–10 UUIDs of READY documents to query against */
-  document_ids: string[];
-  /** 1–1000 characters, stripped of leading/trailing whitespace */
+  chat_id: string;
   question: string;
 }
 
-export type StreamEventType = 'token' | 'done' | 'error';
+export type StreamEventType = 'token' | 'done' | 'error' | 'meta';
 
 export interface StreamToken {
   type: 'token';
@@ -43,7 +41,12 @@ export interface StreamError {
   message: string;
 }
 
-export type StreamEvent = StreamToken | StreamDone | StreamError;
+export interface StreamMeta {
+  type: 'meta';
+  missing_document_ids: string[];
+}
+
+export type StreamEvent = StreamToken | StreamDone | StreamError | StreamMeta;
 
 // ---------------------------------------------------------------------------
 // SSE stream reader
@@ -138,19 +141,38 @@ export async function streamAnswer(
       buffer = frames.pop() ?? ''; // keep trailing incomplete frame
 
       for (const frame of frames) {
-        if (!frame.startsWith('data: ')) continue;
-        const data = frame.slice(6); // strip "data: " prefix
+        let dataStr = '';
+        let eventName = 'message';
+        
+        const lines = frame.split('\n');
+        for (const line of lines) {
+            if (line.startsWith('event: ')) {
+                eventName = line.slice(7).trim();
+            } else if (line.startsWith('data: ')) {
+                dataStr = line.slice(6);
+            }
+        }
+        
+        if (!dataStr) continue;
+
+        if (eventName === 'meta') {
+            try {
+                const parsed = JSON.parse(dataStr);
+                onEvent({ type: 'meta', missing_document_ids: parsed.missing_document_ids || [] });
+            } catch (e) {}
+            continue;
+        }
 
         // Clean end of stream
-        if (data === '[DONE]') {
+        if (dataStr === '[DONE]') {
           onEvent({ type: 'done' });
           return;
         }
 
         // JSON payload (could be sources or terminal error)
-        if (data.startsWith('{')) {
+        if (dataStr.startsWith('{')) {
           try {
-            const parsed = JSON.parse(data) as { type?: string; error?: string; message?: string };
+            const parsed = JSON.parse(dataStr) as { type?: string; error?: string; message?: string };
             
             // Backend sends source citations at the end of the stream
             if (parsed.type === 'sources') {
@@ -175,7 +197,7 @@ export async function streamAnswer(
         }
 
         // Plain text token — append to chat bubble
-        onEvent({ type: 'token', content: data });
+        onEvent({ type: 'token', content: dataStr });
       }
     }
   } catch (err) {

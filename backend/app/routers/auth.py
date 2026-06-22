@@ -484,7 +484,7 @@ async def get_me(
             raw_token=refresh_token,
             db=db,
         )
-    except TokenInvalidError as exc:
+    except TokenInvalidError:
         resp = Response(status_code=status.HTTP_204_NO_CONTENT)
         _clear_refresh_cookie(resp)
         return resp

@@ -1,3 +1,4 @@
+from __future__ import annotations
 import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,7 +8,7 @@ from app.exceptions import (
     DocumentNotFoundError,
     DocumentNotReadyError,
 )
-
+from app.models.chat import Chat
 
 async def validate_documents_for_query(
     document_ids: list[uuid.UUID],
@@ -50,3 +51,54 @@ async def validate_documents_for_query(
             raise DocumentNotReadyError(document_id=doc_id, status=doc.status)
 
     return list(found.values())
+
+async def validate_chat_for_query(
+    chat_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+) -> tuple["Chat", list[uuid.UUID], list[str]]:
+    """
+    Fetches the chat, filters its document_ids to only those that still exist
+    and are owned by the user. If none remain, raises AllDocumentsDeletedError.
+    Returns (chat, valid_document_uuids, missing_document_ids).
+    """
+    from app.models.chat import Chat
+    from app.exceptions import ChatNotFoundError, AllDocumentsDeletedError
+    
+    from sqlalchemy.orm import selectinload
+    result = await db.execute(select(Chat).options(selectinload(Chat.messages)).where(Chat.id == chat_id, Chat.user_id == user_id))
+    chat = result.scalar_one_or_none()
+    
+    if not chat:
+        raise ChatNotFoundError()
+        
+    if not chat.document_ids:
+        from app.utils.metrics import chat_query_blocked_total
+        chat_query_blocked_total.labels(reason="all_documents_deleted").inc()
+        raise AllDocumentsDeletedError()
+        
+    doc_uuids = [uuid.UUID(d) for d in chat.document_ids]
+    
+    # Check which documents still exist and are owned
+    doc_result = await db.execute(
+        select(Document.id, Document.status).where(
+            Document.id.in_(doc_uuids),
+            Document.user_id == user_id,
+        )
+    )
+    docs = doc_result.all()
+    
+    valid_uuids = []
+    found_ids_str = set()
+    for d_id, d_status in docs:
+        found_ids_str.add(str(d_id))
+        if d_status == DocumentStatus.READY:
+            valid_uuids.append(d_id)
+            
+    if not valid_uuids:
+        from app.utils.metrics import chat_query_blocked_total
+        chat_query_blocked_total.labels(reason="all_documents_deleted").inc()
+        raise AllDocumentsDeletedError()
+        
+    missing_ids = [d for d in chat.document_ids if d not in found_ids_str]
+    return chat, valid_uuids, missing_ids
