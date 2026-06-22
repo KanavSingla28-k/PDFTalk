@@ -16,6 +16,7 @@ if TYPE_CHECKING:
         EmailVerification,
         PasswordReset,
     )
+    from app.models.chat import Chat
 
 class User(Base):
     __tablename__ = "users"
@@ -64,5 +65,8 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     password_resets: Mapped[list["PasswordReset"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    chats: Mapped[list["Chat"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )

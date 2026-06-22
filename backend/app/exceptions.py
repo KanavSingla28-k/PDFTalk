@@ -150,6 +150,10 @@ class DocumentNotReadyError(PDFTalkError):
         self.status = status
 
 
+class AllDocumentsDeletedError(PDFTalkError):
+    pass
+
+
 class InvalidStatusTransitionError(PDFTalkError):
     """
     Raised when a caller attempts a document status move that violates the
@@ -223,6 +227,19 @@ class ChunkingError(PDFTalkError):
     def __init__(self, message: str) -> None:
         super().__init__(message)
 
+
+# ---------------------------------------------------------------------------
+# Chat exceptions
+# ---------------------------------------------------------------------------
+
+class ChatNotFoundError(PDFTalkError):
+    pass
+
+class EmptyDocumentListError(PDFTalkError):
+    pass
+
+class InvalidDocumentSelectionError(PDFTalkError):
+    pass
 
 # ---------------------------------------------------------------------------
 # Registration handlers
@@ -397,6 +414,19 @@ def register_exception_handlers(app: FastAPI) -> None:
             },
         )
 
+    @app.exception_handler(AllDocumentsDeletedError)
+    async def all_documents_deleted_handler(
+        request: Request,
+        exc: AllDocumentsDeletedError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": "ALL_DOCUMENTS_DELETED",
+                "message": "All documents attached to this chat have been deleted.",
+            },
+        )
+
     @app.exception_handler(InvalidStatusTransitionError)
     async def invalid_status_transition_handler(
         request: Request,
@@ -459,5 +489,44 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "error": "DAILY_QUERY_QUOTA_EXCEEDED",
                 "message": str(exc),
+            },
+        )
+
+    @app.exception_handler(ChatNotFoundError)
+    async def chat_not_found_handler(
+        request: Request,
+        exc: ChatNotFoundError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "CHAT_NOT_FOUND",
+                "message": "Chat not found",
+            },
+        )
+
+    @app.exception_handler(EmptyDocumentListError)
+    async def empty_document_list_handler(
+        request: Request,
+        exc: EmptyDocumentListError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "EMPTY_DOCUMENT_LIST",
+                "message": "At least one document must be selected",
+            },
+        )
+
+    @app.exception_handler(InvalidDocumentSelectionError)
+    async def invalid_document_selection_handler(
+        request: Request,
+        exc: InvalidDocumentSelectionError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "INVALID_DOCUMENT_SELECTION",
+                "message": "Invalid document selection",
             },
         )

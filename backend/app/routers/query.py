@@ -22,9 +22,10 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.models.query import QueryRequest
 from app.models.user import User
-from app.services.query_validation import validate_documents_for_query
+from app.models.message import Message, MessageRole, MessageStatus
+from app.services.query_validation import validate_chat_for_query
 from app.services.retrieval import retrieve_similar_chunks, RetrievedChunk
-from app.services.prompt import build_messages
+from app.services.prompt import build_messages, _count_tokens
 from app.services.llm import stream_llm_response
 from app.utils.openai_client import (
     CircuitBreakerOpenError,
@@ -34,7 +35,7 @@ from app.utils.openai_client import (
     check_and_increment_query_usage,
 )
 from app.utils.rate_limit import RateLimiter, user_id_from_request
-from app.utils.metrics import queries_total, stream_errors_total
+from app.utils.metrics import queries_total, stream_errors_total, messages_total
 
 logger = structlog.get_logger(__name__)
 
@@ -62,20 +63,41 @@ async def ask(
 ) -> StreamingResponse:
     await check_and_increment_query_usage(user_id=str(current_user.id))
 
-    await validate_documents_for_query(
-        document_ids=body.document_ids,
+    chat, valid_uuids, missing_ids = await validate_chat_for_query(
+        chat_id=body.chat_id,
         user_id=current_user.id,
         db=db,
     )
 
     chunks = await retrieve_similar_chunks(
         user_id=current_user.id,
-        document_ids=body.document_ids,
+        document_ids=valid_uuids,
         query=body.question,
         db=db,
     )
 
-    messages, _included_chunks = build_messages(chunks, body.question)
+    # Sort chat messages to pass to prompt builder
+    chat.messages.sort(key=lambda m: m.created_at)
+    
+    messages, _included_chunks = build_messages(chunks, body.question, history_messages=chat.messages)
+
+    # Pre-stream message save
+    user_msg = Message(
+        chat_id=chat.id,
+        role=MessageRole.USER,
+        content=body.question,
+        token_count=_count_tokens(body.question),
+        status=MessageStatus.COMPLETE,
+    )
+    db.add(user_msg)
+    messages_total.labels(role="user").inc()
+    
+    if chat.title == "New Chat":
+        chat.title = body.question[:50].strip()
+        
+    from sqlalchemy import func
+    chat.updated_at = func.now()
+    await db.commit()
 
     # Increment here — after all pre-stream validation passes, before the
     # stream is opened. This counts queries that reached the LLM, not ones
@@ -87,6 +109,9 @@ async def ask(
             messages=messages,
             user_id=str(current_user.id),
             included_chunks=_included_chunks,
+            chat_id=str(chat.id),
+            missing_ids=missing_ids,
+            db=db,
         ),
         media_type="text/event-stream",
         headers={
@@ -101,20 +126,16 @@ async def _sse_generator(
     messages: list[ChatCompletionMessageParam],
     user_id: str,
     included_chunks: list[RetrievedChunk],
+    chat_id: str,
+    missing_ids: list[str],
+    db: AsyncSession,
 ) -> AsyncIterator[str]:
-    token_stream = stream_llm_response(messages=messages, user_id=user_id)
+    if missing_ids:
+        yield f"event: meta\ndata: {json.dumps({'missing_document_ids': missing_ids})}\n\n"
 
-    # Tracks whether the LLM generation itself finished successfully (i.e.
-    # token_stream raised a clean StopAsyncIteration). Once this flips to
-    # True, ANY exception we see afterwards is — by definition — coming from
-    # post-completion cleanup (e.g. a `finally` block in stream_llm_response
-    # doing quota bookkeeping), not from the actual generation. The user's
-    # answer is already complete and correct at that point; cleanup failures
-    # must never be surfaced as a stream error on top of a successful
-    # response. See: llm.py's finally block, and the incident where a quota
-    # accounting exception there was reported to users as
-    # "An unexpected error occurred" despite the answer rendering correctly.
+    token_stream = stream_llm_response(messages=messages, user_id=user_id)
     generation_completed = False
+    accumulated_content = ""
 
     try:
         while True:
@@ -126,6 +147,7 @@ async def _sse_generator(
             except StopAsyncIteration:
                 generation_completed = True
                 break
+            accumulated_content += token
             yield f"data: {token}\n\n"
 
         # Stream source citations before the terminal DONE event
@@ -250,3 +272,30 @@ async def _sse_generator(
             "STREAM_ERROR",
             "An unexpected error occurred while generating the response.",
         )
+
+    finally:
+        if accumulated_content:
+            import uuid
+            from sqlalchemy import update
+            from sqlalchemy import func
+            from app.models.chat import Chat
+            from app.models.message import Message, MessageRole, MessageStatus
+            
+            status = MessageStatus.COMPLETE if generation_completed else MessageStatus.TRUNCATED
+            assistant_msg = Message(
+                chat_id=uuid.UUID(chat_id),
+                role=MessageRole.ASSISTANT,
+                content=accumulated_content,
+                token_count=_count_tokens(accumulated_content),
+                status=status,
+            )
+            db.add(assistant_msg)
+            messages_total.labels(role="assistant").inc()
+            
+            # Use execute(update(...)) to bump updated_at without needing to load the chat
+            await db.execute(
+                update(Chat)
+                .where(Chat.id == uuid.UUID(chat_id))
+                .values(updated_at=func.now())
+            )
+            await db.commit()

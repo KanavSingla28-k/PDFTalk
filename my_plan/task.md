@@ -1,263 +1,337 @@
-# Frontend & Launch Task List (Tasks 46 - 63)
+# T-72 · Persistent Chat History — Implementation Plan
 
-This task list integrates `pdftalk_mvp_tasklist.md` with `frontend_api_reference.md`. All gaps, missing error paths, and design decisions identified in review have been incorporated.
+**Depends on:** T-22 (auth), T-27 (document ownership), T-34/T-37 (retrieval + prompt builder), T-39/T-40 (SSE streaming), T-69 (metrics)
+**Blocks:** Nothing downstream yet — this is additive to the existing query path.
 
----
-
-## Phase 10 — Frontend
-
----
-
-### T-46: Next.js Scaffold & Foundation ✅
-
-- `[x]` Initialize Next.js 15 App Router in `frontend/`.
-- `[x]` Configure TypeScript, ESLint, Prettier, and TailwindCSS.
-- `[x]` Install `react-hook-form`, `zod`, and `@hookform/resolvers`.
-- `[x]` Configure `next.config.ts` with `NEXT_PUBLIC_API_URL` (`http://localhost:8000` in dev).
-- `[x]` Set up `src/middleware.ts` for protected route redirects (unauthenticated → `/login`).
+This plan sequences the work so each step lands independently testable, in an order that de-risks the parts most likely to break existing behavior (`/query/ask`) before building UI on top of them.
 
 ---
 
-### T-47: API Client Layer ✅
+## Locked Design Decisions
 
-> **Sequencing note:** Build this before T-48 and T-49. All pages depend on this layer.
-
-- `[x]` Create `src/lib/api.ts` — typed base fetch wrapper with the following behaviour:
-  - Attach `Authorization: Bearer <token>` from in-memory state on every call.
-  - Parse response body and throw a typed `ApiError` on all non-2xx responses.
-  - **401 handling (differentiated):**
-    - If `error === "TOKEN_EXPIRED"`: silently call `POST /auth/refresh` (`credentials: 'include'`) and **retry the original request once**.
-    - If `error === "INVALID_TOKEN"`: do **not** retry — clear state and redirect to `/login` immediately.
-    - Any other `401`: treat as `INVALID_TOKEN` (redirect, no retry).
-  - **5xx fallback:** Named error codes (`AI_SERVICE_UNAVAILABLE`, etc.) are handled explicitly. For `502` responses with no error code body (e.g. S3 deletion failure on `DELETE /documents/{id}`), surface a generic "Service error. Please try again." — do not crash.
-  - **`ACCOUNT_INACTIVE` (403):** Map explicitly → "Your account has been deactivated. Contact support."
-  - Read `Retry-After` header on `429` responses and expose it to callers.
-  - Pass `credentials: 'include'` on all requests so the browser sends the httpOnly refresh cookie on `/auth/*`.
-
-- `[x]` Split into separate modules:
-  - `src/lib/auth.api.ts` — register, login, refresh, logout
-  - `src/lib/documents.api.ts` — upload, status, list, delete
-  - `src/lib/query.api.ts` — ask (SSE streaming)
-
-- `[x]` Define and export a typed `ApiError` class:
-  ```ts
-  class ApiError extends Error {
-    constructor(
-      public code: string,        // e.g. "TOKEN_EXPIRED", "UNKNOWN_5XX"
-      public message: string,
-      public status: number,
-      public retryAfter?: number, // seconds from Retry-After header
-    ) { super(message) }
-  }
-  ```
+| Decision | Resolution |
+|---|---|
+| Auto-naming | Created as `"New Chat"` → after first user message, if title is still `"New Chat"`, overwrite with a truncated version of the question. `PATCH` rename always available; auto-title never fires again once overwritten. |
+| Conversation context bounding | Token-budgeted truncation, walked newest→oldest, separate budget from document context. |
+| Document deletion mid-chat (partial) | Chat continues, flags missing doc(s), query still works with remaining documents. |
+| Document deletion mid-chat (all) | `409` error — chat is unusable, must be deleted. |
+| `document_ids` storage | `JSONB` column on `Chat`, no join table. |
+| Partial stream durability | `Message.status` field (`complete` / `truncated`) so partial assistant responses survive disconnects/crashes. |
+| Chat deletion | Hard delete — no soft-delete/archive. |
+| Token budget split | Documents: 3,000 tokens (existing, unchanged). History: 1,500 tokens (new). |
+| `POST /chats` rate limit | 10/min/user. |
 
 ---
 
-### T-48: Auth Pages & Email Verification UI ✅
+## T-72.1 — Database Models + Migration
 
-> **Sequencing note:** All forms on these pages must work **without** an authenticated user — specifically the resend verification button. Do NOT gate any call here behind `AuthContext`.
+**Files:** `backend/app/models/chat.py`, `backend/app/models/message.py`, new Alembic revision
 
-- `[x]` **`/register` page**
-  - Zod-validated form: email + password with inline client-side password rules feedback:
-    - ≥ 8 chars, 1 uppercase, 1 lowercase, 1 number, 1 special char
-    - Show per-rule status (✓/✗) as the user types — don't wait for submit.
-  - Call `POST /auth/register`. On `202 Accepted`, show a **confirmation screen** (not a toast) that says "Check your inbox for a verification email."
-  - **Resend flow on confirmation screen:** The confirmation screen must include a "Resend verification email" button that calls `POST /auth/register` again with the same email. (This is the same endpoint — the backend re-sends if unverified.) This button must be present here, not only on `/verify-email`.
-  - Handle `429 RATE_LIMIT_EXCEEDED` with cooldown timer using `Retry-After` header.
+### Why this goes first
+Everything else — service layer, router, frontend — depends on the schema existing. Getting the schema wrong here means a second migration later to fix column types or relationships mid-build, which costs more than spending extra time up front.
 
-- `[x]` **`/login` page**
-  - Zod-validated form: email + password.
-  - Call `POST /auth/login`. On success (`200 OK`):
-    - Store `access_token` in `AuthContext` (in-memory only).
-    - Store `user.id` and `user.email` in `AuthContext`.
-    - Schedule proactive token refresh timer.
-    - Redirect to `/dashboard/documents`.
-  - Handle `403 EMAIL_NOT_VERIFIED` → show "Your email isn't verified yet." + "Resend verification email" button (calls `POST /auth/register` with entered email).
-  - Handle `401 INVALID_CREDENTIALS` → generic "Invalid email or password." (never specific).
-  - Handle `429 RATE_LIMIT_EXCEEDED` → show cooldown timer.
-  - Read `?verified=true` query param on mount → show success toast: "Email verified! You can now log in."
+### `Chat` model
 
-- `[x]` **`/verify-email` page**
-  - **Case 1 — Error from backend redirect:** Read `?error=` query param:
-    - `invalid_token` → "This verification link is invalid or has already been used."
-    - `token_expired` → "This verification link has expired."
-    - Show a "Resend verification email" button (prompt for email, then call `POST /auth/register`).
-  - **Case 2 — No query param at all (direct navigation):** If the user navigates to `/verify-email` with no `?token=` or `?error=` params, show a neutral message: "Check your inbox for a verification link." with a resend option. Do **not** call the backend or show an error.
-  - **Case 3 — Backend 422 (missing token param):** If for some reason the request hits this page after a backend `422`, treat it the same as Case 2 (the backend redirect handles this, so this is a fallback).
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `UUID` | PK, `gen_random_uuid()` default — matches existing `users`/`documents` pattern (T-04) |
+| `user_id` | `UUID` | FK → `users.id`, `ON DELETE CASCADE` — same cascade behavior as `documents` |
+| `title` | `TEXT NOT NULL DEFAULT 'New Chat'` | No DB-level length cap; truncation happens before insert |
+| `document_ids` | `JSONB NOT NULL DEFAULT '[]'` | List of UUID strings. JSON chosen over a native UUID array because SQLAlchemy's JSONB mapping is simpler to work with (`list[str]` in/out, no array-type quirks between asyncpg and the ORM) |
+| `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | |
+| `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | **Must be bumped on every new message**, not just on rename — the sidebar sort is `ORDER BY updated_at DESC`. The message-insert code path in T-72.4 needs to touch the parent `Chat` row too. Flagging now so it isn't forgotten later. |
 
----
+### `Message` model
 
-### T-49: Auth Context & Protected Routes ✅
+| Column | Type | Notes |
+|---|---|---|
+| `id` | `UUID` | PK |
+| `chat_id` | `UUID` | FK → `chats.id`, `ON DELETE CASCADE` |
+| `role` | Postgres native enum (`user`, `assistant`, `system`) | Same approach as `Document.status` — DB rejects garbage values, not just app-layer validation |
+| `content` | `TEXT NOT NULL` | |
+| `token_count` | `INTEGER NOT NULL` | Computed once at write time via `tiktoken`. Stored so T-72.3's history-budgeting walk never re-tokenizes old messages on every request. This is a deliberate denormalization for performance — worth a one-line comment in the model file so a future reader doesn't think it's redundant and remove it. |
+| `status` | Enum (`complete`, `truncated`) | Default `complete` |
+| `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | |
 
-> **Design decision — `user` population on refresh:**
-> `POST /auth/refresh` returns `{ access_token, token_type, expires_in }` only — **no `user` field**.
-> On app mount (session restore via refresh), we do not have the user object.
-> **Chosen approach:** On successful refresh, keep `user` as `null` until a page that needs it fetches it, OR store `{ id, email }` in a `SameSite=Strict` non-httpOnly cookie that the frontend sets itself after login. The simpler MVP approach: store user in `sessionStorage` only (acceptable since it doesn't contain a token, only non-secret user info), restore from `sessionStorage` on mount alongside the refresh call.
-> **If a `GET /auth/me` endpoint is added to the backend later**, switch to that.
+### Indexes
 
-- `[x]` Create `src/contexts/AuthContext.tsx` holding:
-  ```ts
-  interface AuthState {
-    user: { id: string; email: string } | null;
-    accessToken: string | null;
-    isLoading: boolean;
-  }
-  ```
-- `[x]` Store `access_token` **only in React state** — never localStorage, sessionStorage, or cookies.
-- `[x]` Store `user` object in `sessionStorage` (non-sensitive) to survive page refresh.
-- `[x]` **Session restore on app mount:**
-  1. Set `isLoading = true`.
-  2. Call `POST /auth/refresh` with `credentials: 'include'`.
-  3. On `200`: save `access_token` in state, restore `user` from `sessionStorage`, schedule refresh timer.
-  4. On `401`: clear all state, redirect to `/login`.
-- `[x]` **Proactive token refresh timer:** Call `/auth/refresh` at `(expires_in - 60)` seconds.
-  - **Multi-tab race condition (note / defer for post-MVP):** If two tabs are open, both will attempt refresh simultaneously. The token is one-time-use — the second tab's refresh will get `401` and log the user out. Standard mitigation is `BroadcastChannel` to sync the new token across tabs. **For MVP: defer this.** Document that users with multiple tabs open may experience unexpected logouts; fix before v1.1.
-- `[x]` **Logout:** Call `POST /auth/logout`, clear `accessToken` from state, clear `user` from `sessionStorage`, redirect to `/login`.
-- `[x]` Create `useAuth()` hook that reads from `AuthContext`.
+- `idx_chats_user_id_updated_at ON chats(user_id, updated_at DESC)` — composite, not two single-column indexes, because it matches the sidebar's exact query pattern: `WHERE user_id = ? ORDER BY updated_at DESC`.
+- `idx_messages_chat_id_created_at ON messages(chat_id, created_at)` — history hydration is always "all messages for this chat, in order."
+
+### Migration mechanics
+
+Same gotcha as T-04: create enums and tables in one revision, write a clean `downgrade()` that drops tables *before* enums (Postgres won't let you drop an enum type while a column still references it). Test `alembic downgrade -1` actually works before moving on.
+
+### Open decision to make here, not later
+
+Should `Chat.document_ids` allow an empty list at the DB level, or should the constraint live entirely in the service layer? **Recommendation:** DB allows it, service layer enforces non-empty on create. Keeps the migration simple and validation logic in one place (Python), not split across two layers.
 
 ---
 
-### T-50: Document Upload UI (`/dashboard/upload`) ✅
+## T-72.2 — Chat CRUD Service + Router
 
-- `[x]` Drag-and-drop file picker using `react-dropzone`.
-  - Accept only `.pdf`, `.txt`, `.md` extensions.
-  - Show accepted/rejected state visually.
-- `[x]` **Client-side pre-validation before upload:**
-  - File size ≤ 50 MB (reject immediately with inline error).
-  - File extension in allowed list.
-- `[x]` Upload via `POST /documents/upload` (`multipart/form-data`) with Bearer token.
-- `[x]` Handle all upload error responses:
-  - `422 FILE_VALIDATION_FAILED` + `reason: "file_too_large"` → "File must be under 50 MB."
-  - `422 FILE_VALIDATION_FAILED` + `reason: "unsupported_mime"` → "Only PDF, TXT, and MD files are supported."
-  - `422 FILE_VALIDATION_FAILED` + `reason: "invalid_magic_bytes"` → "This file appears to be corrupt or renamed. Please check the file and try again."
-  - `429 RATE_LIMIT_EXCEEDED` → show cooldown timer from `Retry-After` header.
-  - `429 DAILY_QUOTA_EXCEEDED` → "You've reached your daily document limit. Try again tomorrow."
-  - **`503` (Redis/queue unavailable)** → "Upload queue is temporarily unavailable. Please try again shortly."
-- `[x]` On success (`202 Accepted`): navigate to `/dashboard/documents` and begin polling for the new document's status.
+**Files:** `backend/app/services/chats.py`, `backend/app/routers/chats.py`
 
----
+### Why this is safe to build before touching `/query/ask`
+Nothing here is called by existing code. You can ship this entire step, deploy it, and the live app behaves identically to today — `/query/ask` still takes `document_ids` directly. This is the "build with zero blast radius" step.
 
-### T-51: Document List & Status UI (`/dashboard/documents`) ✅
+### Service layer — what lives here vs. the router
 
-- `[x]` Fetch paginated document list via `GET /documents` on mount.
-- `[x]` Display each document with status badge: `PENDING` / `PROCESSING` / `READY` / `FAILED`.
-- `[x]` **Polling for non-terminal statuses (exact strategy from API reference):**
-  - Poll `GET /documents/{document_id}/status` every **2s for the first 30s**.
-  - Then switch to every **5s**.
-  - **Hard timeout at 5 minutes:** Stop polling and show: "Processing is taking longer than expected. Please check back later or try re-uploading."
-- `[x]` For `FAILED` documents: show `error_message` from the API response and offer "Delete & Re-upload" option.
-- `[x]` **Delete document** via `DELETE /documents/{document_id}`:
-  - On `204 No Content`: remove document from list.
-  - **On `502` (S3 deletion failure):** Show toast "Deletion failed due to a storage error. Please try again." The document remains in the list — do **not** remove it from UI state (API guarantees DB integrity). *(previously missing)*
-  - On `404`: show "Document not found." and remove from list.
-- `[x]` Link `READY` documents to `/dashboard/chat?doc={document_id}`.
+Per the established thin-router pattern: the router parses the request, calls the service, returns the response. All logic lives in `services/chats.py`.
 
----
+**`create_chat(user_id, document_ids, db) -> Chat`**
+- Validates `document_ids` is non-empty.
+- Validates every ID is owned by `user_id` AND has `status == READY`. This is the same check `/query/ask` already does today (T-37's query validation) — **extract it into a shared function** both `chats.py` and `query.py` call, rather than reimplementing it. Prevents the two checks drifting out of sync later.
+- Inserts the row, returns it.
+- Raises a typed exception (e.g. `InvalidDocumentSelectionError`) on failure — the router translates that to the right HTTP status. Never raise `HTTPException` directly from the service, matching the centralized exception handler pattern already in use.
 
-### T-52: Chat / Q&A UI — SSE Streaming (`/dashboard/chat`) ✅
+**`list_chats(user_id, limit, offset, db) -> list[Chat]`**
+- Paginated, owned-only filter baked into the query itself — no path where a user can list someone else's chats by manipulating pagination params.
 
-- `[x]` **Document selector:** Multi-select of user's `READY` documents only. Max 10 selections enforced with inline feedback.
-- `[x]` **Question input:**
-  - Max 1000 characters.
-  - **Live character counter** (e.g. "247 / 1000") visible below the input. *(previously missing)*
-  - Disable submit when input is empty or over limit.
-- `[x]` Call `POST /query/ask` with headers: `Authorization: Bearer <token>`, `Accept: text/event-stream`.
-- `[x]` **Handle pre-stream HTTP errors (before stream opens):**
-  - `404 DOCUMENT_NOT_FOUND` → "One or more selected documents could not be found."
-  - `409 DOCUMENT_NOT_READY` → "A selected document is still processing. Please wait."
-  - `429 DAILY_QUERY_QUOTA_EXCEEDED` → "You've reached your daily query limit. Try again tomorrow."
-  - `503 AI_SERVICE_UNAVAILABLE` → "The AI service is temporarily unavailable. Please try again shortly."
-  - Any other `4xx/5xx` → generic "Something went wrong. Please try again."
-- `[x]` **SSE stream reading — use the buffer-accumulation pattern (non-negotiable):**
-  ```ts
-  // CORRECT: accumulate buffer and split on \n\n
-  // Naive line-by-line split WILL break when SSE events span multiple TCP chunks.
-  let buffer = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const parts = buffer.split('\n\n');
-    buffer = parts.pop()!; // keep the incomplete trailing part
-    for (const part of parts) {
-      if (!part.startsWith('data: ')) continue;
-      const data = part.slice(6);
-      // ... handle data
-    }
-  }
-  ```
-- `[x]` **Handle SSE stream events:**
-  - `data: {"type": "token", "content": "Hello"}` → append to chat bubble.
-  - `data: {"error": "AI_SERVICE_UNAVAILABLE", "message": "..."}` → show inline error inside chat bubble (e.g., "[Error] AI service went down mid-response.") and close stream cleanly.
-  - `data: [DONE]` → close stream cleanly.
+**`get_chat_with_messages(chat_id, user_id, db) -> ChatDetail`**
+- Ownership check first — if `chat.user_id != user_id`, raise a "not found" exception so the router returns `404`, not `403`. Same enumeration-prevention logic as document ownership (T-27): a user probing random chat UUIDs should learn nothing.
+- Loads all messages, ordered by `created_at`.
+- Computes `missing_document_ids` here — diff `chat.document_ids` against a live query of the `documents` table for ones that are owned, exist, and aren't deleted. **This is computed on every read, not stored** — storing it would mean updating chat rows whenever documents are deleted, which is more moving parts for no benefit, since document deletion happens independently of any chat.
+
+**`rename_chat(chat_id, user_id, new_title, db)`**
+- Ownership check, update `title`, bump `updated_at`.
+
+**`delete_chat(chat_id, user_id, db)`**
+- Ownership check, delete. Messages cascade via the FK — a single DELETE statement, no manual cleanup needed.
+
+### Router — the rate limiter detail
+
+`POST /chats` gets its own Redis sliding-window dependency at **10/min/user**, reusing the exact mechanism from T-42 but with a new key namespace: `ratelimit:chat_create:{user_id}`. This reuses the existing `RateLimiter` class/dependency with different params — not a new rate-limiting system. Worth double-checking the T-42 implementation supports per-*user* (not just per-IP) limiting, since login/register are IP-based but this one needs to key off the authenticated user.
+
+### Testing shape
+
+Integration tests against real Postgres (per existing pattern — not SQLite, to avoid the UUID/timezone quirks already documented in project learnings). Specifically test:
+- Creating a chat with someone else's document ID → rejected.
+- Creating a chat with a non-READY document → rejected.
+- `GET /chats/{id}` for a chat you don't own → `404`, not `403`.
+- `missing_document_ids` correctly reflects a deleted document without the chat row itself being updated.
 
 ---
 
-### T-53: Global UI Elements & Polish ✅
+## T-72.3 — Prompt Builder: History Budgeting
 
-- `[x]` **Global React Error Boundary** wrapping the full app — show a fallback UI instead of a blank crash.
-- `[x]` **Toast notification system** (`sonner` / `apiToast` helper):
-  - Map every named `ApiError` code to a user-friendly message (including `ACCOUNT_INACTIVE`, `502` fallback).
-  - Use `Retry-After` header to show cooldown timers on `429` responses natively via the helper.
-- `[x]` Ensure all pages are **responsive** (mobile, tablet, desktop).
-- `[x]` **Accessibility:** Semantic HTML5, ARIA labels on interactive elements, keyboard navigation, colour contrast ≥ 4.5:1.
+**Files:** `backend/app/services/prompt.py` (extend, don't rewrite)
 
----
+### Why this is isolated from the DB and from query.py
+It's a pure function — `list[Message-like objects]` in, `string` out. No async, no DB session, no OpenAI call. This makes it the cheapest thing to get exhaustively right with unit tests, and bugs caught here never reach production streaming.
 
-## Phase 11 — Docker + Production
+### The algorithm
 
-- `[ ]` **T-54: Dockerize FastAPI** (Backend)
-- `[ ]` **T-55: Dockerize RQ worker** (Backend)
-- `[ ]` **T-56: Production Docker Compose**
-  - `[ ]` Wire up `nginx` service to serve static Next.js `out/` directory.
-- `[ ]` **T-57: Production Nginx config**
-  - `[ ]` Static frontend serving (`root /usr/share/nginx/html;`, `try_files $uri $uri.html /index.html;`).
-  - `[ ]` SSE proxy config for `/api/query/ask`: `proxy_buffering off`, `proxy_read_timeout 300s`, `proxy_http_version 1.1`.
-- `[ ]` **T-58: GitHub Actions CI Pipeline**
-  - `[ ]` Frontend jobs: `pnpm install --frozen-lockfile`, `pnpm type-check`, `pnpm lint`, `pnpm test`.
-- `[ ]` **T-59: GitHub Actions CD Pipeline** (Backend-led, deploys built frontend static files)
+```
+function build_history_block(messages, budget=1500):
+    messages are already ordered oldest→newest from the DB
+    reverse to walk newest→oldest
+    accumulated_tokens = 0
+    selected = []
+    for message in reversed(messages):
+        if accumulated_tokens + message.token_count <= budget:
+            selected.insert(0, message)   # maintain chronological order in output
+            accumulated_tokens += message.token_count
+        elif selected is empty (this is the most recent message and it alone exceeds budget):
+            truncate message.content to fit remaining budget, using tiktoken to cut at a token boundary
+            selected.insert(0, truncated_message)
+            break
+        else:
+            break   # older messages don't fit, stop here
+    return format selected messages as the conversation block
+```
 
----
+### Why truncate the most recent message instead of dropping it
 
-## Phase 12 — Testing & Launch
+If you drop it, a follow-up like "what about the second point you mentioned" has nothing to anchor to — the LLM sees the question but not what it's referencing, and either hallucinates or asks the user to repeat themselves, defeating the entire purpose of stateful chat.
 
-- `[ ]` **T-60: Backend unit tests**
-- `[ ]` **T-61: Backend integration tests**
-- `[x]` **T-68: Walkthrough and wrap-up**
-- `[ ]` **T-63: Production smoke test + launch checklist**
-  - `[ ]` End-to-end smoke test: Register → Verify email → Login → Upload PDF → Poll to READY → Ask question → Assert non-empty streamed answer → Logout.
-  - `[ ]` Execute final security and launch checklist (see `pdftalk_mvp_tasklist.md` T-63).
+**Truncation direction is a real choice, not arbitrary:** keep the end of the most recent assistant message and the full user message — since the user's question is almost always short, and the assistant's prior answer is what tends to run long. Decide this explicitly when writing the function rather than picking by default.
 
-- `[x]` **T-64: Password_resets table + Alembic migration**
-  - `[x]` Add `password_resets` table to the schema. Columns: `id` UUID PK, `user_id` UUID FK→users CASCADE, `token_hash` TEXT UNIQUE NOT NULL, `expires_at` TIMESTAMPTZ NOT NULL, `created_at` TIMESTAMPTZ DEFAULT NOW(). Add index on `token_hash` and on `user_id`.
-  - `[ ]` Write Alembic migration. (Failed due to local DB connection timeout. Must be run when DB is up: `uv run alembic revision --autogenerate -m "Add password_resets table"`)
-  - `[x]` Add `PasswordReset` SQLAlchemy model in `backend/app/models/auth.py` (alongside RefreshToken / EmailVerification).
-- `[x]` **T-65: Password reset service**
-  - `[x]` Create `backend/app/services/password_reset.py` with three functions:
-    - `initiate_password_reset(email: str, db)`: looks up user by email_lower; if not found, returns silently; if found but is_verified=False, enqueues verification email; if found and verified, deletes any existing reset tokens, generates raw token, stores SHA-256 hash with 1 hour expiry, enqueues reset email via RQ.
-    - `send_password_reset_email(user_id, raw_token)`: RQ-compatible sync function; builds reset URL, sends via Resend. Add HTML + plain-text templates to `app/utils/email.py`.
-    - `consume_reset_token(raw_token: str, new_password: str, db)`: hashes token, looks up in DB, validates not expired, validates password strength, calls hash_password(), updates user.password_hash, deletes the reset token row, deletes all refresh tokens for that user (session invalidation). Raises `InvalidTokenError`.
-- `[x]` **T-66: Forgot-password + reset-password endpoints**
-  - `[x]` Add to `backend/app/routers/auth.py`:
-    - `POST /auth/forgot-password`: rate-limited at 3/hr/IP (`_reset_limiter`). Body: `{ email }`. Calls `initiate_password_reset()`. Always returns 202 `{ message: "If an account with that email exists, you'll receive an email shortly." }`.
-    - `POST /auth/reset-password`: no auth required. Body: `{ token, new_password }`. Validates password strength. Calls `consume_reset_token()`. On success returns 200 `{ message: "Password updated. Please log in." }`. On error returns 400 `{ code: "INVALID_OR_EXPIRED_TOKEN" }`.
-  - `[x]` Discuss / evaluate adding `GET /auth/me`.
-- `[x]` **T-67: Frontend: forgot-password + reset-password pages**
-  - `[x]` Update `src/lib/auth.api.ts`: add `forgotPassword(email)` and `resetPassword(token, newPassword)`.
-  - `[x]` Create `src/app/(auth)/forgot-password/page.tsx`: Zod form with email. Shows uniform confirmation message.
-  - `[x]` Create `src/app/(auth)/reset-password/page.tsx`: reads `?token=` from URL. Zod form with newPassword + confirmPassword. On success redirect to login. On `INVALID_OR_EXPIRED_TOKEN` show inline error with link back to forgot-password. On missing token redirect to forgot-password.
-  - `[x]` Add "Forgot your password?" link to the login page pointing to `/forgot-password`.
-- `[ ]` **T-68: Password reset integration tests**
-  - `[ ]` Test `POST /auth/forgot-password`: unknown email, unverified email, verified email, rate limit exceeded.
-  - `[ ]` Test `POST /auth/reset-password`: valid token (login possible, old sessions invalidated), expired token, used token, invalid format, weak password.
-  - `[ ]` Confirm session invalidation logic works correctly.
+### Where this plugs into the existing prompt builder
+
+T-37's `services/prompt.py` already caps document context at 3,000 tokens. This is a **second, independent function** in the same file — `build_history_block()` — not a merge into one shared token pool. They're separate concerns:
+- Document context answers "what does the source material say."
+- History answers "what have we already discussed."
+
+Keeping them as separate capped blocks means a long conversation never eats into the budget reserved for grounding the answer in actual PDF content — which is the whole point of RAG. You don't want the model losing document grounding just because the conversation got long.
+
+### Testing
+
+Construct fake message lists with known token counts (mock `token_count` directly, no real `tiktoken` calls needed for this layer), assert exactly which messages survive the budget cut at various total lengths, and specifically test the single-oversized-message truncation path since it's the trickiest branch.
 
 ---
 
-## Open Design Decisions
+## T-72.4 — `/query/ask` Rewrite
 
-| # | Decision | Status | Chosen Approach |
-|---|---|---|---|
-| 1 | How to populate `user` in AuthContext after `POST /auth/refresh` (which returns no user field) | **Resolved for MVP** | Store `{ id, email }` in `sessionStorage` after login; restore on mount alongside refresh call. Revisit if `GET /auth/me` is added. |
-| 2 | Multi-tab token refresh race condition (one-time-use refresh token) | **Deferred to post-MVP** | Both tabs attempt refresh; second tab gets `401` and forces re-login. Fix with `BroadcastChannel` in v1.1. |
-| 3 | Resend verification button must work without auth | **Resolved** | `POST /auth/register` requires no auth token. All pages in T-48 call it directly — no AuthContext dependency. |
+**Files:** `backend/app/routers/query.py`, `backend/app/services/query_validation.py` (modify)
+
+### Why this is sequenced last among backend work
+
+This is the only step touching code that's live in production today and working. Everything before it (T-72.1–72.3) is net-new and additive — if the project stopped here, nothing breaks. This step is where risk concentrates, so by the time it's reached, chats exist and are tested, and history-budgeting is tested. This step becomes "wire two known-good things together" rather than "build three new things and hope they compose correctly under streaming."
+
+### 1. Schema change
+
+Request body goes from `{document_ids, question}` to `{chat_id, question}`. This is a **breaking API change** — any existing frontend code or tests hitting the old shape need updating in lockstep. Not a backend-only change in practice, even though it's filed under backend work.
+
+### 2. Validation rewrite — the real behavioral nuance
+
+**Old behavior (T-37):** all `document_ids` in the request must be owned + READY, or the whole request fails.
+
+**New behavior:** fetch `chat.document_ids`, then filter:
+- Not owned anymore (shouldn't happen since ownership was checked at chat creation, but defensive check anyway)
+- Doesn't exist anymore (deleted) — filter out
+- Exists but not READY (shouldn't happen if READY is a genuinely terminal state — worth confirming this assumption holds before relying on it)
+
+Then count what remains:
+- **Zero remain** → `409 {"error": "ALL_DOCUMENTS_DELETED", ...}`. New error code — needs an entry in the centralized exception handler and a corresponding mapping in the frontend's error-code-to-message system (T-53's toast mapping).
+- **One or more remain** → proceed, compute `missing_document_ids` as the diff between the original `chat.document_ids` and the filtered set, so the frontend can show *which* documents vanished.
+
+### 3. Pre-stream message save
+
+Before retrieval/embedding/LLM call starts, insert the user's `Message` row (`role=user, status=complete`). This means even if everything after this point fails — OpenAI is down, retrieval throws — the user's question is preserved in history. Small but real durability win: nobody wants to retype a question because the server 503'd on the same request.
+
+### 4. SSE shape change — the meta event
+
+Before any token streaming begins, emit one extra SSE event:
+
+```
+event: meta
+data: {"missing_document_ids": ["..."]}
+
+```
+
+followed by the existing `data: {token}` stream and `data: [DONE]` terminator. This is additive to the existing SSE contract — old token/done events are unchanged, there's just one new event type the frontend needs to listen for.
+
+### 5. The durability problem — the trickiest part of this task
+
+**The core issue:** streaming responses terminate in three ways:
+1. Clean completion (`[DONE]` sent)
+2. Client disconnect (user closes tab mid-answer)
+3. Server-side error mid-stream (OpenAI errors out after sending some tokens)
+
+In all three cases, *some* text was already generated and sent to the client. If the `Message` row is only written in the happy path (after `[DONE]`), the other two cases lose that text entirely — the user saw an answer on screen, refreshes, and it's gone.
+
+**The fix is structural:** wrap the token-generator consumption in a `try/finally`, where the `finally` block always writes whatever text was accumulated so far, with `status` set based on how it terminated:
+- Reached `[DONE]` normally → `status=complete`
+- Anything else (exception, detected disconnect) → `status=truncated`
+
+This mirrors the existing pattern for `job_logs` — never let a failure path silently lose state, always write what you have.
+
+**The mechanical challenge:** FastAPI's `StreamingResponse` consumes an async generator, and detecting "the client disconnected" inside that generator requires either periodically checking `request.is_disconnected()` or catching the specific exception Starlette raises on disconnect. This is the one part of this entire task worth prototyping carefully and testing with an actual simulated disconnect (a test that opens the stream and closes the connection after N tokens) rather than reasoning about it abstractly — async generator cleanup semantics in Python have sharp edges.
+
+### 6. `updated_at` bump
+
+Both the user-message save and the assistant-message save need to touch `chat.updated_at`, otherwise sidebar ordering (T-72.2's `list_chats`) goes stale the moment a chat is actively used. Easy to forget since it's a side effect on a different table than the one being directly written to.
+
+### 7. Metrics
+
+- `messages_total{role="user"}` — increments at the pre-stream save
+- `messages_total{role="assistant"}` — increments at the post-stream save, regardless of `complete` vs. `truncated` (still want to count it)
+- `chat_query_blocked_total{reason="all_documents_deleted"}` — increments on the 409 path
+- `queries_total` (already existing) — stays exactly where it is today
+
+### Testing — four distinct scenarios
+
+1. **Normal flow:** chat with all documents intact, question asked, full streamed response, `Message` rows for both user and assistant exist with `status=complete`.
+2. **Partial-missing flow:** one of two documents deleted, query still succeeds, `meta` event contains the missing ID, retrieval only used the remaining document.
+3. **All-missing flow:** both documents deleted, `409` returned, decide whether the user's `Message` row still gets created or not, metric incremented.
+4. **Simulated disconnect:** start the stream, forcibly close the connection partway through, then query the DB separately and assert a `Message` row exists with `status=truncated` and partial content matching what was sent before the cut.
+
+---
+
+## T-72.5 — Frontend: API Client + Chat State
+
+**Files:** `frontend/src/lib/api.ts` (extend), new `frontend/src/lib/chats.api.ts`
+
+### Why this comes after the backend is integration-tested, not in parallel
+
+Building UI against an API contract that might still shift (because T-72.4 surfaced something unexpected) wastes rework. Once T-72.4's tests pass, the contract is stable and this step becomes mechanical.
+
+### `chats.api.ts`
+
+Five typed functions mirroring the five endpoints — `listChats()`, `createChat(documentIds)`, `getChat(chatId)`, `renameChat(chatId, title)`, `deleteChat(chatId)` — following the existing `ApiError` pattern from `lib/api.ts` (T-47), so a failed request throws a typed error the UI can branch on, not a raw fetch rejection.
+
+### The more involved part: updating the existing `/query/ask` client call
+
+Today, this function takes `document_ids` and `question`, opens the SSE stream, and parses `data:` lines. It now needs to:
+- Take `chat_id` instead of `document_ids`.
+- **Parse SSE event types, not just `data:` lines.** The existing parser (from T-39's frontend pattern) only looks for lines starting with `data:`. It needs extending to also recognize `event: meta` lines and route that payload to a different callback than the token-stream callback. This is a real parser change, not just a parameter rename — treat it as its own small unit of work with its own test (feed it a fake SSE byte stream containing a meta event + token events + `[DONE]`, assert both callbacks fire with the right payloads in the right order).
+
+### Done-when
+
+No visible UI yet at this step — purely the typed client layer. "Done" means it compiles, is typed against the real response shapes (no `any`), and has a unit test for the SSE parsing change specifically, since that's the part most likely to have an off-by-one bug in line-splitting logic.
+
+---
+
+## T-72.6 — Frontend: Sidebar + Chat Window Integration
+
+**Files:** `frontend/src/components/chat/ChatSidebar.tsx`, modified dashboard/chat page
+
+### Sidebar component
+
+- Fetches `listChats()` on mount, renders title + relative timestamp (e.g. "2h ago") per row.
+- Highlights whichever chat matches the currently-active `chat_id` in state.
+- **"New Chat" button does not call `POST /chats`.** It only clears local state (`activeChatId = null`, message list = empty, document selection reset or kept, per UX preference). This avoids a real bug: if "New Chat" eagerly created a row, a user clicking it three times while deciding what to ask ends up with three empty "New Chat" rows cluttering the sidebar forever (since `DELETE` is hard-delete and nothing auto-cleans empty chats). Deferring creation until the first actual message is sent avoids this class of orphan entirely.
+
+### Main chat view changes
+
+- State needs an explicit `activeChatId: string | null`, separate from the message list and document selection — these were previously coupled (documents picked per-query) and now need to be three independent pieces of state, set together only at the moment a chat is created or loaded.
+- **Send flow when `activeChatId` is null:** call `createChat(selectedDocumentIds)` first, get back a `chat_id`, then immediately start the SSE stream using that new ID. The send button's click handler now has two sequential async steps instead of one. Worth handling the case where chat creation succeeds but the immediately-following stream fails (rare, but the chat now exists with zero messages — the UI naturally recovers since `listChats()` will include it, letting the user click back in).
+- **Send flow when `activeChatId` exists:** skip straight to streaming, no creation call.
+- **On chat select from sidebar:** `getChat(chatId)` → populate message list, set `activeChatId`, render `missing_document_ids` (if any) as a small persistent banner/badge in the chat header — not a toast, since toasts disappear and this is a standing condition the user should see for as long as they're in that chat.
+- **Handling the `409 ALL_DOCUMENTS_DELETED` case specifically:** must be caught before falling into the generic `ApiError`-to-toast mapping (T-53) — a generic "something went wrong" toast is the wrong UX here. The user needs to understand why (all documents gone) and what to do (delete the chat). This is a dedicated UI state: a full-width message in place of the chat window, with a "Delete this chat" button wired to `deleteChat()`.
+- **Rename UI:** inline-editable title (click to edit, blur/enter to save) is the lowest-friction pattern and avoids a modal for something this small — wired to `renameChat()`.
+
+### Manual verification checklist
+
+1. Create new chat → send message → streams correctly → message appears in sidebar with truncated title.
+2. Refresh page → chat history loads, correct messages in correct order.
+3. Ask a follow-up referencing the previous answer → confirm the model actually has context (not just that it doesn't error).
+4. Delete a document attached to an active chat → reload that chat → confirm the missing-doc badge appears and the chat still answers using the remaining document.
+5. Delete *all* documents attached to a chat → confirm the dedicated error state renders, not a generic toast → delete the chat → confirms it's gone from sidebar.
+6. Click "New Chat" multiple times without sending anything → confirm the sidebar doesn't accumulate empty entries.
+7. Rename a chat → refresh → confirm the rename persisted and a new message doesn't overwrite it. (This is really testing T-72.4's "only auto-title if still `New Chat`" guard, which lives in the backend message-save path — worth noting which layer actually owns the behavior being verified, even though the test is run through the UI.)
+
+---
+
+## T-72.7 — Metrics + Alerting Wiring
+
+**Files:** `backend/app/utils/metrics.py` (extend); no new Grafana dashboard required yet
+
+### Why this is low-priority and parallelizable
+
+Nothing depends on it, and nothing breaks without it — purely diagnostic visibility, not functionality. This is the kind of task that's easy to skip under time pressure, which is exactly why it's worth scheduling explicitly rather than leaving it as an implicit "do it whenever" — implicit low-priority tasks are the ones that silently never happen.
+
+### The three metrics
+
+| Metric | Labels | Why |
+|---|---|---|
+| `chats_created_total` | none | Simple counter — no per-user label, consistent with the existing cardinality warning already documented for `queries_total` |
+| `messages_total` | `role` (`user`/`assistant`) | Small, fixed cardinality (2–3 values); operationally useful to see the ratio drift if, say, assistant saves silently start failing while user saves keep succeeding |
+| `chat_query_blocked_total` | `reason` | Currently just `all_documents_deleted`, but structured so more reasons can be added later via the label, not a schema change |
+
+### Registration
+
+Module-level singletons in `app/utils/metrics.py`, imported and never instantiated inside a function — consistent with the existing rule about avoiding double-registration `ValueError`s.
+
+### Dashboard/alerting — deferred, correctly
+
+No new Grafana panel or Alertmanager rule in this task. At current scale, these are numbers to check occasionally, not numbers that need to page anyone at 2am. If `chat_query_blocked_total` starts climbing in a way that suggests a real problem (e.g. a bug deleting documents that shouldn't be deleted), that signal would show up on existing dashboards or the admin stats page first — a dedicated alert rule can be added later if it proves warranted, rather than speculatively now.
+
+---
+
+## Suggested Build Order
+
+1. **T-72.1 → T-72.2** first, in isolation. Nothing else depends on `query.py` yet, so this delivers a fully working, testable chat CRUD layer with zero risk to the live `/query/ask` endpoint.
+2. **T-72.3** next, also isolated. Pure function, no risk.
+3. **T-72.4** last among backend work, deliberately — the only step touching already-working production code. By this point chats exist and history budgeting is tested, so this step is "wire two known-good things together," not "build three things at once under risk."
+4. **Frontend (T-72.5 → T-72.6)** only after T-72.4 is integration-tested. Building UI against an unstable contract wastes time.
+5. **T-72.7** can run in parallel with T-72.2 onward — low-risk, low-priority, slot in whenever convenient.
+
+---
+
+## Decisions Deferred to Build Time (Not Now)
+
+- Exact truncation length for auto-titles (50 characters was a working suggestion, not yet confirmed).
+- Whether `ChatSidebar` paginates or loads-all — depends on real usage volume once the feature ships; don't over-engineer ahead of data.
+- Truncation direction for the single-oversized-message case in T-72.3 (keep start vs. end of content) — flagged as a real choice above, decide explicitly when writing the function.

@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from app.models.document import Document, DocumentStatus
 from app.models.chunk import Chunk
+from app.models.chat import Chat
 
 pytestmark = pytest.mark.integration
 
@@ -45,6 +46,10 @@ async def test_full_query_pipeline(
         embedding=[0.1] * 1536  # fake embedding matching text-embedding-3-small dimension
     )
     db.add(chunk)
+    
+    chat = Chat(user_id=verified_user.id, document_ids=[str(doc_id)], title="Test Chat")
+    db.add(chat)
+    
     await db.commit()
 
     from app.services.retrieval import RetrievedChunk
@@ -70,7 +75,7 @@ async def test_full_query_pipeline(
         
         resp = await async_client.post(
             "/query/ask",
-            json={"document_ids": [str(doc_id)], "question": "What is the main feature?"},
+            json={"chat_id": str(chat.id), "question": "What is the main feature?"},
             headers=auth_headers
         )
         
@@ -115,11 +120,15 @@ async def test_query_document_not_ready(
         chunk_count=0
     )
     db.add(doc)
+    
+    chat = Chat(user_id=verified_user.id, document_ids=[str(doc_id)], title="Test Chat")
+    db.add(chat)
+    
     await db.commit()
 
     resp = await async_client.post(
         "/query/ask",
-        json={"document_ids": [str(doc_id)], "question": "Is it ready?"},
+        json={"chat_id": str(chat.id), "question": "Is it ready?"},
         headers=auth_headers
     )
     # T-39: Should raise DocumentNotReadyError -> 409
@@ -132,7 +141,7 @@ async def test_query_document_not_found(
 ):
     resp = await async_client.post(
         "/query/ask",
-        json={"document_ids": [str(uuid.uuid4())], "question": "Are you there?"},
+        json={"chat_id": str(uuid.uuid4()), "question": "Are you there?"},
         headers=auth_headers
     )
     # T-39: Should raise DocumentNotFoundError -> 404
@@ -149,7 +158,7 @@ async def test_query_quota_exceeded(
     with patch("app.routers.query.check_and_increment_query_usage", side_effect=DailyQueryQuotaExceededError):
         resp = await async_client.post(
             "/query/ask",
-            json={"document_ids": [str(uuid.uuid4())], "question": "Quota test"},
+            json={"chat_id": str(uuid.uuid4()), "question": "Quota test"},
             headers=auth_headers
         )
         assert resp.status_code == 429

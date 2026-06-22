@@ -107,3 +107,15 @@ stream_errors_total = Counter(
     "SSE stream errors",
     ["error_code"],  # "STREAM_TIMEOUT" | "DAILY_QUOTA_EXCEEDED" | "AI_SERVICE_UNAVAILABLE" | "STREAM_ERROR"
 )
+
+messages_total = Counter(
+    "pdftalk_messages_total",
+    "Total messages saved to the database",
+    ["role"],  # "user" | "assistant"
+)
+
+chat_query_blocked_total = Counter(
+    "pdftalk_chat_query_blocked_total",
+    "Times a chat query was blocked",
+    ["reason"],  # "all_documents_deleted"
+)
