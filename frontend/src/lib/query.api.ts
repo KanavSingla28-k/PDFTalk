@@ -147,13 +147,20 @@ export async function streamAnswer(
           return;
         }
 
-        // Terminal error event (data is a JSON object)
+        // JSON payload (could be sources or terminal error)
         if (data.startsWith('{')) {
           try {
-            const errorBody = JSON.parse(data) as { error?: string; message?: string };
-            const code = errorBody.error ?? ERROR_CODES.UNKNOWN;
+            const parsed = JSON.parse(data) as { type?: string; error?: string; message?: string };
+            
+            // Backend sends source citations at the end of the stream
+            if (parsed.type === 'sources') {
+              // TODO: emit 'sources' event if UI needs to display citations
+              continue;
+            }
+
+            const code = parsed.error ?? ERROR_CODES.UNKNOWN;
             const message =
-              errorBody.message ??
+              parsed.message ??
               ERROR_MESSAGES[code] ??
               ERROR_MESSAGES[ERROR_CODES.UNKNOWN];
             onEvent({ type: 'error', code, message });
