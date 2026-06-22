@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 # Alembic compares Base.metadata against the live DB to generate diffs.
 # If a model isn't imported here, Alembic won't know the table exists
 # and will generate a DROP TABLE migration for it.
-from app.db.Base import Base  # noqa: F401 — side-effect import populates metadata
+from app.models import Base  # noqa: F401 — side-effect import populates metadata
 
 # --- Alembic config object ---
 config = context.config
