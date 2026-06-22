@@ -1,0 +1,14 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-orphaned-upload-objects",
+      "Status": "Enabled",
+      "Filter": {
+        "Prefix": ""
+      },
+      "Expiration": {
+        "Days": 1
+      }
+    }
+  ]
+}

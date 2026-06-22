@@ -200,6 +200,7 @@ async def initiate_upload_endpoint(
 This replaces the "then enqueue RQ" part of the old flow:
 - Fetch the DB row by `document_id`, verify ownership
 - Call `s3_client.head_object(s3_key)` to confirm the file actually landed in S3 (prevents fake confirms)
+- **Read `ContentLength` from `head_object()` and compare against `doc.file_size_bytes` (the client-declared size).** If the real size deviates by more than 10%, delete the S3 object, mark the document FAILED, and return 409. This closes the payload-substitution attack described in the security note below.
 - Transition status `PENDING_UPLOAD → PENDING`
 - Enqueue RQ ingest job
 - Return `ConfirmUploadResponse`
@@ -215,6 +216,32 @@ async def confirm_upload_endpoint(
 ```
 
 > **Why `head_object`?** Without this check, a malicious user could call `/confirm-upload` with a fake `document_id` for an object that was never uploaded, causing the worker to crash trying to download from S3. The `HeadObject` call is a lightweight metadata-only S3 request (no bytes transferred) that proves the object exists.
+
+#### ⚠️ Security Note: Payload-Substitution Attack & ContentLength Verification
+
+**The attack vector:**
+A user can call `POST /documents/initiate-upload` with `file_size_bytes=2_000_000` (2 MB), receive a presigned URL, then `PUT` a 500 MB video to that URL. S3 only validates the `Content-Type` header against the signature — it does **not** enforce `Content-Length`. The `head_object()` existence check alone would confirm the giant file as valid. Quota and storage limits would then be computed off the *claimed* 2 MB, not the real 500 MB.
+
+**The fix (implemented in `confirm_upload()`):**
+After `head_object()` succeeds, the service reads `ContentLength` (the authoritative S3-measured size) and computes:
+
+```python
+_CONFIRM_SIZE_TOLERANCE = 0.10  # 10 %
+
+actual_size = head["ContentLength"]
+claimed_size = doc.file_size_bytes          # set at initiate-upload time
+delta = abs(actual_size - claimed_size) / claimed_size
+
+if delta > _CONFIRM_SIZE_TOLERANCE:
+    s3_client.delete_object(s3_key=doc.s3_key)   # remove rogue object
+    await transition_status(db, doc, DocumentStatus.FAILED, error_message=...)
+    await db.commit()
+    raise ValueError(...)                          # router returns 409
+```
+
+**Tolerance rationale (10%):** In practice, honest uploads are within 1 byte of their declared size (`File.size` in the browser is exact). The 10% band is intentionally generous to absorb any hypothetical edge case without false positives, while still detecting a 2 MB → 500 MB substitution (which would be a 24,900% deviation).
+
+**On rejection:** the rogue S3 object is immediately deleted, the document row is set to `FAILED` with a human-readable `error_message`, and the caller receives `409 Conflict`. If the S3 delete itself fails, the failure is logged for manual remediation — the document remains `FAILED` so no ingest job can ever be enqueued for it.
 
 ---
 
@@ -241,9 +268,57 @@ _ALLOWED_TRANSITIONS = {
 }
 ```
 
-The **stale document cleanup job** in [`workers/tasks.py`](file:///c:/Users/kanaa/OneDrive/Desktop/PDFTalk(v2.0)/PDFTalk/backend/app/workers/tasks.py) already handles PENDING documents older than 30 minutes. You need to add `PENDING_UPLOAD` to its filter — documents stuck in `PENDING_UPLOAD` for more than 15 minutes (presigned URL expiry) should be marked FAILED and the DB row cleaned up.
+The **stale document cleanup job** in [`workers/tasks.py`](file:///c:/Users/kanaa/OneDrive/Desktop/PDFTalk(v2.0)/PDFTalk/backend/app/workers/tasks.py) handles `PENDING_UPLOAD` documents older than 15 minutes. There is a critical nuance here:
+
+#### ⚠️ S3 Orphan Object Problem & Two-Layer Defence
+
+**The problem — two ways an S3 object can become permanently orphaned:**
+
+| Scenario | What happens | Why dangerous |
+|----------|-------------|---------------|
+| **A — Abandoned upload** (common) | Browser gets presigned URL → PUTs file to S3 → closes tab before calling `/confirm-upload`. DB row exists in `PENDING_UPLOAD`. | If cleanup only marks the DB row `FAILED` without deleting the S3 object, the real bytes sit in storage forever — billed, invisible. |
+| **B — Invisible orphan** (rare) | A future code change reverses the order of DB-write and URL-generation; object lands in S3 with no DB row at all. | No DB row → cleanup job cannot see it. No code-layer defence possible. |
+
+**The fix — two complementary layers:**
+
+**Layer 1 (Code — `_cleanup_stale_pending_uploads()` in `tasks.py`):**
+
+The `PENDING_UPLOAD` cleanup path now uses a dedicated function instead of the generic `_mark_stale_batch()`. For each stale row it:
+1. Calls `s3_client.delete_object(s3_key=doc.s3_key)` **before** transitioning to `FAILED`
+2. Handles the `NoSuchKey` case gracefully (browser never PUT — nothing to delete)
+3. Logs but does **not abort** on unexpected S3 errors (best-effort; lifecycle rule catches residuals)
+4. Always marks the DB row `FAILED` regardless of S3 outcome
+
+```
+for each stale PENDING_UPLOAD row:
+    s3_client.delete_object(doc.s3_key)   # best-effort; log, don't abort
+    doc.status = FAILED
+    db.add(JobLog(...))
+db.commit()
+```
+
+`PENDING` and `PROCESSING` rows continue using `_mark_stale_batch()` without S3 deletion — those objects must be preserved for user-triggered retry.
+
+**Layer 2 (Infrastructure — [`infra/s3_lifecycle.json`](file:///c:/Users/kanaa/OneDrive/Desktop/PDFTalk(v2.0)/PDFTalk/infra/s3_lifecycle.json)):**
+
+An S3 object expiration rule expires all bucket objects after 1 day. This catches:
+- Objects from Scenario B (no DB row, invisible to the code layer)
+- Objects from Scenario A where the cleanup job crashed mid-run before the S3 delete
+
+Apply once via:
+```bash
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket YOUR_BUCKET_NAME \
+  --lifecycle-configuration file://infra/s3_lifecycle.json
+```
+
+Or via Terraform (see the comment block inside the JSON file for the `aws_s3_bucket_lifecycle_configuration` resource definition).
+
+> **Why 1 day, not 15 minutes?** S3 lifecycle rules have a minimum granularity of 1 day and operate on creation date, not last-modified. A 1-day rule means worst-case orphan lifetime is ~24 hours, which is acceptable — the code-layer defence (Layer 1) handles real-time cleanup; this is only a safety net.
 
 ---
+
+
 
 #### Step 5 — Migrate Validation Logic
 

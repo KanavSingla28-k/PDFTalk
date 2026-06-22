@@ -25,10 +25,35 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/**
+ * Compile-time exhaustiveness check.
+ * If a new DocumentStatus value is added to the union but not handled in a
+ * switch, TypeScript will error here at the call site (assertNever(x) inside
+ * the default branch) rather than silently rendering nothing.
+ */
+function assertNever(x: never): never {
+  throw new Error(`Unhandled DocumentStatus: ${String(x)}`);
+}
+
 // ─── Status Badge ───────────────────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: DocumentStatus }) {
   switch (status) {
+    case 'PENDING_UPLOAD':
+      // The file is currently being transferred to S3 by the browser.
+      // This badge appears when the documents page is loaded while an upload
+      // from another tab/session is still in progress, or if confirm-upload
+      // has not yet been called.  The stale-cleanup job will transition this
+      // to FAILED after ~15 minutes if the upload is abandoned.
+      return (
+        <span
+          className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium"
+          style={{ background: 'var(--warning-50)', color: 'var(--warning-500)' }}
+        >
+          <Spinner size={12} className="text-[var(--warning-500)]" />
+          Uploading…
+        </span>
+      );
     case 'PENDING':
     case 'PROCESSING':
       return (
@@ -65,6 +90,10 @@ function StatusBadge({ status }: { status: DocumentStatus }) {
           Failed
         </span>
       );
+    default:
+      // TypeScript will error here if a new status is added to DocumentStatus
+      // but not handled above — forcing the developer to add a case.
+      return assertNever(status);
   }
 }
 
@@ -250,10 +279,18 @@ function DocumentsContent() {
     });
   }, []);
 
-  // Check for non-terminal documents to start polling
+  // Check for non-terminal documents to start polling.
+  // PENDING_UPLOAD is included so that documents loaded from the list while
+  // an upload from another tab/session is still in-progress will auto-update
+  // to PENDING (after confirm-upload) or FAILED (after stale cleanup) without
+  // requiring a manual page refresh.
   useEffect(() => {
     documents.forEach((doc) => {
-      if (doc.status === 'PENDING' || doc.status === 'PROCESSING') {
+      if (
+        doc.status === 'PENDING_UPLOAD' ||
+        doc.status === 'PENDING' ||
+        doc.status === 'PROCESSING'
+      ) {
         startPolling(doc.document_id);
       }
     });
