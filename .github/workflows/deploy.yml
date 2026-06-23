@@ -133,6 +133,9 @@ jobs:
             echo "==> Running DB migrations"
             docker compose run --rm --no-deps api alembic upgrade head
 
+            echo "==> Fixing prometheus_multiproc volume permissions (B-1 fix for existing volume)"
+            docker compose run --rm --no-deps --user root api chown -R appuser:appuser /tmp/prometheus_multiproc
+
             echo "==> Restarting API, worker, and frontend"
             docker compose up -d --no-deps api worker frontend
 
