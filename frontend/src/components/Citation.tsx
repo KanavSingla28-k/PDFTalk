@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { getDocumentDownloadUrl } from '@/lib/documents.api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';

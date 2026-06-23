@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Spinner } from '@/components/ui';
 import { ThemeToggle } from '@/components/ui/ThemeToggle';
@@ -45,7 +45,6 @@ const NAV_ITEMS = [
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading, logout } = useAuth();
   const pathname = usePathname();
-  const router = useRouter();
 
   // While session is restoring, or if unauthenticated (redirecting), show loader
   if (isLoading || !user) {

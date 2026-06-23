@@ -14,7 +14,8 @@ context_truncated_total = Counter(
 )
 
 # Budget constants
-CONTEXT_TOKEN_BUDGET = 3_000
+from app.core.config import settings
+CONTEXT_TOKEN_BUDGET = settings.CONTEXT_TOKEN_BUDGET
 ENCODER = tiktoken.get_encoding("cl100k_base")  # matches chunking.py + gpt-4o-mini / text-embedding-3-small
 
 
@@ -109,7 +110,9 @@ def build_context_block(chunks: list[RetrievedChunk]) -> tuple[str, list[Retriev
     return context_block, included
 
 
-def build_history_block(messages: list["Message"], budget: int = 1500) -> list[dict[str, str]]:
+def build_history_block(messages: list["Message"], budget: int | None = None) -> list[dict[str, str]]:
+    if budget is None:
+        budget = settings.HISTORY_TOKEN_BUDGET
     """
     Fit as many recent messages as possible within the budget.
     Walks newest to oldest, keeping chronological order in the output.

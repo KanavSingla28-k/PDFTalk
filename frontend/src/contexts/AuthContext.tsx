@@ -55,7 +55,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearSession = useCallback(() => {
     setState({ user: null, accessToken: null, isLoading: false });
     accessTokenRef.current = null;
-    sessionStorage.removeItem('pdftalk_user');
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = null;
@@ -81,7 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         accessTokenRef.current = data.access_token;
         setState((prev) => ({ ...prev, accessToken: data.access_token }));
         scheduleRefresh(data.expires_in);
-      } catch (err) {
+      } catch {
         // Silent refresh failed -> session dead
         clearSession();
         router.push('/auth/login');
@@ -146,8 +145,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           isLoading: false,
         });
 
-        sessionStorage.setItem('pdftalk_user', JSON.stringify(user));
-
         if (data.expires_in) {
           scheduleRefresh(data.expires_in);
         }
@@ -161,7 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
 
         if (!isPublicRoute && pathname !== '/') {
-          window.location.href = '/auth/login';
+          router.replace('/auth/login');
         }
       }
     }

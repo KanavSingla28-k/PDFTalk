@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 
-import { login, register, resendVerification } from '@/lib/auth.api';
+import { login, resendVerification } from '@/lib/auth.api';
 import { ApiError, ERROR_CODES } from '@/lib/api';
 import { loginSchema, type LoginFormValues } from '@/lib/auth.schemas';
 import { Button, Input, PasswordInput, FormError, Skeleton } from '@/components/ui';
@@ -16,7 +16,6 @@ import { useCountdown } from '@/hooks/useCountdown';
 // ─── Resend-verification inline prompt ───────────────────────────────────────
 
 function ResendPrompt({
-  email,
   onResend,
   isResending,
   cooldown,

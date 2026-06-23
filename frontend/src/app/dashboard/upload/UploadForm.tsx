@@ -5,7 +5,7 @@ import { useDropzone, type FileRejection } from 'react-dropzone';
 import { useRouter } from 'next/navigation';
 import { toast } from 'sonner';
 
-import { uploadDocument, getUploadErrorMessage, UploadApiError } from '@/lib/documents.api';
+import { uploadDocument, getUploadErrorMessage } from '@/lib/documents.api';
 import { ApiError, ERROR_CODES } from '@/lib/api';
 import { env } from '@/env';
 import { Button, FormError, Spinner } from '@/components/ui';

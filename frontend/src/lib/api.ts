@@ -25,6 +25,8 @@ export class ApiError extends Error {
     public readonly status: number,
     /** Seconds from Retry-After header, present on 429 responses */
     public readonly retryAfter?: number,
+    /** Additional error details from the backend */
+    public readonly details?: unknown,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -100,6 +102,7 @@ interface BackendErrorBody {
   error?: string;
   message?: string;
   detail?: unknown; // Pydantic 422 errors use this key
+  reason?: string; // Custom validation reason
 }
 
 /** Callback injected by AuthContext so the core fetch layer can trigger a refresh */
@@ -199,7 +202,7 @@ async function toApiError(response: Response): Promise<ApiError> {
 
   // Named code from backend — use server message if we have no local copy
   const message = ERROR_MESSAGES[code] ?? serverMessage ?? ERROR_MESSAGES[ERROR_CODES.UNKNOWN];
-  return new ApiError(code || ERROR_CODES.UNKNOWN, message, response.status, retryAfter);
+  return new ApiError(code || ERROR_CODES.UNKNOWN, message, response.status, retryAfter, body);
 }
 
 // ---------------------------------------------------------------------------
@@ -223,7 +226,8 @@ export interface FetchOptions extends Omit<RequestInit, 'headers'> {
  * - Throws ApiError on all non-2xx responses
  */
 export async function apiFetch(path: string, options: FetchOptions = {}): Promise<Response> {
-  const { skipAuth = false, rawResponse = false, headers = {}, ...rest } = options;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { skipAuth = false, rawResponse, headers = {}, ...rest } = options;
 
   const buildHeaders = (token: string | null): Record<string, string> => {
     const h: Record<string, string> = { 'Content-Type': 'application/json', ...headers };
