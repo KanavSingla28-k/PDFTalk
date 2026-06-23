@@ -83,6 +83,6 @@ EXPOSE 8000
 # forks worker processes. Without this, every worker crashes silently on import
 # of prometheus_client, causing the crash-loop seen in the logs.
 #
-# 2 workers is right for a 2-vCPU Lightsail instance.
-# Scale this when you move to a bigger plan.
-CMD ["sh", "-c", "mkdir -p \"${PROMETHEUS_MULTIPROC_DIR:-/tmp/prometheus_multiproc}\" && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2 --no-access-log"]
+# 2 workers was causing silent OOM kills within the 384m mem_limit.
+# Running in a single process (no --workers flag) fits comfortably.
+CMD ["sh", "-c", "mkdir -p \"${PROMETHEUS_MULTIPROC_DIR:-/tmp/prometheus_multiproc}\" && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log"]
