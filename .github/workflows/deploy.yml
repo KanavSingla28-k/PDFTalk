@@ -110,8 +110,12 @@ jobs:
             set -e
             cd /opt/pdftalk
 
+            echo "==> Updating codebase"
+            git fetch origin main
+            git reset --hard origin/main
+
             export GIT_SHA=$GITHUB_SHA
-            export GH_REPO=\${GITHUB_REPOSITORY,,}
+            export GH_REPO=${GITHUB_REPOSITORY,,}
 
             echo "==> Logging into GHCR"
             echo "$GITHUB_TOKEN" | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
