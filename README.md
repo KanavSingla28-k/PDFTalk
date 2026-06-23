@@ -228,7 +228,8 @@ The backend exposes a RESTful API. When running locally, interactive Swagger doc
 | POST | `/auth/password-reset/request`| Request a password reset link |
 | POST | `/auth/password-reset/confirm`| Confirm password reset |
 | **Documents** | | |
-| POST | `/documents/upload` | Upload a PDF document (creates ingestion job) |
+| POST | `/documents/initiate-upload` | Request a presigned S3 URL for direct upload |
+| POST | `/documents/confirm-upload` | Confirm S3 upload and enqueue ingestion job |
 | GET | `/documents` | List user's documents |
 | GET | `/documents/{id}` | Get specific document status |
 | DELETE| `/documents/{id}` | Delete a document and its chunks |

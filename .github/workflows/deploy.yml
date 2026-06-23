@@ -22,19 +22,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # --- Backend images ---
-      - name: Build API image
-        run: |
-          docker build \
-            -t pdftalk-api:${{ github.sha }} \
-            ./backend
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build worker image
+      - name: Lowercase repository name
+        run: |
+          echo "GH_REPO=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
+      # --- Backend images ---
+      - name: Build and push API image
         run: |
           docker build \
-            -t pdftalk-worker:${{ github.sha }} \
+            -t ghcr.io/${{ env.GH_REPO }}/pdftalk-api:${{ github.sha }} \
+            -t ghcr.io/${{ env.GH_REPO }}/pdftalk-api:latest \
+            ./backend
+          docker push ghcr.io/${{ env.GH_REPO }}/pdftalk-api:${{ github.sha }}
+          docker push ghcr.io/${{ env.GH_REPO }}/pdftalk-api:latest
+
+      - name: Build and push worker image
+        run: |
+          docker build \
+            -t ghcr.io/${{ env.GH_REPO }}/pdftalk-worker:${{ github.sha }} \
+            -t ghcr.io/${{ env.GH_REPO }}/pdftalk-worker:latest \
             -f ./backend/Dockerfile.worker \
             ./backend
+          docker push ghcr.io/${{ env.GH_REPO }}/pdftalk-worker:${{ github.sha }}
+          docker push ghcr.io/${{ env.GH_REPO }}/pdftalk-worker:latest
 
       # --- Frontend image ---
       - name: Install pnpm
@@ -47,30 +64,18 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Build frontend image
+      - name: Build and push frontend image
         run: |
           docker build \
             --build-arg CI=true \
             --build-arg NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }} \
             --build-arg NEXT_PUBLIC_APP_NAME=PDFTalk \
             --build-arg NEXT_PUBLIC_MAX_UPLOAD_MB=50 \
-            -t pdftalk-frontend:${{ github.sha }} \
+            -t ghcr.io/${{ env.GH_REPO }}/pdftalk-frontend:${{ github.sha }} \
+            -t ghcr.io/${{ env.GH_REPO }}/pdftalk-frontend:latest \
             ./frontend
-
-      - name: Save images as tar.gz
-        run: |
-          docker save \
-            pdftalk-api:${{ github.sha }} \
-            pdftalk-worker:${{ github.sha }} \
-            pdftalk-frontend:${{ github.sha }} \
-            | gzip > images.tar.gz
-
-      - name: Upload images artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: docker-images
-          path: images.tar.gz
-          retention-days: 1   # Only needed for the deploy job; don't accumulate
+          docker push ghcr.io/${{ env.GH_REPO }}/pdftalk-frontend:${{ github.sha }}
+          docker push ghcr.io/${{ env.GH_REPO }}/pdftalk-frontend:latest
 
   # ---------------------------------------------------------------------------
   # Deploy — requires manual approval (GitHub environment gate)
@@ -83,49 +88,42 @@ jobs:
     environment: production   # Manual approval gate lives here
 
     steps:
-      - name: Download Docker images
-        uses: actions/download-artifact@v4
-        with:
-          name: docker-images
-
       - name: Transfer images to Lightsail
         run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.LIGHTSAIL_SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
           echo "${{ secrets.LIGHTSAIL_SSH_KEY }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
-          scp -i /tmp/deploy_key \
-            -o StrictHostKeyChecking=no \
-            -o ConnectTimeout=30 \
-            images.tar.gz \
-            ubuntu@${{ secrets.LIGHTSAIL_IP }}:/tmp/pdftalk-images.tar.gz
 
       - name: Deploy
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.LIGHTSAIL_IP }}
-          username: ubuntu
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          envs: GITHUB_SHA
-          script: |
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ssh -i /tmp/deploy_key -o ConnectTimeout=30 ubuntu@${{ secrets.LIGHTSAIL_IP }} << EOF
             set -e
             cd /opt/pdftalk
 
-            echo "==> Loading Docker images (SHA: $GITHUB_SHA)"
-            docker load < /tmp/pdftalk-images.tar.gz
-            rm /tmp/pdftalk-images.tar.gz
-
             export GIT_SHA=$GITHUB_SHA
+            export GH_REPO=\${GITHUB_REPOSITORY,,}
+
+            echo "==> Logging into GHCR"
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
+
+            echo "==> Pulling Docker images (SHA: \$GIT_SHA)"
+            docker compose pull api worker frontend
 
             echo "==> Backing up database"
-            docker compose exec -T postgres sh -c "pg_dump -U \${POSTGRES_USER:-pdftalk} -d \${POSTGRES_DB:-pdftalk} -F c -f /var/lib/postgresql/data/backup_$GIT_SHA.dump" || true
+            docker compose exec -T postgres sh -c "pg_dump -U \\\$\${POSTGRES_USER:-pdftalk} -d \\\$\${POSTGRES_DB:-pdftalk} -F c -f /var/lib/postgresql/data/backup_\$GIT_SHA.dump"
+            docker compose exec -T postgres sh -c "find /var/lib/postgresql/data -name 'backup_*.dump' -mtime +7 -delete"
 
             echo "==> Running DB migrations"
-            # Run against the already-healthy postgres container.
-            # --no-deps prevents compose from recreating postgres/redis.
             docker compose run --rm --no-deps api alembic upgrade head
 
             echo "==> Restarting API, worker, and frontend"
-            # --no-deps: don't restart postgres/redis, only the named services.
-            # Compose picks up the new GIT_SHA image tag from the environment.
             docker compose up -d --no-deps api worker frontend
 
             echo "==> Reloading nginx (picks up any config changes)"
@@ -136,6 +134,7 @@ jobs:
             docker builder prune -af --filter "until=72h"
 
             echo "==> Deploy complete"
+          EOF
 
       - name: Smoke test
         # Wait for containers to pass their healthchecks before probing.

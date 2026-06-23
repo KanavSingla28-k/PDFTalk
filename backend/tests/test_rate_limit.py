@@ -323,3 +323,23 @@ async def test_redis_error_returns_503(fake_redis):
 
         assert exc_info.value.status_code == 503
         assert exc_info.value.detail == "Service Unavailable"
+
+
+@pytest.mark.asyncio
+async def test_redis_error_fail_open_allows_request(fake_redis):
+    """If Redis raises a RedisError but fail_open is True, the rate limiter must allow the request."""
+    limiter = RateLimiter(limit=1, window_seconds=60, key_prefix="test_redis_err_open", fail_open=True)
+    request = make_request()
+    
+    import redis.exceptions
+
+    with patch("app.utils.rate_limit.get_redis") as mock_get_redis:
+        mock_redis_instance = MagicMock()
+        mock_pipeline = AsyncMock()
+        mock_pipeline.__aenter__.return_value = mock_pipeline
+        mock_pipeline.execute.side_effect = redis.exceptions.RedisError("Connection lost")
+        mock_redis_instance.pipeline.return_value = mock_pipeline
+        mock_get_redis.return_value = mock_redis_instance
+
+        # Should NOT raise an exception
+        await limiter(request)

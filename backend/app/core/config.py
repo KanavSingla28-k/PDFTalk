@@ -1,3 +1,4 @@
+from functools import cached_property
 from typing import Literal, Optional
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
@@ -36,6 +37,16 @@ class Settings(BaseSettings):
 
     APP_URL: str
 
+    # Deployment environment. Set ENVIRONMENT=production in the server .env
+    # (and ENVIRONMENT=development in .env.local for local dev).
+    # Defaults to "production" so that a missing variable is safe: you can
+    # never accidentally expose dev tooling in production.
+    ENVIRONMENT: Literal["development", "production"] = "production"
+
+    @cached_property
+    def is_production(self) -> bool:
+        return self.ENVIRONMENT == "production"
+
     PROMETHEUS_MULTIPROC_DIR: str = "/tmp/prometheus/"  # default empty string will raise errors later
 
     GRAFANA_ADMIN_PASSWORD: str | None = None
@@ -61,6 +72,6 @@ class Settings(BaseSettings):
     LOG_FORMAT: Optional[Literal["json", "pretty"]] = None
     MAX_DAILY_QUERIES_PER_USER: int = 500
 
-    model_config = {"env_file": env_file, "extra": "ignore"}
+    model_config = {"env_file": env_file, "extra": "ignore", "ignored_types": (cached_property,)}
 
 settings: Settings = Settings()  # type: ignore[call-arg]

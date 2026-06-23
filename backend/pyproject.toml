@@ -11,7 +11,6 @@ dependencies = [
     "pydantic-settings",
     "passlib[bcrypt]>=1.7.4",
     "bcrypt==4.0.1",
-    "python-jose[cryptography]",
     "redis>=5.0.0",
     "rq",
     "boto3",
@@ -25,20 +24,14 @@ dependencies = [
     "resend>=2.30.1",
     "pgvector>=0.4.2",
     "aiosqlite>=0.22.1",
-    "pytest",
-    "pytest-asyncio",
-    "pytest-cov",
-    "fakeredis",
-    "moto[s3]",
     "psycopg[binary]",
-    "rq",
-    "redis",
     "pytesseract",
     "pillow",
     "python-magic-bin>=0.4.14; sys_platform == 'win32'",
     "python-magic>=0.4.27; sys_platform != 'win32'",
     "prometheus-client>=0.20.0",
     "prometheus-fastapi-instrumentator>=7.0.0",
+    "pyjwt[crypto]>=2.13.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -67,7 +60,11 @@ markers = [
 
 [dependency-groups]
 dev = [
-    "moto>=5.2.1",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "fakeredis",
+    "moto[s3]>=5.2.1",
     "ruff>=0.12.0",
     "mypy>=1.17.0",
 ]

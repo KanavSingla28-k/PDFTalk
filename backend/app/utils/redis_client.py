@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
 from typing import cast
 import redis.asyncio as aioredis
 from app.core.config import settings
@@ -21,6 +21,13 @@ def get_pool() -> aioredis.ConnectionPool:
 
 def get_redis() -> aioredis.Redis:
     return aioredis.Redis(connection_pool=get_pool())
+
+def seconds_until_utc_midnight() -> int:
+    """Returns seconds until the next UTC midnight, plus a 1-hour buffer."""
+    now = datetime.now(timezone.utc)
+    tomorrow = now + timedelta(days=1)
+    midnight = datetime(tomorrow.year, tomorrow.month, tomorrow.day, tzinfo=timezone.utc)
+    return int((midnight - now).total_seconds()) + 3600
 
 async def set_with_ttl(key: str, value: str, ttl_seconds: int) -> None:
     r = get_redis()
@@ -62,6 +69,10 @@ def key_daily_token_quota(user_id: str) -> str:
     today = date.today().strftime("%Y%m%d")
     return f"quota:tokens:{user_id}:{today}"
 
+def key_daily_token_stats() -> str:
+    today = date.today().strftime("%Y%m%d")
+    return f"admin:stats:tokens:{today}"
+
 def key_daily_query_quota(user_id: str) -> str:
     today = date.today().strftime("%Y%m%d")
     return f"quota:queries:{user_id}:{today}"
@@ -69,32 +80,37 @@ def key_daily_query_quota(user_id: str) -> str:
 def key_email_verify(token_hash: str) -> str:
     return f"emailverify:{token_hash}"
 
-async def increment_counter_by(key: str, amount: int, ttl_seconds: int | None = None) -> int:
+async def increment_counter_by(
+    key: str, 
+    amount: int, 
+    ttl_seconds: int | None = None,
+    stats_zset_key: str | None = None,
+    stats_member: str | None = None
+) -> int:
     """Like increment_counter but adds `amount` instead of 1. Used for token quota tracking.
 
     Uses a pipeline to guarantee that the TTL is set exactly once — on the true first
-    write — regardless of what `amount` is.
-
-    The naive pattern ``if count == amount: expire(key)`` is broken: if a later call
-    increments by the same `amount`, the condition fires again and *resets* the expiry,
-    pushing the quota window forward indefinitely for heavy users.
-
-    Fix: INCRBY + PERSIST in one pipeline round trip.
-    - PERSIST is a no-op when the key already has a TTL (returns 0).
-    - PERSIST returns 1 only on the first write (key exists but has no TTL yet).
-    - After the pipeline we check ``count == amount`` which is now a safe sentinel:
-      the only time count equals amount after a PERSIST no-op is the very first write.
+    write — regardless of what `amount` is. Optionally tracks values in a ZSET for admin stats.
     """
     r = get_redis()
     pipe = r.pipeline(transaction=True)
     pipe.incrby(key, amount)
     pipe.persist(key)  # no-op if key already has a TTL; prevents window from sliding
+    
+    if stats_zset_key and stats_member:
+        pipe.zincrby(stats_zset_key, amount, stats_member)
+        
     results = await pipe.execute()
     count: int = results[0]
-    if count == amount and ttl_seconds:
+    
+    if count == amount:
         # Guaranteed first write — PERSIST returned 1 (no prior TTL).
-        # Safe to set the expiry exactly once.
-        await r.expire(key, ttl_seconds)
+        if ttl_seconds:
+            await r.expire(key, ttl_seconds)
+        if stats_zset_key:
+            # 2 days TTL is enough for today's stats to be viewable tomorrow
+            await r.expire(stats_zset_key, 172800)
+            
     return count
 
 

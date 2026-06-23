@@ -97,7 +97,7 @@ jobs:
           APP_URL: http://localhost
           # Integration tests use mocked OpenAI/Resend responses but need the pgvector DB.
           INTEGRATION_DATABASE_URL: postgresql+psycopg://pdftalk:test@localhost:5432/pdftalk_test  # pragma: allowlist secret
-        run: uv run pytest --cov=app --cov-report=xml -x
+        run: uv run pytest --cov=app --cov-report=xml --cov-fail-under=61 -x
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
@@ -160,7 +160,7 @@ jobs:
       - uses: actions/checkout@v4
       
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.24.0
         with:
           scan-type: 'fs'
           ignore-unfixed: true

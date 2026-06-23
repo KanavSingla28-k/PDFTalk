@@ -103,11 +103,13 @@ class RateLimiter:
         window_seconds: int,
         key_prefix: str,
         identifier_fn: Callable[[Request], str] | None = None,
+        fail_open: bool = False,
     ) -> None:
         self.limit = limit
         self.window_seconds = window_seconds
         self.key_prefix = key_prefix
         self._identifier_fn = identifier_fn or self._default_identifier
+        self.fail_open = fail_open
 
     # ------------------------------------------------------------------
     # FastAPI dependency — called on every request to a guarded route
@@ -169,6 +171,8 @@ class RateLimiter:
                 await pipe.execute()
         except RedisError as exc:
             logger.error("rate_limiter.redis_error", error=str(exc))
+            if self.fail_open:
+                return
             raise HTTPException(status_code=503, detail="Service Unavailable")
 
     # ------------------------------------------------------------------

@@ -12,6 +12,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         if request.url.path in ["/docs", "/redoc", "/openapi.json"]:
+            # These routes only exist in development (settings.is_production=False disables
+            # them in main.py). This branch is dead code in production — kept here so that
+            # local dev still gets a permissive CSP that lets the Swagger UI load correctly.
             response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com"
         else:
             # CSP: API returns JSON only — no scripts, styles, or embedded resources.

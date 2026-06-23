@@ -199,6 +199,12 @@ export async function streamAnswer(
             }
 
             const code = parsed.error ?? ERROR_CODES.UNKNOWN;
+            
+            if (code === ERROR_CODES.TOKEN_EXPIRED || code === ERROR_CODES.INVALID_TOKEN) {
+              window.location.href = '/auth/login';
+              return;
+            }
+
             const message =
               parsed.message ??
               ERROR_MESSAGES[code] ??

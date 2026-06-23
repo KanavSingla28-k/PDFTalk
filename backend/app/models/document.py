@@ -3,7 +3,7 @@ import enum
 import uuid
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, Index, Text, func
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, Index, Text, func, CheckConstraint
 from pydantic import BaseModel, ConfigDict, Field
 
 from sqlalchemy.dialects.postgresql import UUID
@@ -42,12 +42,17 @@ _ALLOWED_TRANSITIONS: dict[DocumentStatus, set[DocumentStatus]] = {
     DocumentStatus.READY:          set(),   # terminal
     DocumentStatus.FAILED:         {DocumentStatus.PROCESSING},  # allowed for retry
 }
+assert set(DocumentStatus) == set(_ALLOWED_TRANSITIONS.keys()), "All DocumentStatus values must be mapped in _ALLOWED_TRANSITIONS"
 
 class Document(Base):
     __tablename__ = "documents"
     __table_args__ = (
         Index("idx_documents_user_id", "user_id"),
         Index("idx_documents_status", "status"),
+        CheckConstraint(
+            f"status IN ({', '.join(repr(v.value) for v in DocumentStatus)})",
+            name="check_valid_document_status"
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -67,7 +72,7 @@ class Document(Base):
 
     # Stored as Text. DocumentStatus enum enforced by document_service.transition_status().
     status: Mapped[str] = mapped_column(
-        Text, nullable=False, default=DocumentStatus.PENDING.value
+        Text, nullable=False, default=DocumentStatus.PENDING_UPLOAD.value
     )
 
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)

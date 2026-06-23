@@ -22,7 +22,7 @@ from app.utils.rate_limit import RateLimiter
 router = APIRouter(prefix="/chats", tags=["chats"])
 
 # 10/min/user rate limit for chat creation
-chat_create_limiter = RateLimiter(limit=10, window_seconds=60, key_prefix="chat_create")
+chat_create_limiter = RateLimiter(limit=10, window_seconds=60, key_prefix="chat_create", fail_open=True)
 
 @router.post(
     "",

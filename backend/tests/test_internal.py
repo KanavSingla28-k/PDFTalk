@@ -9,7 +9,7 @@ async def test_admin_auth_missing_token(async_client: AsyncClient, monkeypatch):
 
     response = await async_client.post(
         "/internal/alerts/webhook",
-        json={},
+        json={"alerts": []},
         headers={"Authorization": "Bearer some-token"}
     )
     assert response.status_code == 500
@@ -23,7 +23,7 @@ async def test_admin_auth_invalid_token(async_client: AsyncClient, monkeypatch):
 
     response = await async_client.post(
         "/internal/alerts/webhook",
-        json={},
+        json={"alerts": []},
         headers={"Authorization": "Bearer wrong-token"}
     )
     assert response.status_code == 403
@@ -36,7 +36,7 @@ async def test_admin_auth_valid_token(async_client: AsyncClient, monkeypatch):
 
     response = await async_client.post(
         "/internal/alerts/webhook",
-        json={},
+        json={"alerts": []},
         headers={"Authorization": "Bearer super-secret-admin-token"}
     )
     assert response.status_code == 204

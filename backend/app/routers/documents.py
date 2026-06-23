@@ -58,6 +58,7 @@ _upload_limiter = RateLimiter(
     window_seconds=60,
     key_prefix="upload",
     identifier_fn=user_id_from_request,
+    fail_open=True,
 )
 
 @router.post(
