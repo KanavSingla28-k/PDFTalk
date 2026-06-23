@@ -116,10 +116,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           )}
           <button
             onClick={() => logout()}
-            className="rounded-lg px-3 py-2 text-sm font-medium transition-colors"
-            style={{ color: 'var(--gray-600)' }}
-            onMouseOver={(e) => { (e.currentTarget.style.background = 'var(--gray-100)'); }}
-            onMouseOut={(e) => { (e.currentTarget.style.background = 'transparent'); }}
+            className="rounded-lg px-3 py-2 text-sm font-medium transition-colors text-[var(--gray-600)] hover:bg-[var(--gray-100)] hover:text-[var(--gray-900)]"
             id="logout-btn"
           >
             Sign out

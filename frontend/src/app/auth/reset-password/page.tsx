@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { resetPassword } from '@/lib/auth.api';
 import { ApiError } from '@/lib/api';
 import { resetPasswordSchema, type ResetPasswordFormValues } from '@/lib/auth.schemas';
-import { Button, PasswordInput, FormError } from '@/components/ui';
+import { Button, PasswordInput, FormError, Skeleton } from '@/components/ui';
 
 function ResetPasswordForm() {
   const router = useRouter();
@@ -123,7 +123,14 @@ function ResetPasswordForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={<div className="h-80 animate-pulse rounded-lg bg-gray-100" />}>
+    <Suspense fallback={
+      <div className="flex flex-col gap-5 w-full">
+        <Skeleton className="h-8 w-40 mb-2" />
+        <Skeleton className="h-14 w-full" />
+        <Skeleton className="h-14 w-full" />
+        <Skeleton className="h-10 w-full mt-2" />
+      </div>
+    }>
       <ResetPasswordForm />
     </Suspense>
   );

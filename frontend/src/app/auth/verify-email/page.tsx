@@ -7,10 +7,10 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 
-import { register, resendVerification } from '@/lib/auth.api';
+import { resendVerification } from '@/lib/auth.api';
 import { ApiError, ERROR_CODES } from '@/lib/api';
 import { emailSchema, type EmailFormValues } from '@/lib/auth.schemas';
-import { Button, Input, FormError } from '@/components/ui';
+import { Button, Input, FormError, Skeleton } from '@/components/ui';
 import { useCountdown } from '@/hooks/useCountdown';
 
 // ─── Error messages for each ?error= param value ─────────────────────────────
@@ -291,7 +291,13 @@ function VerifyEmailContent() {
 
 export default function VerifyEmailPage() {
   return (
-    <Suspense fallback={<div className="h-64 animate-pulse rounded-lg bg-gray-100" />}>
+    <Suspense fallback={
+      <div className="flex flex-col items-center gap-6 text-center w-full">
+        <Skeleton className="h-16 w-16 rounded-full" />
+        <Skeleton className="h-8 w-40" />
+        <Skeleton className="h-12 w-full max-w-sm" />
+      </div>
+    }>
       <VerifyEmailContent />
     </Suspense>
   );

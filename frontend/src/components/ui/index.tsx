@@ -81,7 +81,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       disabled={disabled || isLoading}
       className={[
-        'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all duration-150',
+        'inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all duration-150 active:scale-[0.98]',
         'focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--brand-500)]',
         'disabled:cursor-not-allowed disabled:opacity-50',
         variantStyles[variant],
@@ -237,3 +237,7 @@ export function Divider({ label }: { label?: string }) {
     </div>
   );
 }
+
+export { Modal } from './Modal';
+export { Skeleton } from './Skeleton';
+export { FileTypeIcon } from './FileTypeIcon';

@@ -3,6 +3,7 @@
 import { Suspense, useState, useEffect, useRef, FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
+import { formatDistanceToNow, format } from 'date-fns';
 
 import { listDocuments, type DocumentRecord } from '@/lib/documents.api';
 import { streamAnswer, getSseErrorMessage, type StreamEvent } from '@/lib/query.api';
@@ -25,6 +26,7 @@ type Message = {
   isError?: boolean;
   /** Set to true when the backend emitted a fallback SSE event for this message */
   isFallback?: boolean;
+  created_at?: string;
 };
 
 // ─── Document Selector Component ──────────────────────────────────────────────
@@ -232,6 +234,7 @@ function ChatMessage({
   const { retryMessage, isStreaming, activeChat } = useChat();
   const [copied, setCopied] = useState(false);
   const [hasRetried, setHasRetried] = useState(false);
+  const [feedback, setFeedback] = useState<'up' | 'down' | null>(null);
 
   const [showRetryConfirm, setShowRetryConfirm] = useState(false);
 
@@ -270,16 +273,33 @@ function ChatMessage({
   };
 
   return (
-    <div className={`flex w-full group ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div className={`flex flex-col gap-1 max-w-[85%] ${isUser ? 'items-end' : 'items-start'}`}>
+    <div className={`group flex w-full ${isUser ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
+      <div className={`flex flex-col max-w-[85%] sm:max-w-[75%] ${isUser ? 'items-end' : 'items-start'}`}>
+        {/* Name and Timestamp Row */}
+        <div className={`flex items-center gap-2 mb-1 px-1 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}>
+          <span className="text-xs font-semibold text-[var(--gray-700)]">
+            {isUser ? 'You' : 'Assistant'}
+          </span>
+          {msg.created_at && (
+            <span 
+              className="text-[10px] text-[var(--gray-400)] opacity-0 group-hover:opacity-100 transition-opacity"
+              title={format(new Date(msg.created_at), 'PPpp')}
+            >
+              {formatDistanceToNow(new Date(msg.created_at), { addSuffix: true })}
+            </span>
+          )}
+        </div>
+
         <div
-          className={`w-full rounded-2xl px-5 py-3.5 shadow-sm ${
-            isUser
-              ? 'bg-[var(--brand-500)] text-white rounded-br-none'
+          className={`
+            relative rounded-2xl px-5 py-3.5 shadow-sm
+            ${isUser
+              ? 'bg-[var(--brand-600)] text-white rounded-br-sm'
               : msg.isError
-              ? 'bg-[var(--error-50)] text-[var(--error-700)] border border-[var(--error-200)] rounded-bl-none'
-              : 'bg-white text-[var(--gray-900)] border border-[var(--gray-200)] rounded-bl-none'
-          }`}
+              ? 'bg-[var(--error-50)] text-[var(--error-700)] border border-[var(--error-200)] rounded-bl-sm'
+              : 'bg-white text-[var(--gray-900)] border border-[var(--gray-200)] rounded-bl-sm'
+            }
+          `}
         >
         {isUser ? (
           // User input stays plain text — preserves whitespace exactly as
@@ -322,28 +342,29 @@ function ChatMessage({
           </div>
         )}
         {msg.isStreaming && (
-          <span className="inline-block ml-1 h-3 w-1.5 animate-pulse bg-current opacity-60" />
+          <span className="inline-block ml-1 h-4 w-1.5 align-middle cursor-blink bg-[var(--brand-500)]" />
         )}
         </div>
-        
-        {isUser && (
-          <div className="flex items-center gap-1.5 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
-            <button
-              onClick={handleCopy}
-              className="flex items-center justify-center h-6 w-6 rounded hover:bg-[var(--gray-200)] text-[var(--gray-400)] hover:text-[var(--gray-700)] transition-colors"
-              title="Copy message"
-            >
-              {copied ? (
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                  <path d="M3 7l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <rect x="9" y="9" width="13" height="13" rx="2" />
-                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-                </svg>
-              )}
-            </button>
+        {/* Actions Row */}
+        <div className={`flex items-center gap-1.5 px-2 mt-1 opacity-0 group-hover:opacity-100 transition-opacity ${isUser ? '' : 'justify-end'}`}>
+          <button
+            onClick={handleCopy}
+            className="flex items-center justify-center h-6 w-6 rounded hover:bg-[var(--gray-200)] text-[var(--gray-400)] hover:text-[var(--gray-700)] transition-colors"
+            title="Copy message"
+          >
+            {copied ? (
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                <path d="M3 7l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <rect x="9" y="9" width="13" height="13" rx="2" />
+                <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+              </svg>
+            )}
+          </button>
+          
+          {isUser ? (
             <button
               onClick={handleRetryClick}
               disabled={isStreaming || hasRetried}
@@ -355,8 +376,31 @@ function ChatMessage({
                 <path d="M3 3v5h5" />
               </svg>
             </button>
-          </div>
-        )}
+          ) : (
+            !msg.isStreaming && (
+              <>
+                <button
+                  onClick={() => setFeedback('up')}
+                  className={`flex items-center justify-center h-6 w-6 rounded hover:bg-[var(--gray-200)] transition-colors ${feedback === 'up' ? 'text-[var(--success-600)] bg-[var(--success-50)]' : 'text-[var(--gray-400)] hover:text-[var(--success-600)]'}`}
+                  title="Helpful response"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3"></path>
+                  </svg>
+                </button>
+                <button
+                  onClick={() => setFeedback('down')}
+                  className={`flex items-center justify-center h-6 w-6 rounded hover:bg-[var(--gray-200)] transition-colors ${feedback === 'down' ? 'text-[var(--error-600)] bg-[var(--error-50)]' : 'text-[var(--gray-400)] hover:text-[var(--error-600)]'}`}
+                  title="Unhelpful response"
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M10 15v4a3 3 0 0 0 3 3l4-9V2H5.72a2 2 0 0 0-2 1.7l-1.38 9a2 2 0 0 0 2 2.3zm7-13h2.67A2.31 2.31 0 0 1 22 4v7a2.31 2.31 0 0 1-2.33 2H17"></path>
+                  </svg>
+                </button>
+              </>
+            )
+          )}
+        </div>
         {/* Suggestion chips — shown below fallback assistant messages once streaming ends */}
         {!isUser && msg.isFallback && !msg.isStreaming && onSuggestionSelect && (
           <SuggestionChips onSelect={onSuggestionSelect} />
@@ -399,6 +443,8 @@ function ChatContent() {
 
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [showScrollFAB, setShowScrollFAB] = useState(false);
 
   // ── Load READY documents ──
   useEffect(() => {
@@ -434,8 +480,23 @@ function ChatContent() {
 
   // ── Auto-scroll to bottom ──
   useEffect(() => {
+    if (!showScrollFAB) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [activeChat?.messages, isStreaming, showScrollFAB]);
+
+  const handleScroll = () => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+    const isScrolledUp = scrollHeight - scrollTop - clientHeight > 100;
+    setShowScrollFAB(isScrolledUp);
+  };
+
+  const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeChat?.messages, isStreaming]);
+    setShowScrollFAB(false);
+  };
 
   // ── Toggle selection ──
   const toggleDoc = (id: string) => {
@@ -487,9 +548,9 @@ function ChatContent() {
 
   // ── Render ──
   return (
-    <div className="flex h-[calc(100vh-4rem)] fixed left-0 right-0 top-16 bg-[var(--gray-50)] z-10">
+    <div className="flex h-[calc(100vh-8rem)] w-full rounded-2xl overflow-hidden border border-[var(--gray-200)] shadow-sm bg-white">
       <ChatSidebar />
-      <div className="flex-1 flex flex-col gap-4 p-6 mx-auto max-w-3xl">
+      <div className="flex-1 flex flex-col gap-4 p-6 overflow-hidden">
         {/* Header / Document Selector */}
         <div className="shrink-0">
           <h1 className="text-2xl font-bold tracking-tight text-[var(--gray-900)] mb-4">
@@ -500,12 +561,17 @@ function ChatContent() {
               <Spinner size={16} /> Loading documents…
             </div>
           ) : (
-            <div className={activeChat ? 'opacity-50 pointer-events-none' : ''}>
-              <DocumentSelector
-                documents={documents}
-                selectedIds={selectedDocs}
-                onToggle={toggleDoc}
-              />
+            <div 
+              className={activeChat ? 'opacity-50 cursor-not-allowed' : ''}
+              title={activeChat ? "Documents cannot be changed in an existing chat." : undefined}
+            >
+              <div className={activeChat ? 'pointer-events-none' : ''}>
+                <DocumentSelector
+                  documents={documents}
+                  selectedIds={selectedDocs}
+                  onToggle={toggleDoc}
+                />
+              </div>
             </div>
           )}
           {activeChat?.missing_document_ids && activeChat.missing_document_ids.length > 0 && (
@@ -516,7 +582,11 @@ function ChatContent() {
         </div>
 
         {/* Chat History Area */}
-        <div className="flex-1 overflow-y-auto rounded-xl border border-[var(--gray-200)] bg-[var(--gray-50)] p-4 shadow-inner relative">
+        <div 
+          className="flex-1 overflow-y-auto rounded-xl border border-[var(--gray-200)] bg-[var(--gray-50)] p-4 shadow-inner relative"
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+        >
           {!activeChat || activeChat.messages.length === 0 ? (
             <div className="flex h-full flex-col items-center justify-center text-center px-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand-100)] text-[var(--brand-600)] mb-3">
@@ -530,7 +600,7 @@ function ChatContent() {
               </p>
             </div>
           ) : (
-            <div className="flex flex-col gap-6 pb-4">
+            <div className="flex flex-col gap-6 pb-4" role="log" aria-live="polite" aria-atomic="false">
               {activeChat.messages.map((msg, index, arr) => {
                 const hasLaterUserMessages = arr.slice(index + 1).some(m => m.role.toLowerCase() === 'user');
                 const isLatestUserMessage = !hasLaterUserMessages && msg.role.toLowerCase() === 'user';
@@ -546,6 +616,7 @@ function ChatContent() {
                       // isFallback is set by ChatContext on the temp message; after
                       // reload it won't exist on server messages, so we cast safely.
                       isFallback: (msg as { isFallback?: boolean }).isFallback,
+                      created_at: msg.created_at,
                     }} 
                     isLatestUserMessage={isLatestUserMessage}
                     onSuggestionSelect={(text) => setInput(text)}
@@ -554,6 +625,18 @@ function ChatContent() {
               })}
               <div ref={messagesEndRef} />
             </div>
+          )}
+
+          {showScrollFAB && (
+            <button
+              onClick={scrollToBottom}
+              className="absolute bottom-6 right-6 flex h-10 w-10 items-center justify-center rounded-full bg-white text-[var(--gray-600)] shadow-lg border border-[var(--gray-200)] hover:bg-[var(--gray-50)] hover:text-[var(--gray-900)] transition-all animate-in fade-in slide-in-from-bottom-4 z-10"
+              aria-label="Scroll to bottom"
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M12 5v14M19 12l-7 7-7-7" />
+              </svg>
+            </button>
           )}
         </div>
 

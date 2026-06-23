@@ -15,7 +15,7 @@ import {
   type DocumentStatus,
 } from '@/lib/documents.api';
 import { ApiError, ERROR_CODES } from '@/lib/api';
-import { Button, Spinner } from '@/components/ui';
+import { Button, Spinner, Skeleton, FileTypeIcon } from '@/components/ui';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -127,7 +127,7 @@ function DocumentCard({
 
   return (
     <div
-      className={`relative flex flex-col rounded-xl border p-5 shadow-sm transition-all duration-200 ${
+      className={`relative flex flex-col rounded-xl border p-5 shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-md ${
         isNew ? 'ring-2 ring-[var(--brand-400)] ring-offset-2' : ''
       }`}
       style={{
@@ -136,14 +136,17 @@ function DocumentCard({
       }}
     >
       <div className="flex items-start justify-between gap-4">
-        <div className="flex min-w-0 flex-col">
-          <h3 className="truncate font-semibold text-[var(--gray-900)]" title={doc.filename}>
-            {doc.filename}
-          </h3>
-          <p className="mt-1 text-xs text-[var(--gray-500)]">
-            {formatFileSize(doc.file_size_bytes)} • Uploaded{' '}
-            {formatDistanceToNow(new Date(doc.created_at), { addSuffix: true })}
-          </p>
+        <div className="flex items-start gap-3 min-w-0">
+          <FileTypeIcon filename={doc.filename} />
+          <div className="flex min-w-0 flex-col">
+            <h3 className="truncate font-semibold text-[var(--gray-900)]" title={doc.filename}>
+              {doc.filename}
+            </h3>
+            <p className="mt-1 text-xs text-[var(--gray-500)]">
+              {formatFileSize(doc.file_size_bytes)} • Uploaded{' '}
+              {formatDistanceToNow(new Date(doc.created_at), { addSuffix: true })}
+            </p>
+          </div>
         </div>
         <StatusBadge status={doc.status} />
       </div>
@@ -160,32 +163,44 @@ function DocumentCard({
         </div>
       )}
 
-      <div className="mt-auto pt-4 flex items-center justify-between">
+      <div className="mt-auto pt-4 flex items-center justify-between border-t border-[var(--gray-100)]">
+        <div className="flex gap-2">
+          {doc.status === 'READY' && (
+            <Link
+              href={`/dashboard/chat?doc=${doc.document_id}`}
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-[var(--brand-700)] hover:bg-[var(--brand-50)] transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+              Chat
+            </Link>
+          )}
+          {doc.status === 'FAILED' && (
+            <Link
+              href="/dashboard/upload"
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-semibold text-[var(--gray-700)] hover:bg-[var(--gray-100)] transition-colors"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21.5 2v6h-6M2.13 15.57a9 9 0 1 0 3.84-10.36l-4.14-4.14"></path>
+              </svg>
+              Re-upload
+            </Link>
+          )}
+        </div>
+
         <button
           onClick={handleDelete}
           disabled={isDeleting || (!isTerminal && doc.status !== 'FAILED')}
-          className="text-xs font-medium text-[var(--error-500)] hover:text-[var(--error-700)] disabled:opacity-50 transition-colors"
+          className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--error-600)] hover:bg-[var(--error-50)] disabled:opacity-50 transition-colors"
+          title="Delete document"
         >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M3 6h18"></path>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          </svg>
           {isDeleting ? 'Deleting…' : 'Delete'}
         </button>
-
-        {doc.status === 'READY' && (
-          <Link
-            href={`/dashboard/chat?doc=${doc.document_id}`}
-            className="rounded-lg bg-[var(--brand-50)] px-3 py-1.5 text-xs font-semibold text-[var(--brand-700)] hover:bg-[var(--brand-100)] transition-colors"
-          >
-            Chat
-          </Link>
-        )}
-        
-        {doc.status === 'FAILED' && (
-          <Link
-            href="/dashboard/upload"
-            className="rounded-lg bg-[var(--gray-100)] px-3 py-1.5 text-xs font-semibold text-[var(--gray-700)] hover:bg-[var(--gray-200)] transition-colors"
-          >
-            Re-upload
-          </Link>
-        )}
       </div>
     </div>
   );
@@ -200,6 +215,9 @@ function DocumentsContent() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState('all');
   
   // Track polling controllers and timeout errors per document
   const pollingControllers = useRef<Record<string, AbortController>>({});
@@ -326,10 +344,26 @@ function DocumentsContent() {
     }
   };
 
+  // ── Filter & Search ──
+  const filteredDocuments = documents.filter(doc => {
+    const filename = doc.filename || '';
+    const matchesSearch = filename.toLowerCase().includes(searchQuery.toLowerCase());
+    if (filterType === 'all') return matchesSearch;
+    const ext = filename.split('.').pop()?.toLowerCase() || '';
+    return matchesSearch && ext === filterType;
+  });
+
+  const filterOptions = [
+    { value: 'all', label: 'All Files' },
+    { value: 'pdf', label: 'PDFs' },
+    { value: 'txt', label: 'Text' },
+    { value: 'md', label: 'Markdown' },
+  ];
+
   // ── Render ──
   return (
     <div className="flex flex-col gap-6 h-full">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-[var(--gray-900)]">
             My Documents
@@ -338,14 +372,65 @@ function DocumentsContent() {
             Manage your uploaded files and check their processing status.
           </p>
         </div>
-        <Link href="/dashboard/upload" tabIndex={-1}>
+        <Link href="/dashboard/upload" tabIndex={-1} className="shrink-0">
           <Button>Upload new</Button>
         </Link>
       </div>
 
+      {/* Search and Filters */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-2 rounded-xl border border-[var(--gray-200)] shadow-sm">
+        <div className="relative flex-1 max-w-sm">
+          <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--gray-400)]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+          <input
+            type="text"
+            placeholder="Search documents..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-[var(--gray-50)] text-sm rounded-lg pl-9 pr-3 py-2 text-[var(--gray-900)] placeholder:text-[var(--gray-400)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-500)] border border-transparent focus:bg-white transition-all"
+          />
+        </div>
+        <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 hide-scrollbar">
+          {filterOptions.map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setFilterType(opt.value)}
+              className={`whitespace-nowrap px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
+                filterType === opt.value
+                  ? 'bg-[var(--gray-900)] text-white'
+                  : 'text-[var(--gray-600)] hover:bg-[var(--gray-100)]'
+              }`}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {isLoading ? (
-        <div className="flex h-64 items-center justify-center rounded-2xl border-2 border-dashed border-[var(--gray-200)] bg-[var(--gray-50)]">
-          <Spinner size={32} className="text-[var(--brand-500)]" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="flex flex-col justify-between rounded-xl border border-[var(--gray-200)] bg-white p-5 shadow-sm h-48">
+              <div>
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-10 w-10 rounded-lg" />
+                  <div className="flex-1">
+                    <Skeleton className="h-5 w-3/4 mb-2" />
+                    <Skeleton className="h-4 w-1/2" />
+                  </div>
+                </div>
+                <div className="mt-4">
+                  <Skeleton className="h-6 w-20 rounded-full" />
+                </div>
+              </div>
+              <div className="mt-auto pt-4 flex justify-between">
+                <Skeleton className="h-8 w-16" />
+                <Skeleton className="h-8 w-16" />
+              </div>
+            </div>
+          ))}
         </div>
       ) : error ? (
         <div className="rounded-xl border border-[var(--error-200)] bg-[var(--error-50)] p-6 text-center text-[var(--error-700)]">
@@ -373,9 +458,16 @@ function DocumentsContent() {
             <Button>Upload your first document</Button>
           </Link>
         </div>
+      ) : filteredDocuments.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-[var(--gray-200)] bg-white p-12 text-center">
+          <p className="text-sm text-[var(--gray-500)]">No documents match your search.</p>
+          <Button variant="ghost" onClick={() => { setSearchQuery(''); setFilterType('all'); }} className="mt-4">
+            Clear filters
+          </Button>
+        </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {documents.map((doc) => (
+          {filteredDocuments.map((doc) => (
             <DocumentCard
               key={doc.document_id}
               doc={doc}
@@ -395,8 +487,10 @@ function DocumentsContent() {
 export default function DocumentsPage() {
   return (
     <Suspense fallback={
-      <div className="flex h-64 items-center justify-center">
-        <Spinner size={32} className="text-[var(--brand-500)]" />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 w-full">
+        <Skeleton className="h-48 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-xl hidden sm:block" />
+        <Skeleton className="h-48 w-full rounded-xl hidden lg:block" />
       </div>
     }>
       <DocumentsContent />

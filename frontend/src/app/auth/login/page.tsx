@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 import { login, register, resendVerification } from '@/lib/auth.api';
 import { ApiError, ERROR_CODES } from '@/lib/api';
 import { loginSchema, type LoginFormValues } from '@/lib/auth.schemas';
-import { Button, Input, PasswordInput, FormError } from '@/components/ui';
+import { Button, Input, PasswordInput, FormError, Skeleton } from '@/components/ui';
 import { useCountdown } from '@/hooks/useCountdown';
 
 // ─── Resend-verification inline prompt ───────────────────────────────────────
@@ -221,7 +221,6 @@ function LoginForm() {
             href="/auth/forgot-password"
             className="self-end text-sm font-semibold transition-colors hover:underline"
             style={{ color: 'var(--brand-600)' }}
-            tabIndex={-1}
           >
             Forgot your password?
           </Link>
@@ -256,7 +255,14 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<div className="h-80 animate-pulse rounded-lg bg-gray-100" />}>
+    <Suspense fallback={
+      <div className="flex flex-col gap-5 w-full">
+        <Skeleton className="h-10 w-32 mb-2" />
+        <Skeleton className="h-14 w-full" />
+        <Skeleton className="h-14 w-full" />
+        <Skeleton className="h-10 w-full mt-2" />
+      </div>
+    }>
       <LoginForm />
     </Suspense>
   );
