@@ -1,8 +1,9 @@
 from contextlib import asynccontextmanager
 from prometheus_fastapi_instrumentator import Instrumentator
 from typing import AsyncGenerator
+import ipaddress
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
@@ -61,11 +62,30 @@ app.include_router(internal_router)
 # Exposes /metrics for Prometheus scraping (internal network only — not proxied
 # through Nginx). Instrumentator must be set up after routers are registered
 # so it sees all routes for labelling, but before middleware is added.
+def _require_internal_ip(request: Request) -> None:
+    """Ensure the request comes from an internal network IP and is not proxied."""
+    # Nginx adds X-Forwarded-For if it proxies the request from the public internet.
+    if "x-forwarded-for" in request.headers:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    
+    client_ip = request.client.host if request.client else ""
+    try:
+        ip_obj = ipaddress.ip_address(client_ip)
+        if not ip_obj.is_private and not ip_obj.is_loopback:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+
 Instrumentator(
     should_group_status_codes=True,       # 2xx/4xx/5xx, not individual codes
     should_ignore_untemplated=True,       # drops /metrics itself from its own metrics
     excluded_handlers=["/health", "/metrics"],
-).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
+).instrument(app).expose(
+    app, 
+    endpoint="/metrics", 
+    include_in_schema=False,
+    dependencies=[Depends(_require_internal_ip)]
+)
 
 # ---------------------------------------------------------------------------
 # Middleware stack — added in reverse execution order.

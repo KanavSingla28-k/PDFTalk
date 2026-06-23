@@ -105,7 +105,14 @@ async def _record_failure() -> None:
 
 async def check_and_increment_token_usage(user_id: str, tokens: int) -> None:
     key = rc.key_daily_token_quota(user_id)
-    new_total = await rc.increment_counter_by(key, tokens, ttl_seconds=90_000)
+    stats_key = rc.key_daily_token_stats()
+    new_total = await rc.increment_counter_by(
+        key, 
+        tokens, 
+        ttl_seconds=90_000,
+        stats_zset_key=stats_key,
+        stats_member=user_id
+    )
 
     if new_total > settings.MAX_DAILY_TOKENS_PER_USER:
         logger.warning(

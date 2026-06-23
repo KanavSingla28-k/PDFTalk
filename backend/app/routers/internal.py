@@ -15,7 +15,7 @@ import structlog
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status, BackgroundTasks
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from rq.registry import FailedJobRegistry
@@ -43,29 +43,26 @@ _COOKIE_MAX_AGE = 60 * 60 * 8  # 8 hours
 # Auth dependencies — two separate ones for the two auth surfaces
 # ---------------------------------------------------------------------------
 
-def _require_admin_cookie(
+async def _require_admin_cookie(
     admin_session: str | None = Cookie(default=None),
 ) -> None:
     """
     Protects browser-facing endpoints (stats, future admin routes).
-    Reads the httpOnly cookie set by /internal/admin/login.
+    Reads the httpOnly cookie set by /internal/admin/login and verifies
+    it exists in Redis as an active session.
     """
     if not admin_session:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated",
         )
-    if settings.ADMIN_TOKEN is None:
-        log.error("admin_token_not_configured")
+
+    redis = get_redis()
+    is_valid = await redis.get(f"admin:session:{admin_session}")
+    if not is_valid:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="ADMIN_TOKEN is not configured on the server.",
-        )
-    # Constant-time comparison — prevents timing attacks
-    if not secrets.compare_digest(admin_session, settings.ADMIN_TOKEN):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Forbidden",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session expired or invalid",
         )
 
 
@@ -104,8 +101,8 @@ async def admin_login(
 ) -> dict[str, str]:
     """
     Validate the admin token and set an httpOnly session cookie.
-    The token never touches localStorage — it goes directly into
-    a cookie that JavaScript cannot read.
+    The secret token never touches localStorage — it goes directly into
+    a secure backend Redis session, and the user gets an opaque token.
     """
     if settings.ADMIN_TOKEN is None:
         raise HTTPException(
@@ -118,11 +115,16 @@ async def admin_login(
             detail="Invalid token",
         )
 
+    # Generate an opaque session token
+    session_token = secrets.token_urlsafe(32)
+    redis = get_redis()
+    await redis.set(f"admin:session:{session_token}", "1", ex=_COOKIE_MAX_AGE)
+
     response.set_cookie(
         key=_COOKIE_NAME,
-        value=settings.ADMIN_TOKEN,
+        value=session_token,
         httponly=True,
-        secure=False,        # TODO: flip to True once TLS is live (T-10)
+        secure=settings.is_production,  # Automatically secure in production
         samesite="strict",
         max_age=_COOKIE_MAX_AGE,
         path="/",
@@ -132,12 +134,19 @@ async def admin_login(
 
 
 @router.post("/admin/logout")
-async def admin_logout(response: Response) -> dict[str, str]:
-    """Clear the admin session cookie."""
+async def admin_logout(
+    response: Response,
+    admin_session: str | None = Cookie(default=None)
+) -> dict[str, str]:
+    """Clear the admin session cookie and invalidate it in Redis."""
+    if admin_session:
+        redis = get_redis()
+        await redis.delete(f"admin:session:{admin_session}")
+
     response.delete_cookie(
         key=_COOKIE_NAME,
         path="/",
-        secure=False,        # TODO: flip to True once TLS is live (T-10)
+        secure=settings.is_production,
         samesite="strict",
     )
     return {"detail": "ok"}
@@ -147,17 +156,29 @@ async def admin_logout(response: Response) -> dict[str, str]:
 # Alertmanager webhook — Bearer auth (server-to-server only)
 # ---------------------------------------------------------------------------
 
+class AlertPayload(BaseModel):
+    status: str
+    labels: dict[str, str]
+    annotations: dict[str, str]
+
+class AlertmanagerWebhookPayload(BaseModel):
+    alerts: list[AlertPayload]
+
+
 @router.post(
     "/alerts/webhook",
     dependencies=[Depends(_require_admin_bearer)],
     status_code=204,
 )
-async def alertmanager_webhook(payload: dict[str, Any]) -> None:
+async def alertmanager_webhook(
+    payload: AlertmanagerWebhookPayload,
+    background_tasks: BackgroundTasks,
+) -> None:
     """
     Alertmanager POSTs here when an alert fires or resolves.
     Fire-and-forget — ACK immediately, dispatch in background.
     """
-    asyncio.create_task(dispatch_alert(payload))
+    background_tasks.add_task(dispatch_alert, payload.model_dump())
 
 
 # ---------------------------------------------------------------------------
@@ -222,16 +243,14 @@ async def admin_stats(
         await db.execute(select(func.count()).select_from(EmailVerification))
     ).scalar() or 0
 
-    # ── Token utilization today (Redis scan) ─────────────────────────────
+    # ── Token utilization today (O(1) ZSET fetch) ─────────────────────────────
     redis = get_redis()
     today_str = date.today().strftime("%Y%m%d")
-    token_data: list[dict[str, Any]] = []
-    async for key in redis.scan_iter(f"quota:tokens:*:{today_str}"):
-        val = await redis.get(key)
-        if val:
-            user_id = key.split(":")[2]
-            token_data.append({"user_id": user_id, "tokens_today": int(val)})
-    token_data.sort(key=lambda x: x["tokens_today"], reverse=True)
+    stats_key = f"admin:stats:tokens:{today_str}"
+    
+    # Get top 20 users by token usage today
+    zset_results = await redis.zrevrange(stats_key, 0, 19, withscores=True)
+    token_data = [{"user_id": str(user_id), "tokens_today": int(score)} for user_id, score in zset_results]
 
     # ── Dead-letter queue ─────────────────────────────────────────────────
     sync_redis = get_sync_redis()
