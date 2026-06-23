@@ -184,7 +184,6 @@ function LoginForm() {
         {/* Unverified email prompt */}
         {unverifiedEmail && (
           <ResendPrompt
-            email={unverifiedEmail}
             onResend={handleResend}
             isResending={isResending}
             cooldown={countdown.remaining}

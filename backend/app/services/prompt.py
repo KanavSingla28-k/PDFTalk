@@ -2,8 +2,8 @@ import tiktoken
 from typing import cast, TYPE_CHECKING
 from openai.types.chat import ChatCompletionMessageParam
 from prometheus_client import Counter
-from app.core.config import settings
 
+from app.core.config import settings
 from app.services.retrieval import RetrievedChunk
 
 if TYPE_CHECKING:
