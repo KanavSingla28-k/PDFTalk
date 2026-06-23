@@ -69,6 +69,15 @@ groups:
         annotations:
           summary: "S3 errors: {{ $value | humanize }} errors/sec on {{ $labels.operation }}"
 
+      - alert: RedisMemoryApproachingCeiling
+        expr: redis_memory_used_bytes > 85000000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis memory is approaching the 96MB noeviction ceiling"
+          description: "Redis is using {{ $value | humanize1024 }} of memory. If it hits 96MB, writes will fail (OOM command not allowed)."
+
   - name: pdftalk_quota
     rules:
       - alert: HighDailyQuotaBreaches

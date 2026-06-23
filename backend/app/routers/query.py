@@ -46,6 +46,7 @@ _query_limiter = RateLimiter(
     window_seconds=60,
     key_prefix="query",
     identifier_fn=user_id_from_request,
+    fail_open=True,
 )
 
 
