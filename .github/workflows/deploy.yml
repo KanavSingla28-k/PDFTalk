@@ -91,6 +91,8 @@ jobs:
     environment: production   # Manual approval gate lives here
 
     steps:
+      - uses: actions/checkout@v4
+
       - name: Transfer images to Lightsail
         run: |
           mkdir -p ~/.ssh
