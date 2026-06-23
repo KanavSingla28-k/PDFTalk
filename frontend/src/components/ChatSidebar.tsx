@@ -83,7 +83,7 @@ export function ChatSidebar() {
                 className={`p-3 rounded-lg cursor-pointer text-sm border flex justify-between items-center group
                   ${activeChat?.id === chat.id 
                     ? 'bg-[var(--brand-50)] border-[var(--brand-500)] text-[var(--brand-700)]' 
-                    : 'bg-white border-[var(--gray-200)] hover:border-[var(--gray-300)]'
+                    : 'bg-[var(--surface-card)] border-[var(--gray-200)] hover:border-[var(--gray-300)]'
                   }
                 `}
               >
@@ -97,7 +97,7 @@ export function ChatSidebar() {
                       if (e.key === 'Enter') handleRenameSubmit(chat.id);
                       if (e.key === 'Escape') setEditingId(null);
                     }}
-                    className="w-full bg-white border border-[var(--brand-500)] rounded px-1 outline-none text-[var(--gray-900)] max-w-[140px]"
+                    className="w-full bg-[var(--surface-card)] border border-[var(--brand-500)] rounded px-1 outline-none text-[var(--gray-900)] max-w-[140px]"
                     onClick={(e) => e.stopPropagation()}
                   />
                 ) : (

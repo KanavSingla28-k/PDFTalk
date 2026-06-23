@@ -300,7 +300,7 @@ export default function UploadForm() {
     ? 'var(--brand-50)'
     : isDragReject
       ? 'var(--error-50)'
-      : 'white';
+      : 'var(--surface-card)';
 
   const canUpload = selectedFile !== null && clientError === null && !isUploading && !countdown.isActive;
 

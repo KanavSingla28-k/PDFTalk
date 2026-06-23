@@ -66,7 +66,7 @@ export function Modal({ isOpen, onClose, title, children, maxWidth = 'md' }: Mod
       className="backdrop:bg-black/40 backdrop:backdrop-blur-sm bg-transparent p-4 w-full h-full max-h-screen max-w-none m-0 items-center justify-center open:flex fixed inset-0 z-[var(--z-modal)]"
     >
       <div 
-        className={`bg-white rounded-xl shadow-xl w-full flex flex-col max-h-[90vh] ${maxWidthClasses[maxWidth]}`}
+        className={`bg-[var(--surface-card)] rounded-xl shadow-xl w-full flex flex-col max-h-[90vh] ${maxWidthClasses[maxWidth]}`}
         onClick={(e) => e.stopPropagation()}
       >
         {title && (

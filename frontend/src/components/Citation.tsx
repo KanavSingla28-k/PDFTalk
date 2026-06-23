@@ -84,7 +84,7 @@ export function Citation({ filename, documentId }: CitationProps) {
           onClose={() => setIsModalOpen(false)}
           maxWidth="4xl"
         >
-          <div className="flex-shrink-0 flex items-center justify-between bg-white px-6 py-4 border-b border-[var(--gray-200)]">
+          <div className="flex-shrink-0 flex items-center justify-between bg-[var(--surface-card)] px-6 py-4 border-b border-[var(--gray-200)]">
             <h2 id="modal-title" className="text-lg font-semibold text-[var(--gray-900)] flex items-center gap-2">
               <svg
                 width="18"
@@ -133,9 +133,9 @@ export function Citation({ filename, documentId }: CitationProps) {
           </div>
 
           <div className="flex-1 overflow-y-auto p-6 bg-[var(--gray-50)]">
-            <div className="bg-white border border-[var(--gray-200)] rounded-lg p-6 shadow-sm min-h-full">
+            <div className="bg-[var(--surface-card)] border border-[var(--gray-200)] rounded-lg p-6 shadow-sm min-h-full">
               {markdownContent ? (
-                <div className="prose prose-sm max-w-none text-[var(--gray-900)]">
+                <div className="prose prose-sm max-w-none dark:prose-invert text-[var(--gray-900)]">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
                     {markdownContent}
                   </ReactMarkdown>

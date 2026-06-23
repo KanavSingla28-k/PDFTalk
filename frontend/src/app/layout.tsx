@@ -14,25 +14,29 @@ export const metadata: Metadata = {
 };
 
 import { ChatProvider } from '@/contexts/ChatContext';
+import { ThemeProvider } from '@/providers/ThemeProvider';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full`}
+      suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col">
-        <AuthProvider>
-          <ChatProvider>
-            {children}
-            <Toaster
-              position="top-right"
+      <body className="min-h-full flex flex-col bg-[var(--surface-bg)] text-[var(--gray-900)] transition-colors duration-200">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+          <AuthProvider>
+            <ChatProvider>
+              {children}
+              <Toaster
+                position="top-right"
               richColors
               closeButton
               toastOptions={{ duration: 5000 }}
             />
           </ChatProvider>
         </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

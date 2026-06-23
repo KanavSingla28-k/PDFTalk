@@ -1,6 +1,8 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
 
+@custom-variant dark (&:is(.dark *));
+
 /* ─── Design tokens ──────────────────────────────────────────────────── */
 :root {
   /* Brand */
@@ -84,6 +86,45 @@
   --text-xl: 1.25rem;
   --text-2xl: 1.5rem;
   --text-3xl: 1.875rem;
+}
+
+.dark {
+  /* Brand */
+  --brand-50:  #2d3282;
+  --brand-100: #2d31a6;
+  --brand-200: #3538cd;
+  --brand-300: #444ce7;
+  --brand-400: #6172f3;
+  --brand-500: #8098fb;
+  --brand-600: #a4bcfd;
+  --brand-700: #c7d7fe;
+  --brand-800: #e0eaff;
+  --brand-900: #f0f4ff;
+
+  /* Neutrals */
+  --gray-25:  #101828;
+  --gray-50:  #1d2939;
+  --gray-100: #344054;
+  --gray-200: #475467;
+  --gray-300: #667085;
+  --gray-400: #98a2b3;
+  --gray-500: #d0d5dd;
+  --gray-600: #eaecf0;
+  --gray-700: #f2f4f7;
+  --gray-800: #f9fafb;
+  --gray-900: #fcfcfd;
+
+  /* Surface */
+  --surface-bg:      #0f172a;
+  --surface-card:    #1e293b;
+  --surface-overlay: rgba(255, 255, 255, 0.1);
+
+  /* Shadows for dark mode */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 8px -2px rgba(0, 0, 0, 0.5), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 12px 16px -4px rgba(0, 0, 0, 0.6), 0 4px 6px -2px rgba(0, 0, 0, 0.3);
+  --shadow-xl: 0 20px 24px -4px rgba(0, 0, 0, 0.6), 0 8px 8px -4px rgba(0, 0, 0, 0.3);
 }
 
 @media (prefers-reduced-motion: reduce) {

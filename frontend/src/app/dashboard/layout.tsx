@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { Spinner } from '@/components/ui';
+import { ThemeToggle } from '@/components/ui/ThemeToggle';
 
 const NAV_ITEMS = [
   {
@@ -62,9 +63,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen flex-col" style={{ background: 'var(--gray-50)' }}>
       {/* Top navigation bar */}
       <header
-        className="sticky top-0 z-40 flex h-16 items-center border-b px-6"
+        className="sticky top-0 z-40 flex h-16 items-center border-b px-6 bg-[var(--surface-bg)]"
         style={{
-          background: 'white',
           borderColor: 'var(--gray-200)',
           boxShadow: 'var(--shadow-xs)',
         }}
@@ -108,9 +108,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </nav>
 
         {/* Right side: user + logout */}
-        <div className="ml-auto flex items-center gap-3">
+        <div className="ml-auto flex items-center gap-2 sm:gap-3">
+          <ThemeToggle />
           {user && (
-            <span className="text-sm" style={{ color: 'var(--gray-500)' }}>
+            <span className="text-sm hidden sm:inline-block" style={{ color: 'var(--gray-500)' }}>
               {user.email}
             </span>
           )}
@@ -125,7 +126,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </header>
 
       {/* Page content */}
-      <main className="flex-1 px-6 py-8 mx-auto w-full max-w-5xl">
+      <main className={pathname?.startsWith('/dashboard/chat') ? "flex-1 flex flex-col overflow-hidden" : "flex-1 px-6 py-8 mx-auto w-full max-w-5xl"}>
         {children}
       </main>
     </div>

@@ -8,7 +8,8 @@ import { formatDistanceToNow, format } from 'date-fns';
 import { listDocuments, type DocumentRecord } from '@/lib/documents.api';
 import { streamAnswer, getSseErrorMessage, type StreamEvent } from '@/lib/query.api';
 import { ERROR_CODES } from '@/lib/api';
-import { Button, Spinner } from '@/components/ui';
+import { Button, Spinner, Modal } from '@/components/ui';
+import Link from 'next/link';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
@@ -51,7 +52,7 @@ function DocumentSelector({
   const atLimit = selectedIds.size >= 10;
 
   return (
-    <div className="rounded-xl border border-[var(--gray-200)] bg-white p-4 shadow-sm">
+    <div className="rounded-xl border border-[var(--gray-200)] bg-[var(--surface-card)] p-4 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-semibold text-[var(--gray-900)]">
           Select documents to chat with
@@ -76,7 +77,7 @@ function DocumentSelector({
                   ? 'border-[var(--brand-500)] bg-[var(--brand-50)] text-[var(--brand-700)]'
                   : isDisabled
                   ? 'cursor-not-allowed border-[var(--gray-200)] bg-[var(--gray-50)] text-[var(--gray-400)] opacity-60'
-                  : 'border-[var(--gray-200)] bg-white text-[var(--gray-700)] hover:bg-[var(--gray-50)] hover:border-[var(--gray-300)]'
+                  : 'border-[var(--gray-200)] bg-[var(--surface-card)] text-[var(--gray-700)] hover:bg-[var(--gray-50)] hover:border-[var(--gray-300)]'
               }`}
             >
               <input
@@ -297,7 +298,7 @@ function ChatMessage({
               ? 'bg-[var(--brand-600)] text-white rounded-br-sm'
               : msg.isError
               ? 'bg-[var(--error-50)] text-[var(--error-700)] border border-[var(--error-200)] rounded-bl-sm'
-              : 'bg-white text-[var(--gray-900)] border border-[var(--gray-200)] rounded-bl-sm'
+              : 'bg-[var(--surface-card)] text-[var(--gray-900)] border border-[var(--gray-200)] rounded-bl-sm'
             }
           `}
         >
@@ -318,7 +319,7 @@ function ChatMessage({
         ) : (
           <div
             className="
-              prose prose-sm max-w-none text-sm leading-relaxed
+              prose prose-sm max-w-none text-sm leading-relaxed dark:prose-invert
               prose-p:my-2 prose-headings:my-2 prose-headings:font-semibold
               prose-a:text-[var(--brand-600)] prose-a:no-underline hover:prose-a:underline
               prose-strong:text-[var(--gray-900)]
@@ -346,7 +347,7 @@ function ChatMessage({
         )}
         </div>
         {/* Actions Row */}
-        <div className={`flex items-center gap-1.5 px-2 mt-1 opacity-0 group-hover:opacity-100 transition-opacity ${isUser ? '' : 'justify-end'}`}>
+        <div className={`flex items-center gap-1.5 px-2 mt-1 opacity-50 hover:opacity-100 transition-opacity ${isUser ? '' : 'justify-end'}`}>
           <button
             onClick={handleCopy}
             className="flex items-center justify-center h-6 w-6 rounded hover:bg-[var(--gray-200)] text-[var(--gray-400)] hover:text-[var(--gray-700)] transition-colors"
@@ -409,7 +410,7 @@ function ChatMessage({
 
       {showRetryConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--gray-900)]/40 backdrop-blur-[2px] p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+          <div className="w-full max-w-md rounded-2xl bg-[var(--surface-card)] p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
             <h3 className="text-lg font-semibold text-[var(--gray-900)] mb-2">Retry Question?</h3>
             <p className="text-sm text-[var(--gray-600)] mb-6 leading-relaxed">
               Are you sure you want to retry this question? This will <strong className="text-[var(--gray-900)] font-medium">delete the previous response and any subsequent messages</strong> in the chat.
@@ -440,7 +441,10 @@ function ChatContent() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [showDocModal, setShowDocModal] = useState(false);
 
+  // ── Document Loading ──
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -548,47 +552,30 @@ function ChatContent() {
 
   // ── Render ──
   return (
-    <div className="flex h-[calc(100vh-8rem)] w-full rounded-2xl overflow-hidden border border-[var(--gray-200)] shadow-sm bg-white">
+    <div className="flex h-[calc(100vh-4rem)] w-full bg-[var(--surface-bg)]">
       <ChatSidebar />
-      <div className="flex-1 flex flex-col gap-4 p-6 overflow-hidden">
-        {/* Header / Document Selector */}
-        <div className="shrink-0">
-          <h1 className="text-2xl font-bold tracking-tight text-[var(--gray-900)] mb-4">
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="shrink-0 px-6 py-4 border-b border-[var(--gray-200)] flex items-center justify-between">
+          <h1 className="text-xl font-semibold tracking-tight text-[var(--gray-900)] truncate">
             {activeChat ? activeChat.title : 'New Chat'}
           </h1>
-          {isLoadingDocs ? (
-            <div className="flex items-center gap-2 text-sm text-[var(--gray-500)]">
-              <Spinner size={16} /> Loading documents…
-            </div>
-          ) : (
-            <div 
-              className={activeChat ? 'opacity-50 cursor-not-allowed' : ''}
-              title={activeChat ? "Documents cannot be changed in an existing chat." : undefined}
-            >
-              <div className={activeChat ? 'pointer-events-none' : ''}>
-                <DocumentSelector
-                  documents={documents}
-                  selectedIds={selectedDocs}
-                  onToggle={toggleDoc}
-                />
-              </div>
-            </div>
-          )}
           {activeChat?.missing_document_ids && activeChat.missing_document_ids.length > 0 && (
-             <div className="mt-2 rounded-lg border border-[var(--warning-200)] bg-[var(--warning-50)] p-3 text-sm text-[var(--warning-700)]">
-                Some documents in this chat are no longer available.
+             <div className="rounded-lg border border-[var(--warning-200)] bg-[var(--warning-50)] px-3 py-1.5 text-sm text-[var(--warning-700)]">
+                Some documents missing
              </div>
           )}
         </div>
 
         {/* Chat History Area */}
         <div 
-          className="flex-1 overflow-y-auto rounded-xl border border-[var(--gray-200)] bg-[var(--gray-50)] p-4 shadow-inner relative"
+          className="flex-1 overflow-y-auto p-4 md:p-6 relative bg-[var(--gray-50)]"
           ref={scrollContainerRef}
           onScroll={handleScroll}
         >
-          {!activeChat || activeChat.messages.length === 0 ? (
-            <div className="flex h-full flex-col items-center justify-center text-center px-4">
+          <div className="mx-auto w-full max-w-4xl flex flex-col gap-6 pb-4">
+            {!activeChat || activeChat.messages.length === 0 ? (
+              <div className="flex h-full flex-col items-center justify-center text-center px-4 mt-20">
               <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[var(--brand-100)] text-[var(--brand-600)] mb-3">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
@@ -630,7 +617,7 @@ function ChatContent() {
           {showScrollFAB && (
             <button
               onClick={scrollToBottom}
-              className="absolute bottom-6 right-6 flex h-10 w-10 items-center justify-center rounded-full bg-white text-[var(--gray-600)] shadow-lg border border-[var(--gray-200)] hover:bg-[var(--gray-50)] hover:text-[var(--gray-900)] transition-all animate-in fade-in slide-in-from-bottom-4 z-10"
+              className="sticky bottom-4 left-1/2 -translate-x-1/2 flex h-10 w-10 items-center justify-center rounded-full bg-[var(--surface-card)] text-[var(--gray-600)] shadow-lg border border-[var(--gray-200)] hover:bg-[var(--gray-50)] hover:text-[var(--gray-900)] transition-all z-10"
               aria-label="Scroll to bottom"
             >
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -638,54 +625,110 @@ function ChatContent() {
               </svg>
             </button>
           )}
+          </div>
         </div>
 
         {/* Input Area */}
-        <div className="shrink-0 rounded-xl border border-[var(--gray-200)] bg-white p-3 shadow-sm focus-within:border-[var(--brand-500)] focus-within:ring-1 focus-within:ring-[var(--brand-500)] transition-colors relative">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-2">
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                selectedDocs.size === 0
-                  ? 'Select a document first...'
-                  : 'Ask a question... (Press Enter to submit, Shift+Enter for new line)'
-              }
-              disabled={selectedDocs.size === 0 || isStreaming}
-              rows={3}
-              maxLength={1000}
-              className="w-full resize-none bg-transparent p-2 text-sm text-[var(--gray-900)] placeholder:text-[var(--gray-400)] focus:outline-none disabled:opacity-50"
-            />
-            <div className="flex items-center justify-between px-2">
-              <span
-                className={`text-xs font-medium ${
-                  input.length > 1000 ? 'text-[var(--error-500)]' : 'text-[var(--gray-400)]'
-                }`}
+        <div className="shrink-0 px-4 pb-6 pt-2 bg-gradient-to-t from-[var(--surface-bg)] via-[var(--surface-bg)] to-transparent">
+          <div className="mx-auto w-full max-w-4xl relative">
+            <form 
+              onSubmit={handleSubmit}
+              className="flex items-center gap-2 rounded-full border border-[var(--gray-300)] bg-[var(--surface-card)] px-2 py-1.5 shadow-sm focus-within:border-[var(--brand-500)] focus-within:ring-1 focus-within:ring-[var(--brand-500)] transition-all overflow-hidden"
+            >
+              <button
+                type="button"
+                onClick={() => setShowDocModal(true)}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[var(--gray-500)] hover:bg-[var(--gray-100)] hover:text-[var(--gray-900)] transition-colors"
+                aria-label="Add Documents"
+                title="Add Documents"
               >
-                {input.length} / 1000
-              </span>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              </button>
 
-              {isStreaming ? (
-                <Button type="button" variant="danger" onClick={handleStop}>
-                  Stop generating
-                </Button>
-              ) : (
-                <Button
-                  type="submit"
-                  disabled={selectedDocs.size === 0 || input.trim().length === 0 || input.length > 1000}
-                >
-                  Send
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="ml-1" aria-hidden="true">
-                    <line x1="22" y1="2" x2="11" y2="13" />
-                    <polygon points="22 2 15 22 11 13 2 9 22 2" />
-                  </svg>
-                </Button>
-              )}
-            </div>
-          </form>
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  selectedDocs.size === 0
+                    ? 'Select documents using the + button to chat...'
+                    : 'Ask a question...'
+                }
+                disabled={selectedDocs.size === 0 || isStreaming}
+                rows={1}
+                maxLength={1000}
+                className="w-full resize-none bg-transparent py-2 px-1 text-base text-[var(--gray-900)] placeholder:text-[var(--gray-400)] focus:outline-none disabled:opacity-50 h-[40px] flex items-center"
+              />
+              
+              <div className="flex shrink-0 items-center gap-2 pr-1">
+                {isStreaming ? (
+                  <button
+                    type="button"
+                    onClick={handleStop}
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--gray-100)] text-[var(--error-600)] hover:bg-[var(--error-50)] transition-colors"
+                    aria-label="Stop generation"
+                    title="Stop generation"
+                  >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2" ry="2"></rect></svg>
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    disabled={!input.trim() || selectedDocs.size === 0 || isStreaming}
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-[var(--brand-500)] text-white hover:bg-[var(--brand-600)] disabled:opacity-50 disabled:bg-[var(--gray-300)] transition-colors"
+                    aria-label="Send message"
+                  >
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
         </div>
       </div>
+
+      <Modal
+        isOpen={showDocModal}
+        onClose={() => setShowDocModal(false)}
+        title="Select Documents"
+      >
+        <div className="p-6 space-y-4">
+          <p className="text-sm text-[var(--gray-600)]">
+            Select up to 10 documents to include in your chat context.
+          </p>
+          {isLoadingDocs ? (
+            <div className="flex justify-center p-4">
+              <Spinner size={24} />
+            </div>
+          ) : documents.length === 0 ? (
+            <div className="text-center py-6">
+              <p className="text-sm text-[var(--gray-500)] mb-4">You don&apos;t have any ready documents.</p>
+              <Link href="/dashboard/upload" onClick={() => setShowDocModal(false)}>
+                <Button>Go to Upload</Button>
+              </Link>
+            </div>
+          ) : (
+            <div 
+              className={activeChat ? 'opacity-50 cursor-not-allowed' : ''}
+              title={activeChat ? "Documents cannot be changed in an existing chat." : undefined}
+            >
+              <div className={activeChat ? 'pointer-events-none' : ''}>
+                <DocumentSelector
+                  documents={documents}
+                  selectedIds={selectedDocs}
+                  onToggle={toggleDoc}
+                />
+              </div>
+            </div>
+          )}
+          <div className="flex justify-between items-center pt-4 border-t border-[var(--gray-200)] mt-6">
+            <Link href="/dashboard/upload" className="text-sm text-[var(--brand-600)] hover:underline font-medium" onClick={() => setShowDocModal(false)}>
+              + Upload New Document
+            </Link>
+            <Button onClick={() => setShowDocModal(false)}>Done</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

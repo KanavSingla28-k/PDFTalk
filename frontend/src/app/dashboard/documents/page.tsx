@@ -131,7 +131,7 @@ function DocumentCard({
         isNew ? 'ring-2 ring-[var(--brand-400)] ring-offset-2' : ''
       }`}
       style={{
-        background: 'white',
+        background: 'var(--surface-card)',
         borderColor: 'var(--gray-200)',
       }}
     >
@@ -378,7 +378,7 @@ function DocumentsContent() {
       </div>
 
       {/* Search and Filters */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-2 rounded-xl border border-[var(--gray-200)] shadow-sm">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[var(--surface-card)] p-2 rounded-xl border border-[var(--gray-200)] shadow-sm">
         <div className="relative flex-1 max-w-sm">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--gray-400)]" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="11" cy="11" r="8"></circle>
@@ -389,7 +389,7 @@ function DocumentsContent() {
             placeholder="Search documents..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-[var(--gray-50)] text-sm rounded-lg pl-9 pr-3 py-2 text-[var(--gray-900)] placeholder:text-[var(--gray-400)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-500)] border border-transparent focus:bg-white transition-all"
+            className="w-full bg-[var(--gray-50)] text-sm rounded-lg pl-9 pr-3 py-2 text-[var(--gray-900)] placeholder:text-[var(--gray-400)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-500)] border border-transparent focus:bg-[var(--surface-bg)] transition-all"
           />
         </div>
         <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0 hide-scrollbar">
@@ -412,7 +412,7 @@ function DocumentsContent() {
       {isLoading ? (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="flex flex-col justify-between rounded-xl border border-[var(--gray-200)] bg-white p-5 shadow-sm h-48">
+            <div key={i} className="flex flex-col justify-between rounded-xl border border-[var(--gray-200)] bg-[var(--surface-card)] p-5 shadow-sm h-48">
               <div>
                 <div className="flex items-center gap-3">
                   <Skeleton className="h-10 w-10 rounded-lg" />
@@ -440,7 +440,7 @@ function DocumentsContent() {
           </Button>
         </div>
       ) : documents.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[var(--gray-200)] bg-white p-12 text-center">
+        <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-[var(--gray-200)] bg-[var(--surface-card)] p-12 text-center">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--gray-50)]">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--gray-400)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
@@ -459,7 +459,7 @@ function DocumentsContent() {
           </Link>
         </div>
       ) : filteredDocuments.length === 0 ? (
-        <div className="flex flex-col items-center justify-center rounded-2xl border border-[var(--gray-200)] bg-white p-12 text-center">
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-[var(--gray-200)] bg-[var(--surface-card)] p-12 text-center">
           <p className="text-sm text-[var(--gray-500)]">No documents match your search.</p>
           <Button variant="ghost" onClick={() => { setSearchQuery(''); setFilterType('all'); }} className="mt-4">
             Clear filters

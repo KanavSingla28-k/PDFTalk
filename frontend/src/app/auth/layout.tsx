@@ -11,7 +11,7 @@ export const metadata: Metadata = {
  */
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen bg-white">
+    <div className="flex min-h-screen bg-[var(--surface-bg)]">
       {/* Left Column: Form */}
       <div className="flex flex-1 flex-col justify-center px-4 py-12 sm:px-6 lg:flex-none lg:w-[480px] xl:w-[560px]">
         <div className="mx-auto w-full max-w-sm lg:w-96">
@@ -77,14 +77,14 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
             Upload your PDFs, Markdown files, or Text documents, and instantly extract insights, summaries, and answers using AI.
           </p>
           <div className="mt-12 grid grid-cols-2 gap-8 max-w-lg">
-            <div className="bg-white/60 backdrop-blur-md rounded-xl p-6 border border-white/50 shadow-sm">
+            <div className="bg-[var(--surface-card)]/60 backdrop-blur-md rounded-xl p-6 border border-white/50 shadow-sm">
               <div className="text-[var(--brand-600)] mb-3">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
               </div>
               <h3 className="font-semibold text-[var(--gray-900)]">Instant Answers</h3>
               <p className="mt-1 text-sm text-[var(--gray-500)]">Extract specific information without reading the whole file.</p>
             </div>
-            <div className="bg-white/60 backdrop-blur-md rounded-xl p-6 border border-white/50 shadow-sm">
+            <div className="bg-[var(--surface-card)]/60 backdrop-blur-md rounded-xl p-6 border border-white/50 shadow-sm">
               <div className="text-[var(--brand-600)] mb-3">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 8v4"></path><path d="M12 16h.01"></path></svg>
               </div>
