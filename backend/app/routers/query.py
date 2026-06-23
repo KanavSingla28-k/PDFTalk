@@ -9,17 +9,21 @@ from __future__ import annotations
 import asyncio
 import json
 import structlog
+import uuid
 from typing import AsyncIterator
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from openai import APITimeoutError
 from openai.types.chat import ChatCompletionMessageParam
+from sqlalchemy import update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_verified_user
+from app.auth.tokens import TokenExpiredError, TokenInvalidError
 from app.core.config import settings
 from app.db.session import get_db
+from app.models.chat import Chat
 from app.models.query import QueryRequest
 from app.models.user import User
 from app.models.message import Message, MessageRole, MessageStatus
@@ -107,8 +111,6 @@ async def ask(
     if chat.title == "New Chat":
         chat.title = body.question[:50].strip()
         
-    from sqlalchemy import func
-    chat.updated_at = func.now()
     await db.commit()
 
     # Increment here — after all pre-stream validation passes, before the
@@ -270,6 +272,15 @@ async def _sse_generator(
             "The AI service is temporarily unavailable. Please try again shortly.",
         )
 
+    except (TokenInvalidError, TokenExpiredError):
+        if generation_completed:
+            logger.warning("sse.post_completion_cleanup_token_error", user_id=user_id)
+            yield "data: [DONE]\n\n"
+            return
+        logger.warning("sse.token_expired", user_id=user_id)
+        stream_errors_total.labels(error_code="TOKEN_EXPIRED").inc()
+        yield _error_event("TOKEN_EXPIRED", "Session expired. Please log in again.")
+
     except Exception as exc:
         if generation_completed:
             # Generation succeeded; this is an unanticipated failure in
@@ -296,12 +307,6 @@ async def _sse_generator(
 
     finally:
         if accumulated_content:
-            import uuid
-            from sqlalchemy import update
-            from sqlalchemy import func
-            from app.models.chat import Chat
-            from app.models.message import Message, MessageRole, MessageStatus
-            
             status = MessageStatus.COMPLETE if generation_completed else MessageStatus.TRUNCATED
             assistant_msg = Message(
                 chat_id=uuid.UUID(chat_id),
