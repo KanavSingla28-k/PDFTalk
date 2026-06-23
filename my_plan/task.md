@@ -1,337 +1,355 @@
-# T-72 · Persistent Chat History — Implementation Plan
+# T-52a · Markdown Rendering for Chat Messages
 
-**Depends on:** T-22 (auth), T-27 (document ownership), T-34/T-37 (retrieval + prompt builder), T-39/T-40 (SSE streaming), T-69 (metrics)
-**Blocks:** Nothing downstream yet — this is additive to the existing query path.
+> **Type:** Frontend enhancement (sub-task of T-52 — Chat / Q&A UI)
+> **Phase:** 10 — Frontend
+> **Depends on:** T-52 (SSE streaming chat UI — confirmed live in `src/app/dashboard/chat/page.tsx` + `ChatContext.tsx`)
+> **Blocks:** T-53 (error boundary / responsive polish should land after this)
+> **Estimated effort:** 1.5–2 hours (smaller than originally scoped — see §2)
 
-This plan sequences the work so each step lands independently testable, in an order that de-risks the parts most likely to break existing behavior (`/query/ask`) before building UI on top of them.
-
----
-
-## Locked Design Decisions
-
-| Decision | Resolution |
-|---|---|
-| Auto-naming | Created as `"New Chat"` → after first user message, if title is still `"New Chat"`, overwrite with a truncated version of the question. `PATCH` rename always available; auto-title never fires again once overwritten. |
-| Conversation context bounding | Token-budgeted truncation, walked newest→oldest, separate budget from document context. |
-| Document deletion mid-chat (partial) | Chat continues, flags missing doc(s), query still works with remaining documents. |
-| Document deletion mid-chat (all) | `409` error — chat is unusable, must be deleted. |
-| `document_ids` storage | `JSONB` column on `Chat`, no join table. |
-| Partial stream durability | `Message.status` field (`complete` / `truncated`) so partial assistant responses survive disconnects/crashes. |
-| Chat deletion | Hard delete — no soft-delete/archive. |
-| Token budget split | Documents: 3,000 tokens (existing, unchanged). History: 1,500 tokens (new). |
-| `POST /chats` rate limit | 10/min/user. |
+This revision replaces the first draft after reviewing the actual frontend source. The plan now targets real file paths, the real `ChatMessage` function, the real CSS variable names from `globals.css`, and the actual dependency set in `package.json` / `pnpm-lock.yaml`.
 
 ---
 
-## T-72.1 — Database Models + Migration
+## 1. Why this task exists
 
-**Files:** `backend/app/models/chat.py`, `backend/app/models/message.py`, new Alembic revision
+`gpt-4o-mini` streams Markdown-structured text (`**bold**`, numbered lists, code fences) through `streamAnswer()` in `query.api.ts`, token by token, into `ChatContext.tsx`'s `activeChat.messages` state. The chat page currently renders that accumulated string as literal text inside a `whitespace-pre-wrap` div (`page.tsx`, `ChatMessage` function, lines ~140–160). Users see raw asterisks and hash marks instead of formatting.
 
-### Why this goes first
-Everything else — service layer, router, frontend — depends on the schema existing. Getting the schema wrong here means a second migration later to fix column types or relationships mid-build, which costs more than spending extra time up front.
+This is a pure rendering change. Nothing in `query.api.ts`, `ChatContext.tsx`, or the backend SSE protocol changes.
 
-### `Chat` model
+---
 
-| Column | Type | Notes |
+## 2. What's different from the original draft, now that the real code is visible
+
+| Item | Original assumption | Actual codebase | Plan adjustment |
+|---|---|---|---|
+| Component location | Separate `ChatMessage.tsx` file | `ChatMessage` is a local function *inside* `src/app/dashboard/chat/page.tsx` (not exported, not in its own file) | Edit in place; no new component directory needed |
+| Tailwind version | Assumed v4, unconfirmed | Confirmed v4: `globals.css` starts with `@import "tailwindcss";`, `package.json` has `"tailwindcss": "^4"` and `"@tailwindcss/postcss": "^4"` | `@plugin` directive approach is correct, no fallback needed |
+| Brand/surface CSS vars | Guessed names like `--surface-muted`, `--surface-code` | Real tokens in `globals.css`: `--brand-500`, `--gray-50`...`--gray-900`, `--error-50/300/500/700`, `--success-50/500/700`, `--warning-50/500`. **No `--surface-*` or `--text-*` tokens exist** | Rewrite every `prose-*` class and the code-block component to use the actual `--gray-*` / `--brand-*` scale |
+| Icon library | Assumed `lucide-react` available | Not installed. Every icon in this codebase (`ui/index.tsx`, `UploadForm.tsx`, `dashboard/layout.tsx`) is **hand-written inline SVG**, zero icon-library dependency anywhere | Copy button uses inline SVG, matching the codebase's existing pattern exactly — don't introduce a new dependency for one icon |
+| Citations | Assumed already rendered after the stream, needing isolation from Markdown | **Not implemented yet.** `query.api.ts` has a literal `// TODO: emit 'sources' event if UI needs to display citations` — the `sources` SSE payload is currently discarded | No isolation work needed today since there's nothing to isolate from. Note added in §6 so whoever implements citations later reads it first |
+| pnpm version | Generic `pnpm add` | Repo pins pnpm to exactly `11.6.0` (`package.json` `packageManager` field, `Dockerfile`'s `npm install -g pnpm@11.6.0`) | Specify the exact pinned version in install instructions |
+| Streaming source | Assumed a generic streaming hook | Real flow: `ChatContext.sendMessage()` mutates `activeChat.messages[last].content += event.content` on every `token` event, fully accumulated string lives in React state already | Confirms "render whatever string exists right now" approach in §5 — no extra buffering work needed |
+| User message rendering | Generic | `ChatMessage` already branches on `isUser` with a different bubble style (`bg-[var(--brand-500)] text-white` vs `bg-white border`) | Keep that exact branch structure — only change what happens inside the non-user branch |
+
+---
+
+## 3. Security note (unchanged, still load-bearing)
+
+`react-markdown` does not execute embedded HTML or scripts by default. That property must be preserved:
+
+- Never add `rehype-raw` to the plugin list.
+- Never pipe any part of `msg.content` through `dangerouslySetInnerHTML`.
+- The streamed text originates from the backend's LLM call, grounded in user-uploaded PDF content — effectively untrusted text that happens to flow through your own API. Treat it accordingly.
+
+---
+
+## 4. Implementation steps
+
+### Step 1 — Install dependencies
+
+```bash
+cd frontend
+pnpm add react-markdown@9.0.1 remark-gfm@4.0.0
+pnpm add -D @tailwindcss/typography@0.5.15
+```
+
+Exact pins, not `^` ranges — consistent with how `package.json` already pins exact versions for framework-critical packages (`"next": "15.5.19"`, `"react": "19.2.4"`, `"eslint-config-next": "15.5.19"`).
+
+After this, `pnpm-lock.yaml` regenerates. Confirm `pnpm install --frozen-lockfile` (the exact command `Dockerfile`'s `deps` stage runs) still succeeds before committing the new lockfile — that's the real build gate, not just `pnpm add` exiting cleanly.
+
+---
+
+### Step 2 — Register the Tailwind v4 typography plugin
+
+**File:** `frontend/src/app/globals.css`
+
+```css
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+/* ─── Design tokens ──────────────────────────────────────────────────── */
+:root {
+  /* ... existing content, completely unchanged ... */
+```
+
+One line added, directly below the existing `@import "tailwindcss";`. Nothing else in this file changes — all the `--brand-*`, `--gray-*`, `--error-*`, `--success-*`, `--warning-*` tokens stay exactly as they are; Step 3 builds on top of them rather than inventing new ones.
+
+---
+
+### Step 3 — Edit `ChatMessage` in place (no new file needed)
+
+**File:** `frontend/src/app/dashboard/chat/page.tsx`
+
+Current code (for reference, lines ~140–162):
+
+```tsx
+function ChatMessage({ msg }: { msg: Message }) {
+  const isUser = msg.role === 'user';
+
+  return (
+    <div className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={`max-w-[85%] rounded-2xl px-5 py-3.5 shadow-sm ${
+          isUser
+            ? 'bg-[var(--brand-500)] text-white rounded-br-none'
+            : msg.isError
+            ? 'bg-[var(--error-50)] text-[var(--error-700)] border border-[var(--error-200)] rounded-bl-none'
+            : 'bg-white text-[var(--gray-900)] border border-[var(--gray-200)] rounded-bl-none'
+        }`}
+      >
+        <div className="whitespace-pre-wrap text-sm leading-relaxed">
+          {msg.content}
+          {msg.isStreaming && (
+            <span className="inline-block ml-1 h-3 w-1.5 animate-pulse bg-current opacity-60" />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+```
+
+Note in passing: `border-[var(--error-200)]` is referenced here but `--error-200` isn't defined in `globals.css` (only `--error-50/300/500/700` exist). Pre-existing gap, unrelated to this task — left as-is below rather than silently "fixed" as a drive-by change.
+
+New code — only the inner content block changes; the outer bubble/role logic is untouched:
+
+```tsx
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import type { Components } from 'react-markdown';
+
+// ─── Markdown code block (fenced ``` blocks only — inline `code` falls
+// through to prose-code:* classes below and isn't touched by this) ──────────
+
+function CodeBlock({ className, children }: { className?: string; children?: React.ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const language = className?.replace('language-', '') ?? 'text';
+  const code = String(children).replace(/\n$/, '');
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <div className="my-2 overflow-hidden rounded-lg border border-[var(--gray-200)]">
+      <div className="flex items-center justify-between bg-[var(--gray-50)] px-3 py-1.5 text-xs text-[var(--gray-500)]">
+        <span className="font-mono">{language}</span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1 transition-opacity hover:opacity-100"
+          style={{ opacity: copied ? 1 : 0.6 }}
+          aria-label="Copy code"
+        >
+          {copied ? (
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M3 7l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="9" y="9" width="13" height="13" rx="2" />
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+            </svg>
+          )}
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <pre className="m-0 overflow-x-auto bg-[var(--gray-25)] p-3 text-sm">
+        <code className={className}>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
+const markdownComponents: Components = {
+  code(props) {
+    const { children, className, ...rest } = props;
+    const isInline = !className?.includes('language-');
+    if (isInline) {
+      return <code className={className} {...rest}>{children}</code>;
+    }
+    return <CodeBlock className={className}>{children}</CodeBlock>;
+  },
+};
+
+function ChatMessage({ msg }: { msg: Message }) {
+  const isUser = msg.role === 'user';
+
+  return (
+    <div className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div
+        className={`max-w-[85%] rounded-2xl px-5 py-3.5 shadow-sm ${
+          isUser
+            ? 'bg-[var(--brand-500)] text-white rounded-br-none'
+            : msg.isError
+            ? 'bg-[var(--error-50)] text-[var(--error-700)] border border-[var(--error-300)] rounded-bl-none'
+            : 'bg-white text-[var(--gray-900)] border border-[var(--gray-200)] rounded-bl-none'
+        }`}
+      >
+        {isUser ? (
+          // User input stays plain text — preserves whitespace exactly as
+          // typed and never interprets typed *asterisks* or _underscores_
+          // as Markdown.
+          <div className="whitespace-pre-wrap text-sm leading-relaxed">
+            {msg.content}
+          </div>
+        ) : msg.isError ? (
+          // Error bubbles also stay plain text — these are short strings
+          // from getSseErrorMessage(), not LLM output, and don't need
+          // Markdown parsing.
+          <div className="whitespace-pre-wrap text-sm leading-relaxed">
+            {msg.content}
+          </div>
+        ) : (
+          <div
+            className="
+              prose prose-sm max-w-none text-sm leading-relaxed
+              prose-p:my-2 prose-headings:my-2 prose-headings:font-semibold
+              prose-a:text-[var(--brand-600)] prose-a:no-underline hover:prose-a:underline
+              prose-strong:text-[var(--gray-900)]
+              prose-code:rounded prose-code:bg-[var(--gray-100)] prose-code:px-1 prose-code:py-0.5
+              prose-code:text-[var(--brand-700)] prose-code:before:content-none prose-code:after:content-none
+              prose-pre:bg-transparent prose-pre:p-0 prose-pre:m-0
+              prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5
+              prose-blockquote:border-l-[var(--brand-300)] prose-blockquote:text-[var(--gray-600)]
+            "
+          >
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+              {msg.content}
+            </ReactMarkdown>
+          </div>
+        )}
+        {msg.isStreaming && (
+          <span className="inline-block ml-1 h-3 w-1.5 animate-pulse bg-current opacity-60" />
+        )}
+      </div>
+    </div>
+  );
+}
+```
+
+Two structural notes versus the original draft:
+
+1. **Error bubbles (`msg.isError`) now get their own explicit plain-text branch**, rather than falling into the Markdown path. A stray `*` in an error string like *"AI service went down mid-response"* shouldn't ever be parsed as emphasis.
+2. **The streaming cursor (`msg.isStreaming` span) stays outside all three branches**, exactly matching today's placement — it appears after whichever content rendered, regardless of which branch ran.
+
+`useState` is already imported at the top of `page.tsx` (`import { Suspense, useState, useEffect, useRef, FormEvent } from 'react';`), so `CodeBlock`'s `useState` call needs no new import line.
+
+---
+
+### Step 4 — Verify the exact `prose-*` color choices against `globals.css`
+
+Quick gut-check before merging — every var referenced above, checked against the real file:
+
+| Class used | Token | Defined in `globals.css`? |
 |---|---|---|
-| `id` | `UUID` | PK, `gen_random_uuid()` default — matches existing `users`/`documents` pattern (T-04) |
-| `user_id` | `UUID` | FK → `users.id`, `ON DELETE CASCADE` — same cascade behavior as `documents` |
-| `title` | `TEXT NOT NULL DEFAULT 'New Chat'` | No DB-level length cap; truncation happens before insert |
-| `document_ids` | `JSONB NOT NULL DEFAULT '[]'` | List of UUID strings. JSON chosen over a native UUID array because SQLAlchemy's JSONB mapping is simpler to work with (`list[str]` in/out, no array-type quirks between asyncpg and the ORM) |
-| `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | |
-| `updated_at` | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | **Must be bumped on every new message**, not just on rename — the sidebar sort is `ORDER BY updated_at DESC`. The message-insert code path in T-72.4 needs to touch the parent `Chat` row too. Flagging now so it isn't forgotten later. |
+| `prose-a:text-[var(--brand-600)]` | `--brand-600: #444ce7;` | ✅ |
+| `prose-strong:text-[var(--gray-900)]` | `--gray-900: #101828;` | ✅ |
+| `prose-code:bg-[var(--gray-100)]` | `--gray-100: #f2f4f7;` | ✅ |
+| `prose-code:text-[var(--brand-700)]` | `--brand-700: #3538cd;` | ✅ |
+| `prose-blockquote:border-l-[var(--brand-300)]` | `--brand-300: #a4bcfd;` | ✅ |
+| `bg-[var(--gray-25)]` (code block background) | `--gray-25: #fcfcfd;` | ✅ |
+| `border-[var(--gray-200)]` | `--gray-200: #eaecf0;` | ✅ |
 
-### `Message` model
+All real, all already defined — no new CSS variables introduced by this task.
 
-| Column | Type | Notes |
+---
+
+### Step 5 — `package.json` / CI check
+
+CI (`T-58`) runs `pnpm install --frozen-lockfile` then `pnpm type-check && pnpm lint && pnpm test`. Before pushing:
+
+- `pnpm type-check` — `react-markdown@9` ships its own `.d.ts`, no `@types/react-markdown` needed. Importing `Components` (`import type { Components } from 'react-markdown'`) types the `code()` render-prop without resorting to `any`.
+- `pnpm lint` — `eslint.config.mjs` extends `next/core-web-vitals` + `next/typescript`, plus `eslint-plugin-prettier`. The inline-SVG + template-literal style added here matches what's already throughout `page.tsx`, so it should pass without new exceptions.
+- `pnpm test` — `frontend/src/app/page.test.tsx` is the only existing test, targets the unrelated root `page.tsx`. Not required to add a new test for this task, but a cheap regression guard would be: render `<ChatMessage msg={{ id: '1', role: 'assistant', content: '**bold** text' }} />` and assert the literal string `**bold**` is absent from the rendered output.
+
+---
+
+### Step 6 — Docker rebuild reminder
+
+This change adds no new env vars, but it does change `frontend/package.json` and `pnpm-lock.yaml`. The `deps` stage in `frontend/Dockerfile` does `COPY package.json pnpm-lock.yaml* ... && pnpm install --frozen-lockfile`, cached as a layer keyed on those two files' content hash. Since both change here, Docker's own layer cache invalidates automatically on the next build — unlike `NEXT_PUBLIC_*` env-var changes, this doesn't require a manual `--no-cache` flag. Still worth one clean local build to be sure: `docker build -t pdftalk-frontend-test ./frontend`.
+
+---
+
+## 5. Streaming + partial Markdown — confirmed behavior, no extra code needed
+
+The real flow in `ChatContext.tsx`:
+
+```tsx
+} else if (event.type === 'token') {
+  setActiveChat(prev => {
+    if (!prev) return prev;
+    const newMessages = [...prev.messages];
+    const lastMsg = newMessages[newMessages.length - 1];
+    if (lastMsg.id === tempAssistantId) {
+      lastMsg.content += event.content;
+    }
+    return { ...prev, messages: newMessages };
+  });
+}
+```
+
+Every token triggers a full `setActiveChat` re-render with the growing string. `ChatMessage` already re-renders on every token today (just showing raw text); adding `ReactMarkdown` means each re-render now re-parses the accumulated string instead of dumping it raw. For typical response lengths (a few hundred to low thousands of tokens), that parse cost per token isn't perceptible lag — no debouncing is being added preemptively.
+
+The only visible effect: while `**bold` is mid-stream (closing `**` not yet arrived), it renders as literal `**bold` for a moment, then snaps to bold once the closing marker streams in. Same behavior any Markdown-streaming chat UI has (ChatGPT, Claude.ai itself) — treated as acceptable, not a bug to engineer around.
+
+---
+
+## 6. Note for whoever implements citations next (not part of this task)
+
+`query.api.ts` currently discards the `sources` SSE event:
+
+```tsx
+if (parsed.type === 'sources') {
+  // TODO: emit 'sources' event if UI needs to display citations
+  continue;
+}
+```
+
+When that TODO gets picked up: render citations as a **separate React element appended after** the `<ReactMarkdown>` block inside the assistant bubble, never concatenated into `msg.content` itself. A source filename like `Q3_2024_report.pdf` contains an underscore, which Markdown's emphasis parsing would silently corrupt if it were part of the string passed to `ReactMarkdown`. This task doesn't touch that flow since it isn't implemented yet, but the constraint is worth stating now so it isn't violated later.
+
+---
+
+## 7. File summary
+
+| Action | Path | Change |
 |---|---|---|
-| `id` | `UUID` | PK |
-| `chat_id` | `UUID` | FK → `chats.id`, `ON DELETE CASCADE` |
-| `role` | Postgres native enum (`user`, `assistant`, `system`) | Same approach as `Document.status` — DB rejects garbage values, not just app-layer validation |
-| `content` | `TEXT NOT NULL` | |
-| `token_count` | `INTEGER NOT NULL` | Computed once at write time via `tiktoken`. Stored so T-72.3's history-budgeting walk never re-tokenizes old messages on every request. This is a deliberate denormalization for performance — worth a one-line comment in the model file so a future reader doesn't think it's redundant and remove it. |
-| `status` | Enum (`complete`, `truncated`) | Default `complete` |
-| `created_at` | `TIMESTAMPTZ NOT NULL DEFAULT NOW()` | |
+| Modify | `frontend/package.json` / `pnpm-lock.yaml` | Add `react-markdown@9.0.1`, `remark-gfm@4.0.0`, `@tailwindcss/typography@0.5.15` (dev) |
+| Modify | `frontend/src/app/globals.css` | One line: `@plugin "@tailwindcss/typography";` below the existing `@import` |
+| Modify | `frontend/src/app/dashboard/chat/page.tsx` | Add `CodeBlock` function + `markdownComponents` const + two new imports; rewrite the non-user/non-error branch of `ChatMessage` to use `<ReactMarkdown>` wrapped in `prose prose-sm` |
 
-### Indexes
-
-- `idx_chats_user_id_updated_at ON chats(user_id, updated_at DESC)` — composite, not two single-column indexes, because it matches the sidebar's exact query pattern: `WHERE user_id = ? ORDER BY updated_at DESC`.
-- `idx_messages_chat_id_created_at ON messages(chat_id, created_at)` — history hydration is always "all messages for this chat, in order."
-
-### Migration mechanics
-
-Same gotcha as T-04: create enums and tables in one revision, write a clean `downgrade()` that drops tables *before* enums (Postgres won't let you drop an enum type while a column still references it). Test `alembic downgrade -1` actually works before moving on.
-
-### Open decision to make here, not later
-
-Should `Chat.document_ids` allow an empty list at the DB level, or should the constraint live entirely in the service layer? **Recommendation:** DB allows it, service layer enforces non-empty on create. Keeps the migration simple and validation logic in one place (Python), not split across two layers.
+No other files change. No backend, no API contract, no new component directories.
 
 ---
 
-## T-72.2 — Chat CRUD Service + Router
+## 8. Verification plan
 
-**Files:** `backend/app/services/chats.py`, `backend/app/routers/chats.py`
+### Manual
+1. `pnpm dev` (or rebuild the Docker frontend image), open `/dashboard/chat`, select a `READY` document.
+2. Ask: *"Give me a bulleted list of 3 points, bold one term and italicize another."* → confirm real `<ul>`/`<strong>`/`<em>` rendering, not literal markup characters.
+3. Ask for a short Python snippet → confirm a bordered code block with a language label and a working Copy button (verify via actual clipboard paste, not just visually).
+4. Type `**not bold**` as a *user* message → confirm it renders literally (user branch untouched).
+5. Trigger a forced SSE error (e.g. disconnect network mid-stream) → confirm the red error bubble still renders as plain text, not through `ReactMarkdown`.
+6. Resize to a 375px-wide viewport → confirm code blocks scroll horizontally (`overflow-x-auto` on `<pre>`) rather than breaking the `max-w-[85%]` bubble layout.
+7. DevTools console: zero errors, zero React warnings, throughout.
 
-### Why this is safe to build before touching `/query/ask`
-Nothing here is called by existing code. You can ship this entire step, deploy it, and the live app behaves identically to today — `/query/ask` still takes `document_ids` directly. This is the "build with zero blast radius" step.
+### CI
+- [ ] `pnpm install --frozen-lockfile` succeeds with the updated lockfile
+- [ ] `pnpm type-check` passes
+- [ ] `pnpm lint` passes
+- [ ] `pnpm test` passes (unaffected, but confirm no accidental break)
+- [ ] `docker build ./frontend` succeeds cleanly
 
-### Service layer — what lives here vs. the router
-
-Per the established thin-router pattern: the router parses the request, calls the service, returns the response. All logic lives in `services/chats.py`.
-
-**`create_chat(user_id, document_ids, db) -> Chat`**
-- Validates `document_ids` is non-empty.
-- Validates every ID is owned by `user_id` AND has `status == READY`. This is the same check `/query/ask` already does today (T-37's query validation) — **extract it into a shared function** both `chats.py` and `query.py` call, rather than reimplementing it. Prevents the two checks drifting out of sync later.
-- Inserts the row, returns it.
-- Raises a typed exception (e.g. `InvalidDocumentSelectionError`) on failure — the router translates that to the right HTTP status. Never raise `HTTPException` directly from the service, matching the centralized exception handler pattern already in use.
-
-**`list_chats(user_id, limit, offset, db) -> list[Chat]`**
-- Paginated, owned-only filter baked into the query itself — no path where a user can list someone else's chats by manipulating pagination params.
-
-**`get_chat_with_messages(chat_id, user_id, db) -> ChatDetail`**
-- Ownership check first — if `chat.user_id != user_id`, raise a "not found" exception so the router returns `404`, not `403`. Same enumeration-prevention logic as document ownership (T-27): a user probing random chat UUIDs should learn nothing.
-- Loads all messages, ordered by `created_at`.
-- Computes `missing_document_ids` here — diff `chat.document_ids` against a live query of the `documents` table for ones that are owned, exist, and aren't deleted. **This is computed on every read, not stored** — storing it would mean updating chat rows whenever documents are deleted, which is more moving parts for no benefit, since document deletion happens independently of any chat.
-
-**`rename_chat(chat_id, user_id, new_title, db)`**
-- Ownership check, update `title`, bump `updated_at`.
-
-**`delete_chat(chat_id, user_id, db)`**
-- Ownership check, delete. Messages cascade via the FK — a single DELETE statement, no manual cleanup needed.
-
-### Router — the rate limiter detail
-
-`POST /chats` gets its own Redis sliding-window dependency at **10/min/user**, reusing the exact mechanism from T-42 but with a new key namespace: `ratelimit:chat_create:{user_id}`. This reuses the existing `RateLimiter` class/dependency with different params — not a new rate-limiting system. Worth double-checking the T-42 implementation supports per-*user* (not just per-IP) limiting, since login/register are IP-based but this one needs to key off the authenticated user.
-
-### Testing shape
-
-Integration tests against real Postgres (per existing pattern — not SQLite, to avoid the UUID/timezone quirks already documented in project learnings). Specifically test:
-- Creating a chat with someone else's document ID → rejected.
-- Creating a chat with a non-READY document → rejected.
-- `GET /chats/{id}` for a chat you don't own → `404`, not `403`.
-- `missing_document_ids` correctly reflects a deleted document without the chat row itself being updated.
+### Explicit non-goals (unchanged from original, still out of scope)
+- No syntax highlighting library (plain monospace + copy button only)
+- No Markdown rendering of user-typed input
+- No citation rendering (not implemented anywhere yet — see §6)
+- No change to `query.api.ts`, `ChatContext.tsx`, or any backend code
 
 ---
 
-## T-72.3 — Prompt Builder: History Budgeting
+## 9. Rollback
 
-**Files:** `backend/app/services/prompt.py` (extend, don't rewrite)
-
-### Why this is isolated from the DB and from query.py
-It's a pure function — `list[Message-like objects]` in, `string` out. No async, no DB session, no OpenAI call. This makes it the cheapest thing to get exhaustively right with unit tests, and bugs caught here never reach production streaming.
-
-### The algorithm
-
-```
-function build_history_block(messages, budget=1500):
-    messages are already ordered oldest→newest from the DB
-    reverse to walk newest→oldest
-    accumulated_tokens = 0
-    selected = []
-    for message in reversed(messages):
-        if accumulated_tokens + message.token_count <= budget:
-            selected.insert(0, message)   # maintain chronological order in output
-            accumulated_tokens += message.token_count
-        elif selected is empty (this is the most recent message and it alone exceeds budget):
-            truncate message.content to fit remaining budget, using tiktoken to cut at a token boundary
-            selected.insert(0, truncated_message)
-            break
-        else:
-            break   # older messages don't fit, stop here
-    return format selected messages as the conversation block
-```
-
-### Why truncate the most recent message instead of dropping it
-
-If you drop it, a follow-up like "what about the second point you mentioned" has nothing to anchor to — the LLM sees the question but not what it's referencing, and either hallucinates or asks the user to repeat themselves, defeating the entire purpose of stateful chat.
-
-**Truncation direction is a real choice, not arbitrary:** keep the end of the most recent assistant message and the full user message — since the user's question is almost always short, and the assistant's prior answer is what tends to run long. Decide this explicitly when writing the function rather than picking by default.
-
-### Where this plugs into the existing prompt builder
-
-T-37's `services/prompt.py` already caps document context at 3,000 tokens. This is a **second, independent function** in the same file — `build_history_block()` — not a merge into one shared token pool. They're separate concerns:
-- Document context answers "what does the source material say."
-- History answers "what have we already discussed."
-
-Keeping them as separate capped blocks means a long conversation never eats into the budget reserved for grounding the answer in actual PDF content — which is the whole point of RAG. You don't want the model losing document grounding just because the conversation got long.
-
-### Testing
-
-Construct fake message lists with known token counts (mock `token_count` directly, no real `tiktoken` calls needed for this layer), assert exactly which messages survive the budget cut at various total lengths, and specifically test the single-oversized-message truncation path since it's the trickiest branch.
-
----
-
-## T-72.4 — `/query/ask` Rewrite
-
-**Files:** `backend/app/routers/query.py`, `backend/app/services/query_validation.py` (modify)
-
-### Why this is sequenced last among backend work
-
-This is the only step touching code that's live in production today and working. Everything before it (T-72.1–72.3) is net-new and additive — if the project stopped here, nothing breaks. This step is where risk concentrates, so by the time it's reached, chats exist and are tested, and history-budgeting is tested. This step becomes "wire two known-good things together" rather than "build three new things and hope they compose correctly under streaming."
-
-### 1. Schema change
-
-Request body goes from `{document_ids, question}` to `{chat_id, question}`. This is a **breaking API change** — any existing frontend code or tests hitting the old shape need updating in lockstep. Not a backend-only change in practice, even though it's filed under backend work.
-
-### 2. Validation rewrite — the real behavioral nuance
-
-**Old behavior (T-37):** all `document_ids` in the request must be owned + READY, or the whole request fails.
-
-**New behavior:** fetch `chat.document_ids`, then filter:
-- Not owned anymore (shouldn't happen since ownership was checked at chat creation, but defensive check anyway)
-- Doesn't exist anymore (deleted) — filter out
-- Exists but not READY (shouldn't happen if READY is a genuinely terminal state — worth confirming this assumption holds before relying on it)
-
-Then count what remains:
-- **Zero remain** → `409 {"error": "ALL_DOCUMENTS_DELETED", ...}`. New error code — needs an entry in the centralized exception handler and a corresponding mapping in the frontend's error-code-to-message system (T-53's toast mapping).
-- **One or more remain** → proceed, compute `missing_document_ids` as the diff between the original `chat.document_ids` and the filtered set, so the frontend can show *which* documents vanished.
-
-### 3. Pre-stream message save
-
-Before retrieval/embedding/LLM call starts, insert the user's `Message` row (`role=user, status=complete`). This means even if everything after this point fails — OpenAI is down, retrieval throws — the user's question is preserved in history. Small but real durability win: nobody wants to retype a question because the server 503'd on the same request.
-
-### 4. SSE shape change — the meta event
-
-Before any token streaming begins, emit one extra SSE event:
-
-```
-event: meta
-data: {"missing_document_ids": ["..."]}
-
-```
-
-followed by the existing `data: {token}` stream and `data: [DONE]` terminator. This is additive to the existing SSE contract — old token/done events are unchanged, there's just one new event type the frontend needs to listen for.
-
-### 5. The durability problem — the trickiest part of this task
-
-**The core issue:** streaming responses terminate in three ways:
-1. Clean completion (`[DONE]` sent)
-2. Client disconnect (user closes tab mid-answer)
-3. Server-side error mid-stream (OpenAI errors out after sending some tokens)
-
-In all three cases, *some* text was already generated and sent to the client. If the `Message` row is only written in the happy path (after `[DONE]`), the other two cases lose that text entirely — the user saw an answer on screen, refreshes, and it's gone.
-
-**The fix is structural:** wrap the token-generator consumption in a `try/finally`, where the `finally` block always writes whatever text was accumulated so far, with `status` set based on how it terminated:
-- Reached `[DONE]` normally → `status=complete`
-- Anything else (exception, detected disconnect) → `status=truncated`
-
-This mirrors the existing pattern for `job_logs` — never let a failure path silently lose state, always write what you have.
-
-**The mechanical challenge:** FastAPI's `StreamingResponse` consumes an async generator, and detecting "the client disconnected" inside that generator requires either periodically checking `request.is_disconnected()` or catching the specific exception Starlette raises on disconnect. This is the one part of this entire task worth prototyping carefully and testing with an actual simulated disconnect (a test that opens the stream and closes the connection after N tokens) rather than reasoning about it abstractly — async generator cleanup semantics in Python have sharp edges.
-
-### 6. `updated_at` bump
-
-Both the user-message save and the assistant-message save need to touch `chat.updated_at`, otherwise sidebar ordering (T-72.2's `list_chats`) goes stale the moment a chat is actively used. Easy to forget since it's a side effect on a different table than the one being directly written to.
-
-### 7. Metrics
-
-- `messages_total{role="user"}` — increments at the pre-stream save
-- `messages_total{role="assistant"}` — increments at the post-stream save, regardless of `complete` vs. `truncated` (still want to count it)
-- `chat_query_blocked_total{reason="all_documents_deleted"}` — increments on the 409 path
-- `queries_total` (already existing) — stays exactly where it is today
-
-### Testing — four distinct scenarios
-
-1. **Normal flow:** chat with all documents intact, question asked, full streamed response, `Message` rows for both user and assistant exist with `status=complete`.
-2. **Partial-missing flow:** one of two documents deleted, query still succeeds, `meta` event contains the missing ID, retrieval only used the remaining document.
-3. **All-missing flow:** both documents deleted, `409` returned, decide whether the user's `Message` row still gets created or not, metric incremented.
-4. **Simulated disconnect:** start the stream, forcibly close the connection partway through, then query the DB separately and assert a `Message` row exists with `status=truncated` and partial content matching what was sent before the cut.
-
----
-
-## T-72.5 — Frontend: API Client + Chat State
-
-**Files:** `frontend/src/lib/api.ts` (extend), new `frontend/src/lib/chats.api.ts`
-
-### Why this comes after the backend is integration-tested, not in parallel
-
-Building UI against an API contract that might still shift (because T-72.4 surfaced something unexpected) wastes rework. Once T-72.4's tests pass, the contract is stable and this step becomes mechanical.
-
-### `chats.api.ts`
-
-Five typed functions mirroring the five endpoints — `listChats()`, `createChat(documentIds)`, `getChat(chatId)`, `renameChat(chatId, title)`, `deleteChat(chatId)` — following the existing `ApiError` pattern from `lib/api.ts` (T-47), so a failed request throws a typed error the UI can branch on, not a raw fetch rejection.
-
-### The more involved part: updating the existing `/query/ask` client call
-
-Today, this function takes `document_ids` and `question`, opens the SSE stream, and parses `data:` lines. It now needs to:
-- Take `chat_id` instead of `document_ids`.
-- **Parse SSE event types, not just `data:` lines.** The existing parser (from T-39's frontend pattern) only looks for lines starting with `data:`. It needs extending to also recognize `event: meta` lines and route that payload to a different callback than the token-stream callback. This is a real parser change, not just a parameter rename — treat it as its own small unit of work with its own test (feed it a fake SSE byte stream containing a meta event + token events + `[DONE]`, assert both callbacks fire with the right payloads in the right order).
-
-### Done-when
-
-No visible UI yet at this step — purely the typed client layer. "Done" means it compiles, is typed against the real response shapes (no `any`), and has a unit test for the SSE parsing change specifically, since that's the part most likely to have an off-by-one bug in line-splitting logic.
-
----
-
-## T-72.6 — Frontend: Sidebar + Chat Window Integration
-
-**Files:** `frontend/src/components/chat/ChatSidebar.tsx`, modified dashboard/chat page
-
-### Sidebar component
-
-- Fetches `listChats()` on mount, renders title + relative timestamp (e.g. "2h ago") per row.
-- Highlights whichever chat matches the currently-active `chat_id` in state.
-- **"New Chat" button does not call `POST /chats`.** It only clears local state (`activeChatId = null`, message list = empty, document selection reset or kept, per UX preference). This avoids a real bug: if "New Chat" eagerly created a row, a user clicking it three times while deciding what to ask ends up with three empty "New Chat" rows cluttering the sidebar forever (since `DELETE` is hard-delete and nothing auto-cleans empty chats). Deferring creation until the first actual message is sent avoids this class of orphan entirely.
-
-### Main chat view changes
-
-- State needs an explicit `activeChatId: string | null`, separate from the message list and document selection — these were previously coupled (documents picked per-query) and now need to be three independent pieces of state, set together only at the moment a chat is created or loaded.
-- **Send flow when `activeChatId` is null:** call `createChat(selectedDocumentIds)` first, get back a `chat_id`, then immediately start the SSE stream using that new ID. The send button's click handler now has two sequential async steps instead of one. Worth handling the case where chat creation succeeds but the immediately-following stream fails (rare, but the chat now exists with zero messages — the UI naturally recovers since `listChats()` will include it, letting the user click back in).
-- **Send flow when `activeChatId` exists:** skip straight to streaming, no creation call.
-- **On chat select from sidebar:** `getChat(chatId)` → populate message list, set `activeChatId`, render `missing_document_ids` (if any) as a small persistent banner/badge in the chat header — not a toast, since toasts disappear and this is a standing condition the user should see for as long as they're in that chat.
-- **Handling the `409 ALL_DOCUMENTS_DELETED` case specifically:** must be caught before falling into the generic `ApiError`-to-toast mapping (T-53) — a generic "something went wrong" toast is the wrong UX here. The user needs to understand why (all documents gone) and what to do (delete the chat). This is a dedicated UI state: a full-width message in place of the chat window, with a "Delete this chat" button wired to `deleteChat()`.
-- **Rename UI:** inline-editable title (click to edit, blur/enter to save) is the lowest-friction pattern and avoids a modal for something this small — wired to `renameChat()`.
-
-### Manual verification checklist
-
-1. Create new chat → send message → streams correctly → message appears in sidebar with truncated title.
-2. Refresh page → chat history loads, correct messages in correct order.
-3. Ask a follow-up referencing the previous answer → confirm the model actually has context (not just that it doesn't error).
-4. Delete a document attached to an active chat → reload that chat → confirm the missing-doc badge appears and the chat still answers using the remaining document.
-5. Delete *all* documents attached to a chat → confirm the dedicated error state renders, not a generic toast → delete the chat → confirms it's gone from sidebar.
-6. Click "New Chat" multiple times without sending anything → confirm the sidebar doesn't accumulate empty entries.
-7. Rename a chat → refresh → confirm the rename persisted and a new message doesn't overwrite it. (This is really testing T-72.4's "only auto-title if still `New Chat`" guard, which lives in the backend message-save path — worth noting which layer actually owns the behavior being verified, even though the test is run through the UI.)
-
----
-
-## T-72.7 — Metrics + Alerting Wiring
-
-**Files:** `backend/app/utils/metrics.py` (extend); no new Grafana dashboard required yet
-
-### Why this is low-priority and parallelizable
-
-Nothing depends on it, and nothing breaks without it — purely diagnostic visibility, not functionality. This is the kind of task that's easy to skip under time pressure, which is exactly why it's worth scheduling explicitly rather than leaving it as an implicit "do it whenever" — implicit low-priority tasks are the ones that silently never happen.
-
-### The three metrics
-
-| Metric | Labels | Why |
-|---|---|---|
-| `chats_created_total` | none | Simple counter — no per-user label, consistent with the existing cardinality warning already documented for `queries_total` |
-| `messages_total` | `role` (`user`/`assistant`) | Small, fixed cardinality (2–3 values); operationally useful to see the ratio drift if, say, assistant saves silently start failing while user saves keep succeeding |
-| `chat_query_blocked_total` | `reason` | Currently just `all_documents_deleted`, but structured so more reasons can be added later via the label, not a schema change |
-
-### Registration
-
-Module-level singletons in `app/utils/metrics.py`, imported and never instantiated inside a function — consistent with the existing rule about avoiding double-registration `ValueError`s.
-
-### Dashboard/alerting — deferred, correctly
-
-No new Grafana panel or Alertmanager rule in this task. At current scale, these are numbers to check occasionally, not numbers that need to page anyone at 2am. If `chat_query_blocked_total` starts climbing in a way that suggests a real problem (e.g. a bug deleting documents that shouldn't be deleted), that signal would show up on existing dashboards or the admin stats page first — a dedicated alert rule can be added later if it proves warranted, rather than speculatively now.
-
----
-
-## Suggested Build Order
-
-1. **T-72.1 → T-72.2** first, in isolation. Nothing else depends on `query.py` yet, so this delivers a fully working, testable chat CRUD layer with zero risk to the live `/query/ask` endpoint.
-2. **T-72.3** next, also isolated. Pure function, no risk.
-3. **T-72.4** last among backend work, deliberately — the only step touching already-working production code. By this point chats exist and history budgeting is tested, so this step is "wire two known-good things together," not "build three things at once under risk."
-4. **Frontend (T-72.5 → T-72.6)** only after T-72.4 is integration-tested. Building UI against an unstable contract wastes time.
-5. **T-72.7** can run in parallel with T-72.2 onward — low-risk, low-priority, slot in whenever convenient.
-
----
-
-## Decisions Deferred to Build Time (Not Now)
-
-- Exact truncation length for auto-titles (50 characters was a working suggestion, not yet confirmed).
-- Whether `ChatSidebar` paginates or loads-all — depends on real usage volume once the feature ships; don't over-engineer ahead of data.
-- Truncation direction for the single-oversized-message case in T-72.3 (keep start vs. end of content) — flagged as a real choice above, decide explicitly when writing the function.
+Single commit touching 3 source files plus the lockfile (`package.json`, `pnpm-lock.yaml`, `globals.css`, `page.tsx`). Revert the commit, redeploy via the normal CD pipeline (T-59). Nothing persisted differently in DB, Redis, or S3 — purely a frontend rendering change.

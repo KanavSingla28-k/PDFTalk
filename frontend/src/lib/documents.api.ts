@@ -279,6 +279,15 @@ export async function getDocumentStatus(documentId: string): Promise<DocumentRec
   return apiRequest<DocumentRecord>(`/documents/${documentId}/status`);
 }
 
+/**
+ * GET /documents/{document_id}/download-url
+ *
+ * Fetches a presigned S3 GET URL to download the document.
+ */
+export async function getDocumentDownloadUrl(documentId: string): Promise<{ url: string }> {
+  return apiRequest<{ url: string }>(`/documents/${documentId}/download-url`);
+}
+
 // ---------------------------------------------------------------------------
 // Document list (paginated)
 // ---------------------------------------------------------------------------

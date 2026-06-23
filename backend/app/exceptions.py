@@ -235,6 +235,9 @@ class ChunkingError(PDFTalkError):
 class ChatNotFoundError(PDFTalkError):
     pass
 
+class MessageNotFoundError(PDFTalkError):
+    pass
+
 class EmptyDocumentListError(PDFTalkError):
     pass
 
@@ -502,6 +505,19 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "error": "CHAT_NOT_FOUND",
                 "message": "Chat not found",
+            },
+        )
+
+    @app.exception_handler(MessageNotFoundError)
+    async def message_not_found_handler(
+        request: Request,
+        exc: MessageNotFoundError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "error": "MESSAGE_NOT_FOUND",
+                "message": "Message not found",
             },
         )
 

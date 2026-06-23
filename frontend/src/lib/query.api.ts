@@ -11,6 +11,7 @@
  *   data: {plain text token}   — append to chat bubble
  *   data: [DONE]               — stream ended cleanly
  *   data: {"error": "..."}     — terminal error mid-stream (JSON object)
+ *   data: {"type":"fallback"}  — LLM used graceful redirect (show suggestion chips)
  */
 
 import { apiFetch, ApiError, ERROR_CODES, ERROR_MESSAGES } from '@/lib/api';
@@ -24,7 +25,7 @@ export interface AskRequest {
   question: string;
 }
 
-export type StreamEventType = 'token' | 'done' | 'error' | 'meta';
+export type StreamEventType = 'token' | 'done' | 'error' | 'meta' | 'fallback';
 
 export interface StreamToken {
   type: 'token';
@@ -46,7 +47,12 @@ export interface StreamMeta {
   missing_document_ids: string[];
 }
 
-export type StreamEvent = StreamToken | StreamDone | StreamError | StreamMeta;
+/** Emitted when the LLM used its graceful Rule-5 fallback response. */
+export interface StreamFallback {
+  type: 'fallback';
+}
+
+export type StreamEvent = StreamToken | StreamDone | StreamError | StreamMeta | StreamFallback;
 
 // ---------------------------------------------------------------------------
 // SSE stream reader
@@ -169,11 +175,23 @@ export async function streamAnswer(
           return;
         }
 
-        // JSON payload (could be sources or terminal error)
+        // JSON payload (could be sources, terminal error, or token)
         if (dataStr.startsWith('{')) {
           try {
-            const parsed = JSON.parse(dataStr) as { type?: string; error?: string; message?: string };
+            const parsed = JSON.parse(dataStr) as { type?: string; error?: string; message?: string; content?: string };
             
+            // Handle token events first
+            if (parsed.type === 'token') {
+              onEvent({ type: 'token', content: parsed.content || '' });
+              continue;
+            }
+            
+            // Backend signals LLM used its graceful fallback (Rule 5)
+            if (parsed.type === 'fallback') {
+              onEvent({ type: 'fallback' });
+              continue;
+            }
+
             // Backend sends source citations at the end of the stream
             if (parsed.type === 'sources') {
               // TODO: emit 'sources' event if UI needs to display citations
@@ -196,7 +214,7 @@ export async function streamAnswer(
           return; // Terminal — stream closes after an error event
         }
 
-        // Plain text token — append to chat bubble
+        // Fallback for plain text tokens (legacy format)
         onEvent({ type: 'token', content: dataStr });
       }
     }

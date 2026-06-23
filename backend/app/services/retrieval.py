@@ -199,7 +199,7 @@ async def _run_similarity_search(
     )
 
     rows = result.fetchall()
-    return [
+    chunks = [
         RetrievedChunk(
             chunk_id=uuid.UUID(str(row.id)),
             document_id=uuid.UUID(str(row.document_id)),
@@ -211,3 +211,12 @@ async def _run_similarity_search(
         )
         for row in rows
     ]
+
+    # Drop off-topic chunks whose cosine distance exceeds the configured ceiling.
+    # If *all* chunks are too distant (completely unrelated query) we return the
+    # full list anyway — the prompt builder's degenerate-path handler will emit
+    # the right hint to the LLM, which will then trigger its graceful Rule 5
+    # fallback rather than inventing an answer.
+    max_distance = settings.RETRIEVAL_MAX_DISTANCE
+    relevant = [c for c in chunks if c.distance <= max_distance]
+    return relevant if relevant else chunks

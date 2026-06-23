@@ -85,9 +85,10 @@ async def test_full_query_pipeline(
         # Parse SSE
         events = [line for line in resp.text.split("\n\n") if line.strip()]
         
-        assert "data: The" in events[0]
-        assert "data:  main" in events[1]
-        assert "data:  feature." in events[2]
+        import json
+        assert json.loads(events[0].replace("data: ", "", 1))["content"] == "The"
+        assert json.loads(events[1].replace("data: ", "", 1))["content"] == " main"
+        assert json.loads(events[2].replace("data: ", "", 1))["content"] == " feature."
         
         # Verify custom sources event
         import json

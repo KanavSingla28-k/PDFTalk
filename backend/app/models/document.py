@@ -120,6 +120,9 @@ class DocumentStatusResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DocumentDownloadUrlResponse(BaseModel):
+    url: str
+
 class DocumentListResponse(BaseModel):
     items: list[DocumentStatusResponse]
     total: int          # total matching rows (for the frontend pagination UI)

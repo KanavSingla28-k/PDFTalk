@@ -55,7 +55,7 @@ class TestPromptBuilder:
         assert len(included) == 0
         assert messages[0]["role"] == "system"
         assert messages[1]["role"] == "user"
-        assert "(No context available)" in messages[1]["content"]
+        assert "(No relevant content found in the uploaded documents" in messages[1]["content"]
         assert "What is life?" in messages[1]["content"]
 
     def test_build_messages_with_chunks(self):

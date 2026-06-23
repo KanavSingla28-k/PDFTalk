@@ -50,10 +50,17 @@ class Settings(BaseSettings):
     MAX_DOCS_PER_USER: int = 20
     MAX_DAILY_TOKENS_PER_USER: int = 100000
     RETRIEVAL_TOP_K: int = 5
+    # Cosine distance ceiling for retrieved chunks. Chunks whose distance
+    # exceeds this value are considered off-topic and dropped from the context
+    # window before the LLM call.  Set in the environment as
+    # RETRIEVAL_MAX_DISTANCE=<float>.  Range: 0.0 (identical) – 2.0 (opposite).
+    # 0.70 is a conservative default for text-embedding-3-small; raise it
+    # (e.g. 0.85) to be more permissive, lower it to be stricter.
+    RETRIEVAL_MAX_DISTANCE: float = 0.70
     STREAM_CHUNK_TIMEOUT: int = 30
     LOG_FORMAT: Optional[Literal["json", "pretty"]] = None
     MAX_DAILY_QUERIES_PER_USER: int = 500
 
-    model_config = {"env_file": env_file}
+    model_config = {"env_file": env_file, "extra": "ignore"}
 
 settings: Settings = Settings()  # type: ignore[call-arg]

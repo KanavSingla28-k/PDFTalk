@@ -19,6 +19,7 @@ from app.models.document import (
     DocumentUploadResponse,
     InitiateUploadRequest,
     InitiateUploadResponse,
+    DocumentDownloadUrlResponse,
 )
 from app.models.user import User
 from app.exceptions import DocumentNotFoundError
@@ -31,6 +32,7 @@ from app.services.document_service import (
     initiate_upload,
     upload_document,
     transition_status,
+    get_document_download_url,
 )
 from app.utils.rate_limit import RateLimiter, user_id_from_request
 from app.workers.queues import ingest_queue
@@ -132,6 +134,31 @@ async def get_document_status(
         raise HTTPException(status_code=404, detail="Document not found.")
 
     return DocumentStatusResponse.model_validate(doc)
+
+
+@router.get(
+    "/{document_id}/download-url",
+    response_model=DocumentDownloadUrlResponse,
+)
+async def get_document_download_url_endpoint(
+    document_id: uuid.UUID,
+    current_user: User = Depends(get_verified_user),
+    db: AsyncSession = Depends(get_db),
+) -> DocumentDownloadUrlResponse:
+    """
+    Return a presigned S3 GET URL to download the document.
+    """
+    try:
+        url = await get_document_download_url(
+            db=db,
+            document_id=document_id,
+            user_id=current_user.id,
+        )
+    except DocumentNotFoundError:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Document not found.")
+
+    return DocumentDownloadUrlResponse(url=url)
 
 
 @router.get(

@@ -67,11 +67,16 @@ class S3Client:
         self._client.head_bucket(Bucket=self.bucket)
         
 
-    def generate_presigned_download_url(self, s3_key: str, expires_in: int = 3600) -> str:
+    def generate_presigned_download_url(self, s3_key: str, expires_in: int = 3600, filename: str | None = None) -> str:
         """Generate a time-limited URL for direct client download."""
+        params: dict[str, Any] = {"Bucket": self.bucket, "Key": s3_key}
+        if filename:
+            # Force the browser to download the file instead of displaying it inline
+            params["ResponseContentDisposition"] = f'attachment; filename="{filename}"'
+            
         return cast(str, self._client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": self.bucket, "Key": s3_key},
+            Params=params,
             ExpiresIn=expires_in,
         ))
 

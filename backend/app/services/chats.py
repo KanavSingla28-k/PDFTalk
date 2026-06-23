@@ -9,6 +9,7 @@ from app.models.document import Document
 from app.services.query_validation import validate_documents_for_query
 from app.exceptions import (
     ChatNotFoundError,
+    MessageNotFoundError,
     EmptyDocumentListError,
 )
 
@@ -103,4 +104,33 @@ async def delete_chat(chat_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession) 
         raise ChatNotFoundError()
 
     await db.delete(chat)
+    await db.commit()
+
+async def truncate_chat_from_message(chat_id: uuid.UUID, user_id: uuid.UUID, message_id: uuid.UUID, db: AsyncSession) -> None:
+    from sqlalchemy import delete, update, func
+    from app.models.message import Message
+    
+    # 1. Verify chat ownership
+    query = select(Chat).where(Chat.id == chat_id, Chat.user_id == user_id)
+    result = await db.execute(query)
+    chat = result.scalar_one_or_none()
+    if not chat:
+        raise ChatNotFoundError()
+
+    # 2. Get target message's created_at
+    msg_query = select(Message.created_at).where(Message.id == message_id, Message.chat_id == chat_id)
+    msg_result = await db.execute(msg_query)
+    target_created_at = msg_result.scalar_one_or_none()
+    
+    if not target_created_at:
+        raise MessageNotFoundError()
+
+    # 3. Delete messages from that point onwards
+    del_query = delete(Message).where(Message.chat_id == chat_id, Message.created_at >= target_created_at)
+    await db.execute(del_query)
+    
+    # 4. Bump chat updated_at
+    upd_query = update(Chat).where(Chat.id == chat_id).values(updated_at=func.now())
+    await db.execute(upd_query)
+    
     await db.commit()

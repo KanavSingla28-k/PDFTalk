@@ -11,8 +11,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-        # CSP: API returns JSON only — no scripts, styles, or embedded resources.
-        # default-src 'none' is the strictest possible policy and safe for a pure JSON API.
-        response.headers["Content-Security-Policy"] = "default-src 'none'"
+        if request.url.path in ["/docs", "/redoc", "/openapi.json"]:
+            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com"
+        else:
+            # CSP: API returns JSON only — no scripts, styles, or embedded resources.
+            # default-src 'none' is the strictest possible policy and safe for a pure JSON API.
+            response.headers["Content-Security-Policy"] = "default-src 'none'"
         # NOTE: HSTS is intentionally omitted — Nginx owns it for the full domain (T-57)
         return response

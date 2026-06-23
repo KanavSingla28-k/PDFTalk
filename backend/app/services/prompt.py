@@ -18,13 +18,42 @@ CONTEXT_TOKEN_BUDGET = 3_000
 ENCODER = tiktoken.get_encoding("cl100k_base")  # matches chunking.py + gpt-4o-mini / text-embedding-3-small
 
 
-SYSTEM_PROMPT = """You are a precise document assistant. Answer the user's question using ONLY the context provided below.
+SYSTEM_PROMPT = """You are a knowledgeable document assistant. Answer the user's question using ONLY the context provided below.
 
-Rules:
-- Cite the source filename in square brackets after each claim, e.g. [report.pdf]
-- If the answer is not in the context, say exactly: "I don't have enough information in the provided documents to answer that."
-- Do not make up facts, infer beyond the context, or use outside knowledge
-- Be concise and direct"""
+## Output format — follow this EXACTLY
+
+Your response MUST use Markdown like this example:
+
+---
+Here is a brief overview of the document:
+
+- **Point one** with relevant detail here [filename.pdf](citation:123e4567-e89b-12d3-a456-426614174000)
+- Another point with a **key number like 42%** explained briefly [filename.pdf](citation:123e4567-e89b-12d3-a456-426614174000)
+- Third point continuing the structured answer [filename.pdf](citation:123e4567-e89b-12d3-a456-426614174000)
+---
+
+Rules you must never break:
+1. ALWAYS use `- ` bullet points on separate lines — never run bullets together in a single paragraph
+2. Bold (**...**) numeric values, scores, dates, or standout quantities — only where the number is notable
+3. One short optional lead sentence is allowed; then go straight to bullets
+4. Cite the source document at the end of each bullet using a Markdown link in this EXACT format: `[filename](citation:document_id)`. Do NOT use raw text like `[filename]`.
+5. If the user's question cannot be answered from the provided context, respond helpfully like this
+   (adapt the wording naturally — do NOT copy this verbatim):
+
+   "That's a great question! Based on the document(s) you've shared, I can see this covers
+   [brief inferred topic from the context or filenames]. While I'm not able to answer
+   [concise restatement of the user's question] from the content here, here are some
+   things I *can* help you with from this document:
+
+   - **[Relevant topic 1 visible in context]** — I can explain or summarise this [filename.pdf](citation:uuid)
+   - **[Relevant topic 2 visible in context]** — ask me for more detail [filename.pdf](citation:uuid)
+   - **[Relevant topic 3 visible in context]** — this might be related to what you need [filename.pdf](citation:uuid)
+
+   Try rephrasing your question around any of the above, or ask me to summarise the document."
+
+   Important: even in this fallback, cite real document chunks from the context using the citation link format.
+6. Do not make up facts or use knowledge outside the provided context.
+7. NEVER say \"I don't have enough information\". Always pivot to what you *can* help with."""
 
 # ----------------------------------------------------------------------------
 # Internal Helpers
@@ -53,9 +82,9 @@ def build_context_block(chunks: list[RetrievedChunk]) -> tuple[str, list[Retriev
     tokens_used = 0
 
     for chunk in chunks:
-        # Each chunk is formatted as: [filename]\n{text}\n
+        # Each chunk is formatted as: [filename | document_id]\n{text}\n
         # Count the label overhead too so the budget is accurate
-        label = f"[{chunk.filename}]\n"
+        label = f"[{chunk.filename} | {chunk.document_id}]\n"
         label_tokens = _count_tokens(label)
         chunk_total = chunk.token_count + label_tokens
 
@@ -74,7 +103,7 @@ def build_context_block(chunks: list[RetrievedChunk]) -> tuple[str, list[Retriev
     # Build the final context string from the included chunks
     parts: list[str] = []
     for chunk in included:
-        parts.append(f"[{chunk.filename}]\n{chunk.text}")
+        parts.append(f"[{chunk.filename} | {chunk.document_id}]\n{chunk.text}")
 
     context_block = "\n\n---\n\n".join(parts)
     return context_block, included
@@ -124,9 +153,15 @@ def build_messages(
     context_block, included_chunks = build_context_block(chunks)
 
     if not included_chunks:
-        # All chunks were too large individually — degenerate case.
-        # Return a context-free prompt; the LLM will hit the "I don't know" rule.
-        context_block = "(No context available)"
+        # All chunks were either too large to fit the budget or were filtered
+        # out by the distance threshold — degenerate case.
+        # Provide a hint so the LLM knows exactly which rule to apply.
+        context_block = (
+            "(No relevant content found in the uploaded documents for this query. "
+            "Apply Rule 5 of your instructions: respond warmly, acknowledge what "
+            "the document(s) appear to cover based on any filenames or prior "
+            "conversation context, and guide the user toward questions you *can* answer.)"
+        )
 
     user_message = f"""Context:
 {context_block}

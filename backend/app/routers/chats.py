@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, Query, Path, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_verified_user
 from app.models.user import User
 from app.models.chat import (
     ChatCreateRequest,
@@ -32,7 +32,7 @@ chat_create_limiter = RateLimiter(limit=10, window_seconds=60, key_prefix="chat_
 )
 async def create_chat(
     request: ChatCreateRequest,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_verified_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> ChatResponse:
     chat = await chats.create_chat(
@@ -44,7 +44,7 @@ async def create_chat(
 
 @router.get("", response_model=ChatListResponse)
 async def list_chats(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(get_verified_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
@@ -64,7 +64,7 @@ async def list_chats(
 @router.get("/{chat_id}", response_model=ChatDetailResponse)
 async def get_chat(
     chat_id: uuid.UUID = Path(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_verified_user),
     db: AsyncSession = Depends(get_db),
 ) -> ChatDetailResponse:
     chat, missing_document_ids = await chats.get_chat_with_messages(
@@ -87,7 +87,7 @@ async def get_chat(
 async def rename_chat(
     request: ChatRenameRequest,
     chat_id: uuid.UUID = Path(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_verified_user),
     db: AsyncSession = Depends(get_db),
 ) -> ChatResponse:
     chat = await chats.rename_chat(
@@ -98,7 +98,21 @@ async def rename_chat(
 @router.delete("/{chat_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_chat(
     chat_id: uuid.UUID = Path(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_verified_user),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await chats.delete_chat(chat_id=chat_id, user_id=current_user.id, db=db)
+
+@router.delete("/{chat_id}/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def truncate_chat_messages(
+    chat_id: uuid.UUID = Path(...),
+    message_id: uuid.UUID = Path(...),
+    current_user: User = Depends(get_verified_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    await chats.truncate_chat_from_message(
+        chat_id=chat_id,
+        user_id=current_user.id,
+        message_id=message_id,
+        db=db,
+    )

@@ -81,6 +81,16 @@ async def ask(
     
     messages, _included_chunks = build_messages(chunks, body.question, history_messages=chat.messages)
 
+    # Detect whether the LLM is going to use its graceful Rule-5 fallback.
+    # Two signals indicate a low/no-relevance response:
+    #   1. No chunks fit the token budget (included_chunks is empty).
+    #   2. Every retrieved chunk exceeded the configured distance ceiling,
+    #      meaning retrieval returned its "full-list fallback" (all irrelevant).
+    _is_fallback = (
+        not _included_chunks
+        or (bool(chunks) and all(c.distance > settings.RETRIEVAL_MAX_DISTANCE for c in chunks))
+    )
+
     # Pre-stream message save
     user_msg = Message(
         chat_id=chat.id,
@@ -111,6 +121,7 @@ async def ask(
             included_chunks=_included_chunks,
             chat_id=str(chat.id),
             missing_ids=missing_ids,
+            is_fallback=_is_fallback,
             db=db,
         ),
         media_type="text/event-stream",
@@ -128,6 +139,7 @@ async def _sse_generator(
     included_chunks: list[RetrievedChunk],
     chat_id: str,
     missing_ids: list[str],
+    is_fallback: bool,
     db: AsyncSession,
 ) -> AsyncIterator[str]:
     if missing_ids:
@@ -148,7 +160,9 @@ async def _sse_generator(
                 generation_completed = True
                 break
             accumulated_content += token
-            yield f"data: {token}\n\n"
+            # Wrap token in JSON to safely encode newlines and special characters
+            token_data = {"type": "token", "content": token}
+            yield f"data: {json.dumps(token_data)}\n\n"
 
         # Stream source citations before the terminal DONE event
         sources_data = {
@@ -163,6 +177,11 @@ async def _sse_generator(
             ]
         }
         yield f"data: {json.dumps(sources_data)}\n\n"
+
+        # Emit the fallback signal BEFORE [DONE] so the client can attach
+        # suggestion chips as soon as the stream closes.
+        if is_fallback:
+            yield f"data: {json.dumps({'type': 'fallback'})}\n\n"
 
         yield "data: [DONE]\n\n"
 

@@ -7,7 +7,7 @@ repos:
           - --baseline
           - .secrets.baseline
           - --exclude-files
-          - frontend/pnpm-lock.yaml
+          - .*pnpm-lock\.yaml
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

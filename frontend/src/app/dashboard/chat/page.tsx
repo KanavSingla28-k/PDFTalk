@@ -8,6 +8,12 @@ import { listDocuments, type DocumentRecord } from '@/lib/documents.api';
 import { streamAnswer, getSseErrorMessage, type StreamEvent } from '@/lib/query.api';
 import { ERROR_CODES } from '@/lib/api';
 import { Button, Spinner } from '@/components/ui';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import type { Components } from 'react-markdown';
+import { Citation } from '@/components/Citation';
+import { useChat } from '@/contexts/ChatContext';
+import { ChatSidebar } from '@/components/ChatSidebar';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -17,6 +23,8 @@ type Message = {
   content: string;
   isStreaming?: boolean;
   isError?: boolean;
+  /** Set to true when the backend emitted a fallback SSE event for this message */
+  isFallback?: boolean;
 };
 
 // ─── Document Selector Component ──────────────────────────────────────────────
@@ -95,35 +103,287 @@ function DocumentSelector({
   );
 }
 
-// ─── Chat Message Bubble ─────────────────────────────────────────────────────
+// ─── Markdown code block (fenced ``` blocks only — inline `code` falls
+// through to prose-code:* classes below and isn't touched by this) ──────────
 
-function ChatMessage({ msg }: { msg: Message }) {
-  const isUser = msg.role === 'user';
+function CodeBlock({ className, children }: { className?: string; children?: React.ReactNode }) {
+  const [copied, setCopied] = useState(false);
+  const language = className?.replace('language-', '') ?? 'text';
+  const code = String(children).replace(/\n$/, '');
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
 
   return (
-    <div className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}>
-      <div
-        className={`max-w-[85%] rounded-2xl px-5 py-3.5 shadow-sm ${
-          isUser
-            ? 'bg-[var(--brand-500)] text-white rounded-br-none'
-            : msg.isError
-            ? 'bg-[var(--error-50)] text-[var(--error-700)] border border-[var(--error-200)] rounded-bl-none'
-            : 'bg-white text-[var(--gray-900)] border border-[var(--gray-200)] rounded-bl-none'
-        }`}
-      >
-        <div className="whitespace-pre-wrap text-sm leading-relaxed">
-          {msg.content}
-          {msg.isStreaming && (
-            <span className="inline-block ml-1 h-3 w-1.5 animate-pulse bg-current opacity-60" />
+    <div className="my-2 overflow-hidden rounded-lg border border-[var(--gray-200)]">
+      <div className="flex items-center justify-between bg-[var(--gray-50)] px-3 py-1.5 text-xs text-[var(--gray-500)]">
+        <span className="font-mono">{language}</span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="flex items-center gap-1 transition-opacity hover:opacity-100"
+          style={{ opacity: copied ? 1 : 0.6 }}
+          aria-label="Copy code"
+        >
+          {copied ? (
+            <svg width="13" height="13" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+              <path d="M3 7l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : (
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <rect x="9" y="9" width="13" height="13" rx="2" />
+              <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+            </svg>
           )}
-        </div>
+          {copied ? 'Copied' : 'Copy'}
+        </button>
+      </div>
+      <pre className="m-0 overflow-x-auto bg-[var(--gray-25)] p-3 text-sm">
+        <code className={className}>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
+const markdownComponents: Components = {
+  code(props) {
+    const { children, className, ...rest } = props;
+    const isInline = !className?.includes('language-');
+    if (isInline) {
+      return <code className={className} {...rest}>{children}</code>;
+    }
+    return <CodeBlock className={className}>{children}</CodeBlock>;
+  },
+  a(props) {
+    const { href, children, ...rest } = props;
+    
+    // Intercept our custom citation links format: [filename](citation:document_id)
+    if (href?.startsWith('citation:')) {
+      const documentId = href.replace('citation:', '');
+      // Extract filename from the children array if it's text
+      let filename = 'Document';
+      if (Array.isArray(children) && typeof children[0] === 'string') {
+        filename = children[0];
+      } else if (typeof children === 'string') {
+        filename = children;
+      }
+      
+      // The LLM generates [[filename]](citation:uuid), so react-markdown captures "filename]".
+      filename = filename.replace(/^\[|\]$/g, '');
+      
+      return <Citation filename={filename} documentId={documentId} />;
+    }
+    
+    // Normal links
+    return <a href={href} target="_blank" rel="noopener noreferrer" {...rest}>{children}</a>;
+  },
+};
+
+// ─── Suggestion Chips (shown after fallback responses) ───────────────────────
+
+const SUGGESTION_CHIPS = [
+  'Summarise this document',
+  'What are the key topics covered?',
+  'List the main points',
+  'What conclusions does this document reach?',
+];
+
+function SuggestionChips({ onSelect }: { onSelect: (text: string) => void }) {
+  return (
+    <div className="mt-3 flex flex-col gap-2">
+      <span className="text-xs font-medium text-[var(--gray-400)] tracking-wide uppercase">Try asking</span>
+      <div className="flex flex-wrap gap-2">
+        {SUGGESTION_CHIPS.map((chip) => (
+          <button
+            key={chip}
+            type="button"
+            onClick={() => onSelect(chip)}
+            className="
+              rounded-full border border-[var(--brand-200)] bg-[var(--brand-50)]
+              px-3 py-1 text-xs font-medium text-[var(--brand-700)]
+              transition-all duration-150
+              hover:bg-[var(--brand-100)] hover:border-[var(--brand-400)] hover:shadow-sm
+              active:scale-95
+            "
+          >
+            {chip}
+          </button>
+        ))}
       </div>
     </div>
   );
 }
 
-import { useChat } from '@/contexts/ChatContext';
-import { ChatSidebar } from '@/components/ChatSidebar';
+// ─── Chat Message Bubble ─────────────────────────────────────────────────────
+
+function ChatMessage({
+  msg,
+  isLatestUserMessage,
+  onSuggestionSelect,
+}: {
+  msg: Message;
+  isLatestUserMessage?: boolean;
+  onSuggestionSelect?: (text: string) => void;
+}) {
+  const isUser = msg.role === 'user';
+  const { retryMessage, isStreaming, activeChat } = useChat();
+  const [copied, setCopied] = useState(false);
+  const [hasRetried, setHasRetried] = useState(false);
+
+  const [showRetryConfirm, setShowRetryConfirm] = useState(false);
+
+  useEffect(() => {
+    if (isUser && activeChat) {
+      const key = `retried_v2_${activeChat.id}`;
+      const existing = JSON.parse(localStorage.getItem(key) || '[]');
+      if (existing.includes(msg.content)) {
+        setHasRetried(true);
+      } else {
+        setHasRetried(false);
+      }
+    }
+  }, [isUser, activeChat, msg.content]);
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(msg.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleRetryClick = () => {
+    if (isStreaming || hasRetried) return;
+    
+    if (!isLatestUserMessage) {
+      setShowRetryConfirm(true);
+      return;
+    }
+    
+    retryMessage(msg.id, msg.content);
+  };
+
+  const confirmRetry = () => {
+    setShowRetryConfirm(false);
+    retryMessage(msg.id, msg.content);
+  };
+
+  return (
+    <div className={`flex w-full group ${isUser ? 'justify-end' : 'justify-start'}`}>
+      <div className={`flex flex-col gap-1 max-w-[85%] ${isUser ? 'items-end' : 'items-start'}`}>
+        <div
+          className={`w-full rounded-2xl px-5 py-3.5 shadow-sm ${
+            isUser
+              ? 'bg-[var(--brand-500)] text-white rounded-br-none'
+              : msg.isError
+              ? 'bg-[var(--error-50)] text-[var(--error-700)] border border-[var(--error-200)] rounded-bl-none'
+              : 'bg-white text-[var(--gray-900)] border border-[var(--gray-200)] rounded-bl-none'
+          }`}
+        >
+        {isUser ? (
+          // User input stays plain text — preserves whitespace exactly as
+          // typed and never interprets typed *asterisks* or _underscores_
+          // as Markdown.
+          <div className="whitespace-pre-wrap text-sm leading-relaxed">
+            {msg.content}
+          </div>
+        ) : msg.isError ? (
+          // Error bubbles also stay plain text — these are short strings
+          // from getSseErrorMessage(), not LLM output, and don't need
+          // Markdown parsing.
+          <div className="whitespace-pre-wrap text-sm leading-relaxed">
+            {msg.content}
+          </div>
+        ) : (
+          <div
+            className="
+              prose prose-sm max-w-none text-sm leading-relaxed
+              prose-p:my-2 prose-headings:my-2 prose-headings:font-semibold
+              prose-a:text-[var(--brand-600)] prose-a:no-underline hover:prose-a:underline
+              prose-strong:text-[var(--gray-900)]
+              prose-code:rounded prose-code:bg-[var(--gray-100)] prose-code:px-1 prose-code:py-0.5
+              prose-code:text-[var(--brand-700)] prose-code:before:content-none prose-code:after:content-none
+              prose-pre:bg-transparent prose-pre:p-0 prose-pre:m-0
+              prose-ul:my-2 prose-ol:my-2 prose-li:my-0.5
+              prose-blockquote:border-l-[var(--brand-300)] prose-blockquote:text-[var(--gray-600)]
+            "
+          >
+            <ReactMarkdown 
+              remarkPlugins={[remarkGfm]} 
+              components={markdownComponents}
+              urlTransform={(value: string) => {
+                if (value.startsWith('citation:')) return value;
+                return defaultUrlTransform(value);
+              }}
+            >
+              {msg.content}
+            </ReactMarkdown>
+          </div>
+        )}
+        {msg.isStreaming && (
+          <span className="inline-block ml-1 h-3 w-1.5 animate-pulse bg-current opacity-60" />
+        )}
+        </div>
+        
+        {isUser && (
+          <div className="flex items-center gap-1.5 px-2 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={handleCopy}
+              className="flex items-center justify-center h-6 w-6 rounded hover:bg-[var(--gray-200)] text-[var(--gray-400)] hover:text-[var(--gray-700)] transition-colors"
+              title="Copy message"
+            >
+              {copied ? (
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
+                  <path d="M3 7l3 3 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2" />
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                </svg>
+              )}
+            </button>
+            <button
+              onClick={handleRetryClick}
+              disabled={isStreaming || hasRetried}
+              className="flex items-center justify-center h-6 w-6 rounded hover:bg-[var(--gray-200)] text-[var(--gray-400)] hover:text-[var(--brand-600)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={hasRetried ? "Already retried" : "Retry question"}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+              </svg>
+            </button>
+          </div>
+        )}
+        {/* Suggestion chips — shown below fallback assistant messages once streaming ends */}
+        {!isUser && msg.isFallback && !msg.isStreaming && onSuggestionSelect && (
+          <SuggestionChips onSelect={onSuggestionSelect} />
+        )}
+      </div>
+
+      {showRetryConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--gray-900)]/40 backdrop-blur-[2px] p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+            <h3 className="text-lg font-semibold text-[var(--gray-900)] mb-2">Retry Question?</h3>
+            <p className="text-sm text-[var(--gray-600)] mb-6 leading-relaxed">
+              Are you sure you want to retry this question? This will <strong className="text-[var(--gray-900)] font-medium">delete the previous response and any subsequent messages</strong> in the chat.
+            </p>
+            <div className="flex justify-end gap-3">
+              <Button type="button" variant="ghost" onClick={() => setShowRetryConfirm(false)}>
+                Cancel
+              </Button>
+              <Button type="button" variant="danger" onClick={confirmRetry}>
+                Delete & Retry
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Inner Chat Component ────────────────────────────────────────────────────
 
@@ -205,10 +465,7 @@ function ChatContent() {
       // Create new chat first
       try {
         const chat_id = await createNewChat(Array.from(selectedDocs));
-        // Wait for active chat to update slightly
-        setTimeout(() => {
-          sendMessage(query);
-        }, 50);
+        sendMessage(query, chat_id);
       } catch (e) {
         console.error(e);
       }
@@ -230,7 +487,7 @@ function ChatContent() {
 
   // ── Render ──
   return (
-    <div className="flex h-[calc(100vh-6rem)] w-full -mx-6 -my-8 absolute left-0 right-0">
+    <div className="flex h-[calc(100vh-4rem)] fixed left-0 right-0 top-16 bg-[var(--gray-50)] z-10">
       <ChatSidebar />
       <div className="flex-1 flex flex-col gap-4 p-6 mx-auto max-w-3xl">
         {/* Header / Document Selector */}
@@ -274,9 +531,27 @@ function ChatContent() {
             </div>
           ) : (
             <div className="flex flex-col gap-6 pb-4">
-              {activeChat.messages.map((msg) => (
-                <ChatMessage key={msg.id} msg={{ id: msg.id, role: msg.role.toLowerCase() as 'user'|'assistant', content: msg.content, isStreaming: isStreaming && msg.role === 'ASSISTANT' && msg === activeChat.messages[activeChat.messages.length - 1], isError: msg.status === 'TRUNCATED' }} />
-              ))}
+              {activeChat.messages.map((msg, index, arr) => {
+                const hasLaterUserMessages = arr.slice(index + 1).some(m => m.role.toLowerCase() === 'user');
+                const isLatestUserMessage = !hasLaterUserMessages && msg.role.toLowerCase() === 'user';
+                return (
+                  <ChatMessage 
+                    key={msg.id} 
+                    msg={{
+                      id: msg.id,
+                      role: msg.role.toLowerCase() as 'user'|'assistant',
+                      content: msg.content,
+                      isStreaming: isStreaming && msg.role === 'ASSISTANT' && msg === activeChat.messages[activeChat.messages.length - 1],
+                      isError: msg.status === 'TRUNCATED',
+                      // isFallback is set by ChatContext on the temp message; after
+                      // reload it won't exist on server messages, so we cast safely.
+                      isFallback: (msg as { isFallback?: boolean }).isFallback,
+                    }} 
+                    isLatestUserMessage={isLatestUserMessage}
+                    onSuggestionSelect={(text) => setInput(text)}
+                  />
+                );
+              })}
               <div ref={messagesEndRef} />
             </div>
           )}

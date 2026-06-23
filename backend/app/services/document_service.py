@@ -430,6 +430,22 @@ async def delete_document(
     )
 
 
+async def get_document_download_url(
+    db: AsyncSession,
+    document_id: uuid.UUID,
+    user_id: uuid.UUID,
+) -> str:
+    """
+    Get a presigned S3 GET URL to download/view the original file.
+    Ownership is verified via get_document_for_user.
+
+    Raises:
+        DocumentNotFoundError: document doesn't exist or isn't owned by user_id.
+    """
+    doc = await get_document_for_user(db=db, document_id=document_id, user_id=user_id)
+    return s3_client.generate_presigned_download_url(s3_key=doc.s3_key, filename=doc.filename)
+
+
 # ---------------------------------------------------------------------------
 # Presigned URL upload flow — Step 3
 # ---------------------------------------------------------------------------

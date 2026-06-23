@@ -56,3 +56,9 @@ export async function deleteChat(chat_id: string): Promise<void> {
     method: 'DELETE',
   });
 }
+
+export async function truncateChatMessages(chat_id: string, message_id: string): Promise<void> {
+  return apiRequest<void>(`/chats/${chat_id}/messages/${message_id}`, {
+    method: 'DELETE',
+  });
+}
