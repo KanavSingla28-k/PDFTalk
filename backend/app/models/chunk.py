@@ -24,6 +24,13 @@ class Chunk(Base):
         # Direct user_id index lets the vector similarity query filter by user
         # without joining through documents. Critical for query performance.
         Index("idx_chunks_user_id", "user_id"),
+        Index(
+            "idx_chunks_embedding_hnsw",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_with={"m": 16, "ef_construction": 64},
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
