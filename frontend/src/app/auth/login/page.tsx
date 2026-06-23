@@ -20,7 +20,6 @@ function ResendPrompt({
   isResending,
   cooldown,
 }: {
-  email: string;
   onResend: () => void;
   isResending: boolean;
   cooldown: number;
@@ -91,13 +90,8 @@ function LoginForm() {
     try {
       const response = await login(data);
 
-      // Store user + token in sessionStorage for AuthContext to pick up (T-49).
-      // Access token itself is NOT stored here — AuthContext owns that.
-      sessionStorage.setItem(
-        'pdftalk_user',
-        JSON.stringify({ id: response.user.id, email: response.user.email }),
-      );
-      // Emit a custom event so AuthContext (once mounted) can hydrate from this
+      // Emit a custom event so AuthContext can hydrate from the login response
+      // without needing a round-trip to GET /auth/me.
       window.dispatchEvent(new CustomEvent('pdftalk:login', { detail: response }));
 
       // Navigate to intended destination or dashboard

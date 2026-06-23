@@ -61,10 +61,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(() => {
     clearSession();
-    await apiLogout();
+    // Navigate immediately — don't wait for the revocation round-trip
     router.push('/auth/login');
+    // Revoke server-side refresh token in the background (best-effort)
+    apiLogout().catch(() => {
+      // Ignore errors — local session is already cleared
+    });
   }, [clearSession, router]);
 
   const scheduleRefresh = useCallback((expiresInSeconds: number) => {

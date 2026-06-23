@@ -2,6 +2,7 @@ import tiktoken
 from typing import cast, TYPE_CHECKING
 from openai.types.chat import ChatCompletionMessageParam
 from prometheus_client import Counter
+from app.core.config import settings
 
 from app.services.retrieval import RetrievedChunk
 
@@ -14,7 +15,6 @@ context_truncated_total = Counter(
 )
 
 # Budget constants
-from app.core.config import settings
 CONTEXT_TOKEN_BUDGET = settings.CONTEXT_TOKEN_BUDGET
 ENCODER = tiktoken.get_encoding("cl100k_base")  # matches chunking.py + gpt-4o-mini / text-embedding-3-small
 

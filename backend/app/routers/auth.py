@@ -172,8 +172,9 @@ async def resend_verification(
                 # Delete the stale verification row first so we don't accumulate orphaned tokens
                 await user_service._delete_pending_verification(db, existing.id)
                 await send_verification_email_for_user(str(existing.id), existing.email, db)
-                await db.commit()
+                await db.commit()  # B-4 fix: commit inside try only when both ops succeed
             except Exception as exc:
+                await db.rollback()  # B-4 fix: roll back the token deletion if delivery fails
                 logger.warning(
                     "resend_verification: email delivery failed for %s: %s",
                     existing.email,
@@ -532,8 +533,10 @@ async def forgot_password(
     
     try:
         await initiate_password_reset(email=payload.email, db=db)
-    except Exception as exc:
-        _log.error("forgot_password_failed", email=payload.email, error=str(exc))
+    except RuntimeError as exc:
+        # B-3 fix: only swallow email delivery failures (RuntimeError from send_*_email).
+        # DB errors and other unexpected failures propagate normally as 500.
+        _log.error("forgot_password_email_delivery_failed", email=payload.email, error=str(exc))
         
     return RegisterResponse(message="If an account with that email exists, you'll receive an email shortly.")
 
