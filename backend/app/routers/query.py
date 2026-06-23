@@ -61,13 +61,14 @@ async def ask(
     db: AsyncSession = Depends(get_db),
     _rate: None = Depends(_query_limiter),
 ) -> StreamingResponse:
-    await check_and_increment_query_usage(user_id=str(current_user.id))
-
     chat, valid_uuids, missing_ids = await validate_chat_for_query(
         chat_id=body.chat_id,
         user_id=current_user.id,
         db=db,
     )
+
+    # Only decrement quota after verifying the chat exists and belongs to the user
+    await check_and_increment_query_usage(user_id=str(current_user.id))
 
     chunks = await retrieve_similar_chunks(
         user_id=current_user.id,

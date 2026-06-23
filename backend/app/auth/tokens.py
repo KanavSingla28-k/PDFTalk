@@ -24,9 +24,9 @@ import structlog
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, cast
+from typing import Any
 
-from jose import ExpiredSignatureError, JWTError, jwt
+import jwt
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -79,8 +79,6 @@ def _decode_token_unverified(token: str) -> str | None:
     try:
         payload = jwt.decode(
             token,
-            key="",                         # ignored when verify_signature=False
-            algorithms=["HS256"],
             options={
                 "verify_signature": False,
                 "verify_exp": False,
@@ -133,11 +131,11 @@ def create_access_token(user_id: str) -> str:
         "jti": str(uuid.uuid4()),
         "type": "access",
     }
-    return cast(str, jwt.encode(
+    return jwt.encode(
         payload,
         settings.JWT_SECRET_KEY,
-        algorithm=settings.JWT_ALGORITHM,
-    ))
+        algorithm="HS256",
+    )
 
 
 def decode_access_token(token: str) -> str:
@@ -152,12 +150,12 @@ def decode_access_token(token: str) -> str:
         payload = jwt.decode(
             token,
             settings.JWT_SECRET_KEY,
-            algorithms=[settings.JWT_ALGORITHM],
+            algorithms=["HS256"],
             options={"verify_exp": True},
         )
-    except ExpiredSignatureError:
+    except jwt.ExpiredSignatureError:
         raise TokenExpiredError("Access token has expired")
-    except JWTError as exc:
+    except jwt.InvalidTokenError as exc:
         raise TokenInvalidError(f"Invalid access token: {exc}") from exc
 
     if payload.get("type") != "access":

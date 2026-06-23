@@ -9,11 +9,11 @@ Internal-only routes.
   GET  /internal/admin/stats      Business metrics (cookie auth)
 """
 
-import asyncio
+# import asyncio
 import secrets
 import structlog
 from datetime import date
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status, BackgroundTasks
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -249,7 +249,7 @@ async def admin_stats(
     stats_key = f"admin:stats:tokens:{today_str}"
     
     # Get top 20 users by token usage today
-    zset_results = await redis.zrevrange(stats_key, 0, 19, withscores=True)
+    zset_results = cast(list[tuple[Any, float]], await redis.zrevrange(stats_key, 0, 19, withscores=True))
     token_data = [{"user_id": str(user_id), "tokens_today": int(score)} for user_id, score in zset_results]
 
     # ── Dead-letter queue ─────────────────────────────────────────────────

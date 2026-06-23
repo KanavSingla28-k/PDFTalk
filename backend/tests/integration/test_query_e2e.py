@@ -156,7 +156,8 @@ async def test_query_quota_exceeded(
     # If the user exceeds 20 queries/min (T-42), rate limiter kicks in.
     # We can either make 21 requests or mock `check_and_increment_query_usage` to raise `DailyQueryQuotaExceededError`.
     from app.utils.openai_client import DailyQueryQuotaExceededError
-    with patch("app.routers.query.check_and_increment_query_usage", side_effect=DailyQueryQuotaExceededError):
+    with patch("app.routers.query.check_and_increment_query_usage", side_effect=DailyQueryQuotaExceededError), \
+         patch("app.routers.query.validate_chat_for_query", return_value=(None, [], [])):
         resp = await async_client.post(
             "/query/ask",
             json={"chat_id": str(uuid.uuid4()), "question": "Quota test"},

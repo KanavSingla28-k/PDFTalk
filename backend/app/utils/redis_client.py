@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone, timedelta
 from typing import cast
 import redis.asyncio as aioredis
 from app.core.config import settings
@@ -21,6 +21,13 @@ def get_pool() -> aioredis.ConnectionPool:
 
 def get_redis() -> aioredis.Redis:
     return aioredis.Redis(connection_pool=get_pool())
+
+def seconds_until_utc_midnight() -> int:
+    """Returns seconds until the next UTC midnight, plus a 1-hour buffer."""
+    now = datetime.now(timezone.utc)
+    tomorrow = now + timedelta(days=1)
+    midnight = datetime(tomorrow.year, tomorrow.month, tomorrow.day, tzinfo=timezone.utc)
+    return int((midnight - now).total_seconds()) + 3600
 
 async def set_with_ttl(key: str, value: str, ttl_seconds: int) -> None:
     r = get_redis()
