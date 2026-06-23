@@ -99,6 +99,11 @@ jobs:
           echo "${{ secrets.LIGHTSAIL_SSH_KEY }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
 
+      - name: Copy deployment files
+        run: |
+          scp -i /tmp/deploy_key -o ConnectTimeout=30 docker-compose.yml ubuntu@${{ secrets.LIGHTSAIL_IP }}:/opt/pdftalk/docker-compose.yml
+          scp -i /tmp/deploy_key -o ConnectTimeout=30 -r infra ubuntu@${{ secrets.LIGHTSAIL_IP }}:/opt/pdftalk/
+
       - name: Deploy
         env:
           GITHUB_SHA: ${{ github.sha }}
@@ -109,10 +114,6 @@ jobs:
           ssh -i /tmp/deploy_key -o ConnectTimeout=30 ubuntu@${{ secrets.LIGHTSAIL_IP }} << EOF
             set -e
             cd /opt/pdftalk
-
-            echo "==> Updating codebase"
-            git fetch origin main
-            git reset --hard origin/main
 
             export GIT_SHA=$GITHUB_SHA
             export GH_REPO=${GITHUB_REPOSITORY,,}
