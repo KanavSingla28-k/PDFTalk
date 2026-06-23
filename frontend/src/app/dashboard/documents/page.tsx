@@ -399,7 +399,7 @@ function DocumentsContent() {
               onClick={() => setFilterType(opt.value)}
               className={`whitespace-nowrap px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                 filterType === opt.value
-                  ? 'bg-[var(--gray-900)] text-white'
+                  ? 'bg-[var(--gray-900)] text-[var(--surface-bg)]'
                   : 'text-[var(--gray-600)] hover:bg-[var(--gray-100)]'
               }`}
             >

@@ -63,7 +63,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex min-h-screen flex-col" style={{ background: 'var(--gray-50)' }}>
       {/* Top navigation bar */}
       <header
-        className="sticky top-0 z-40 flex h-16 items-center border-b px-6 bg-[var(--surface-bg)]"
+        className="sticky top-0 z-40 flex h-16 w-full items-center border-b px-2 sm:px-6 bg-[var(--surface-bg)] overflow-x-auto hide-scrollbar"
         style={{
           borderColor: 'var(--gray-200)',
           boxShadow: 'var(--shadow-xs)',
@@ -72,7 +72,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         {/* Brand */}
         <Link
           href="/dashboard/documents"
-          className="flex items-center gap-2 text-lg font-bold tracking-tight mr-8"
+          className="flex shrink-0 items-center gap-2 text-lg font-bold tracking-tight mr-2 sm:mr-8"
           style={{ color: 'var(--brand-600)' }}
         >
           <svg width="26" height="26" viewBox="0 0 32 32" fill="none" aria-hidden="true">
@@ -81,11 +81,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             <path d="M18 8l5 5h-4a1 1 0 01-1-1V8z" fill="white" fillOpacity="0.5" />
             <path d="M12 17h8M12 20h5" stroke="var(--brand-500)" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
-          PDFTalk
+          <span className="hidden sm:inline-block">PDFTalk</span>
         </Link>
 
         {/* Nav items */}
-        <nav className="flex items-center gap-1" aria-label="Main navigation">
+        <nav className="flex flex-1 items-center gap-1 sm:gap-2" aria-label="Main navigation">
           {NAV_ITEMS.map((item) => {
             const isActive = pathname?.startsWith(item.href);
             return (
@@ -93,7 +93,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 key={item.href}
                 href={item.href}
                 className={[
-                  'flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors',
+                  'flex shrink-0 items-center gap-1 sm:gap-2 rounded-lg px-2 sm:px-3 py-2 text-sm font-medium transition-colors whitespace-nowrap',
                   isActive
                     ? 'bg-[var(--brand-50)] text-[var(--brand-700)]'
                     : 'text-[var(--gray-600)] hover:bg-[var(--gray-100)] hover:text-[var(--gray-900)]',
@@ -101,14 +101,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 aria-current={isActive ? 'page' : undefined}
               >
                 {item.icon}
-                {item.label}
+                <span className="hidden xs:inline-block sm:inline-block">{item.label}</span>
               </Link>
             );
           })}
         </nav>
 
         {/* Right side: user + logout */}
-        <div className="ml-auto flex items-center gap-2 sm:gap-3">
+        <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-3">
           <ThemeToggle />
           {user && (
             <span className="text-sm hidden sm:inline-block" style={{ color: 'var(--gray-500)' }}>
@@ -120,7 +120,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             className="rounded-lg px-3 py-2 text-sm font-medium transition-colors text-[var(--gray-600)] hover:bg-[var(--gray-100)] hover:text-[var(--gray-900)]"
             id="logout-btn"
           >
-            Sign out
+            <span className="hidden sm:inline-block">Sign out</span>
+            <svg className="sm:hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
           </button>
         </div>
       </header>
