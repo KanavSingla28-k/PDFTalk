@@ -36,10 +36,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await get_pool().aclose()
 
 
+_docs_url    = None if settings.is_production else "/docs"
+_redoc_url   = None if settings.is_production else "/redoc"
+_openapi_url = None if settings.is_production else "/openapi.json"
+
 app = FastAPI(
     title="PDFTalk API",
     version="1.0.0",
-    docs_url="/docs" if settings.APP_URL.startswith("http://localhost") else None,
+    docs_url=_docs_url,
+    redoc_url=_redoc_url,
+    openapi_url=_openapi_url,
     lifespan=lifespan,
 )
 
