@@ -90,22 +90,21 @@ jobs:
 
       - name: Transfer images to Lightsail
         run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.LIGHTSAIL_SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
           echo "${{ secrets.LIGHTSAIL_SSH_KEY }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
           scp -i /tmp/deploy_key \
-            -o StrictHostKeyChecking=no \
             -o ConnectTimeout=30 \
             images.tar.gz \
             ubuntu@${{ secrets.LIGHTSAIL_IP }}:/tmp/pdftalk-images.tar.gz
 
       - name: Deploy
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.LIGHTSAIL_IP }}
-          username: ubuntu
-          key: ${{ secrets.LIGHTSAIL_SSH_KEY }}
-          envs: GITHUB_SHA
-          script: |
+        env:
+          GITHUB_SHA: ${{ github.sha }}
+        run: |
+          ssh -i /tmp/deploy_key -o ConnectTimeout=30 ubuntu@${{ secrets.LIGHTSAIL_IP }} << EOF
             set -e
             cd /opt/pdftalk
 
@@ -119,13 +118,9 @@ jobs:
             docker compose exec -T postgres sh -c "pg_dump -U \${POSTGRES_USER:-pdftalk} -d \${POSTGRES_DB:-pdftalk} -F c -f /var/lib/postgresql/data/backup_$GIT_SHA.dump" || true
 
             echo "==> Running DB migrations"
-            # Run against the already-healthy postgres container.
-            # --no-deps prevents compose from recreating postgres/redis.
             docker compose run --rm --no-deps api alembic upgrade head
 
             echo "==> Restarting API, worker, and frontend"
-            # --no-deps: don't restart postgres/redis, only the named services.
-            # Compose picks up the new GIT_SHA image tag from the environment.
             docker compose up -d --no-deps api worker frontend
 
             echo "==> Reloading nginx (picks up any config changes)"
@@ -136,6 +131,7 @@ jobs:
             docker builder prune -af --filter "until=72h"
 
             echo "==> Deploy complete"
+          EOF
 
       - name: Smoke test
         # Wait for containers to pass their healthchecks before probing.

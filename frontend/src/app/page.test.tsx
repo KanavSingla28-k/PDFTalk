@@ -2,17 +2,14 @@ import { render, screen } from '@testing-library/react'
 import Page from './page'
 
 describe('Home Page', () => {
-  it('renders the Next.js logo', () => {
+  it('renders the brand name', () => {
     render(<Page />)
-    
-    const logo = screen.getByAltText('Next.js logo')
-    expect(logo).toBeInTheDocument()
+    expect(screen.getByText(/PDFTalk v2\.0 is now live/i)).toBeInTheDocument()
   })
 
-  it('renders the getting started text', () => {
+  it('renders the main heading', () => {
     render(<Page />)
-    
     const heading = screen.getByRole('heading', { level: 1 })
-    expect(heading).toHaveTextContent('To get started, edit the page.tsx file.')
+    expect(heading).toHaveTextContent(/Chat with your documents/i)
   })
 })
