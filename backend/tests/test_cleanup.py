@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime, timezone, timedelta
 from unittest.mock import patch, MagicMock
+from rq.exceptions import NoSuchJobError
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -125,7 +126,7 @@ def test_cleanup_stale_documents_job() -> None:
         assert len(logs) == 2
         doc_ids_in_logs = {log.document_id for log in logs}
         assert doc_ids_in_logs == {stale_pending_id, stale_processing_id}
-        assert all(log.attempt == 1 for log in logs)
+        assert all(log.attempt == 0 for log in logs)
         assert all("timed out" in log.error for log in logs)
 
 
@@ -149,7 +150,7 @@ def test_setup_stale_document_cleanup_already_scheduled() -> None:
 
 def test_setup_stale_document_cleanup_not_scheduled() -> None:
     mock_conn = MagicMock()
-    with patch("rq.job.Job.fetch", side_effect=Exception("Job not found")), \
+    with patch("rq.job.Job.fetch", side_effect=NoSuchJobError("Job not found")), \
          patch("app.workers.tasks.Queue") as mock_queue_class:
         
         mock_queue = MagicMock()

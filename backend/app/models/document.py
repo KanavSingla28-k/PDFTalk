@@ -42,6 +42,7 @@ _ALLOWED_TRANSITIONS: dict[DocumentStatus, set[DocumentStatus]] = {
     DocumentStatus.READY:          set(),   # terminal
     DocumentStatus.FAILED:         {DocumentStatus.PROCESSING},  # allowed for retry
 }
+assert set(DocumentStatus) == set(_ALLOWED_TRANSITIONS.keys()), "All DocumentStatus values must be mapped in _ALLOWED_TRANSITIONS"
 
 class Document(Base):
     __tablename__ = "documents"

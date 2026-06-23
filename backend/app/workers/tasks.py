@@ -48,6 +48,7 @@ from datetime import datetime, timezone, timedelta
 import structlog
 from rq import Queue
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 # from typing import cast
 
 from app.db.sync_session import SessionLocal
@@ -89,14 +90,13 @@ def _cleanup_stale_pending_uploads(
         "the upload or /confirm-upload was never called."
     )
 
-    stale_docs = (
-        db.query(Document)
-        .filter(
+    stale_docs = db.execute(
+        select(Document)
+        .where(
             Document.status == DocumentStatus.PENDING_UPLOAD.value,
             Document.updated_at < cutoff,
         )
-        .all()
-    )
+    ).scalars().all()
 
     for doc in stale_docs:
         logger.warning(
@@ -147,13 +147,13 @@ def _cleanup_stale_pending_uploads(
         log = JobLog(
             id=uuid.uuid4(),
             document_id=doc.id,
-            attempt=1,
+            attempt=0,
             error=reason,
             traceback=traceback_detail,
         )
         db.add(log)
 
-    return stale_docs
+    return list(stale_docs)
 
 
 def _mark_stale_batch(
@@ -173,14 +173,13 @@ def _mark_stale_batch(
 
     Caller is responsible for commit/rollback.
     """
-    stale_docs = (
-        db.query(Document)
-        .filter(
+    stale_docs = db.execute(
+        select(Document)
+        .where(
             Document.status.in_(statuses),
             Document.updated_at < cutoff,
         )
-        .all()
-    )
+    ).scalars().all()
 
     for doc in stale_docs:
         logger.warning(
@@ -199,13 +198,13 @@ def _mark_stale_batch(
         log = JobLog(
             id=uuid.uuid4(),
             document_id=doc.id,
-            attempt=1,
+            attempt=0,
             error=reason,
             traceback=traceback_detail,
         )
         db.add(log)
 
-    return stale_docs
+    return list(stale_docs)
 
 
 def cleanup_stale_documents_job() -> None:
@@ -293,6 +292,7 @@ def cleanup_stale_documents_job() -> None:
 
 def setup_stale_document_cleanup(conn: Redis) -> None:
     from rq.job import Job
+    from rq.exceptions import NoSuchJobError
 
     q = Queue("default", connection=conn)
     try:
@@ -301,7 +301,7 @@ def setup_stale_document_cleanup(conn: Redis) -> None:
             job.delete()
             raise ValueError("Inactive job")
         logger.info("Stale document cleanup job is already scheduled.")
-    except Exception:
+    except (NoSuchJobError, ValueError):
         logger.info("Scheduling initial stale document cleanup job.")
         q.enqueue_in(
             timedelta(seconds=10),

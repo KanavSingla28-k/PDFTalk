@@ -32,6 +32,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.utils.openai_client import create_embeddings
 from app.core.config import settings
@@ -126,25 +127,77 @@ def retrieve_similar_chunks_sync(
     user_id: uuid.UUID,
     document_ids: list[uuid.UUID],
     query: str,
-    db: AsyncSession,
+    db: Session,
     k: int | None = None,
 ) -> list[RetrievedChunk]:
     """
     Sync entry point for use in the RQ worker.
-    Wraps retrieve_similar_chunks() with asyncio.run().
-
-    Do NOT call this from an already-running event loop.
+    Executes the async OpenAI embedding call, validates the vector,
+    and runs the sync database query.
     """
     import asyncio
-    return asyncio.run(
-        retrieve_similar_chunks(
-            user_id=user_id,
-            document_ids=document_ids,
-            query=query,
-            db=db,
-            k=k,
-        )
+    import math
+
+    if not document_ids:
+        raise ValueError("document_ids must be non-empty.")
+
+    effective_k = k if k is not None else settings.RETRIEVAL_TOP_K
+
+    # 1. Fetch embeddings asynchronously using asyncio.run
+    # Safe because create_embeddings does not use the DB connection
+    vectors = asyncio.run(create_embeddings([query]))
+    query_vector = vectors[0]
+
+    # HIGH-6: Validate embedding vectors
+    if not all(math.isfinite(x) for x in query_vector):
+        raise ValueError("Invalid query embedding vector: contains NaN or inf.")
+
+    # 2. Run the synchronous DB query using the sync Session
+    vector_literal = "[" + ",".join(str(x) for x in query_vector) + "]"
+
+    result = db.execute(
+        text("""
+            SELECT
+                c.id,
+                c.document_id,
+                c.chunk_index,
+                c.text,
+                c.token_count,
+                d.filename,
+                c.embedding <=> CAST(:query_vec AS vector) AS distance
+            FROM chunks c
+            JOIN documents d ON d.id = c.document_id
+            WHERE c.user_id   = :user_id
+            AND c.document_id = ANY(CAST(:doc_ids AS uuid[]))
+            AND c.embedding IS NOT NULL
+            ORDER BY distance ASC
+            LIMIT :k
+        """),
+        {
+            "query_vec": vector_literal,
+            "user_id": str(user_id),
+            "doc_ids": [str(d) for d in document_ids],
+            "k": effective_k,
+        },
     )
+
+    rows = result.fetchall()
+    chunks = [
+        RetrievedChunk(
+            chunk_id=uuid.UUID(str(row.id)),
+            document_id=uuid.UUID(str(row.document_id)),
+            chunk_index=row.chunk_index,
+            text=row.text,
+            token_count=row.token_count,
+            filename=row.filename,
+            distance=float(row.distance),
+        )
+        for row in rows
+    ]
+
+    max_distance = settings.RETRIEVAL_MAX_DISTANCE
+    relevant = [c for c in chunks if c.distance <= max_distance]
+    return relevant if relevant else chunks
 
 
 # ---------------------------------------------------------------------------
