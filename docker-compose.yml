@@ -103,7 +103,7 @@ services:
       retries: 5
 
   api:
-    image: pdftalk-api:${GIT_SHA:-latest}
+    image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-api:${GIT_SHA:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -132,7 +132,7 @@ services:
       start_period: 20s
 
   worker:
-    image: pdftalk-worker:${GIT_SHA:-latest}
+    image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-worker:${GIT_SHA:-latest}
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
@@ -160,10 +160,15 @@ services:
         condition: service_healthy
     mem_limit: 512m
     mem_reservation: 320m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import redis; r=redis.from_url('redis://redis'); r.ping()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     stop_grace_period: 60s
 
   frontend:
-    image: pdftalk-frontend:${GIT_SHA:-latest}
+    image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-frontend:${GIT_SHA:-latest}
     build:
       context: ./frontend
       dockerfile: Dockerfile
