@@ -29,7 +29,7 @@ if not settings.LOG_EMAILS_ONLY:
 # ── Sender identity ───────────────────────────────────────────────────────────
 # Must match a verified domain in your Resend dashboard.
 # For local dev you can use Resend's sandbox: onboarding@resend.dev
-SENDER = settings.FROM_EMAIL        #TODO: @gmail.com not allowed switch after domain creation "PDFTalk [EMAIL_ADDRESS]"
+SENDER = f"PDFTalk <{settings.FROM_EMAIL}>"
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

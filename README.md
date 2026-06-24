@@ -12,7 +12,7 @@ PDFTalk consists of a **Next.js frontend** for the user interface, a **FastAPI b
 ## 🚀 Quick Start / How to Use
 
 Experience PDFTalk live right now by visiting:  
-**[👉 http://13.207.100.137](http://13.207.100.137)**
+**[👉 https://pdftalk.kanavsingla.fyi](https://pdftalk.kanavsingla.fyi)**
 
 ### 💡 User Guidelines & Best Practices
 

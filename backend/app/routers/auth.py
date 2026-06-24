@@ -70,12 +70,12 @@ _reset_limiter = RateLimiter(
 # Cookie helpers — single source of truth for refresh-token cookie settings
 #
 # All attributes (secure, samesite, path, max_age) are defined ONCE here.
-# When TLS goes live (T-10) flip secure=False → True in _COOKIE_SECURE only.
+# TLS is live — cookies are secure in production.
 # ---------------------------------------------------------------------------
 
 _COOKIE_KEY = "refresh_token"
 _COOKIE_MAX_AGE = 60 * 60 * 24 * 7   # 7 days — matches REFRESH_TOKEN_EXPIRE_DAYS
-_COOKIE_SECURE = False                # TODO: flip to True once TLS cert is in place (T-10)
+_COOKIE_SECURE = settings.is_production
 _COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
 _COOKIE_PATH = "/"
 
