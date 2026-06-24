@@ -123,6 +123,10 @@ jobs:
             echo "==> Logging into GHCR"
             echo "$GITHUB_TOKEN" | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
 
+            echo "==> Pruning old images and builder cache to free up space"
+            docker image prune -af --filter "until=72h" || true
+            docker builder prune -af --filter "until=72h" || true
+
             echo "==> Pulling Docker images (SHA: \$GIT_SHA)"
             docker compose pull api worker frontend
 
@@ -141,10 +145,6 @@ jobs:
 
             echo "==> Reloading nginx (picks up any config changes)"
             docker compose exec -T nginx nginx -s reload || docker compose up -d --no-deps nginx
-
-            echo "==> Pruning old images (keeping images newer than 72h)"
-            docker image prune -f --filter "until=72h"
-            docker builder prune -af --filter "until=72h"
 
             echo "==> Deploy complete"
           EOF
