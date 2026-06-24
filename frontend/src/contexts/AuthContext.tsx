@@ -119,6 +119,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function restoreSession() {
       try {
+        if (!accessTokenRef.current) {
+          await doRefreshFn();
+        }
+
         const res = await fetch(
           `${env.NEXT_PUBLIC_API_URL}/auth/me`,
           {
