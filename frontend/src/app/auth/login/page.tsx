@@ -12,6 +12,7 @@ import { ApiError, ERROR_CODES } from '@/lib/api';
 import { loginSchema, type LoginFormValues } from '@/lib/auth.schemas';
 import { Button, Input, PasswordInput, FormError, Skeleton } from '@/components/ui';
 import { useCountdown } from '@/hooks/useCountdown';
+import { useAuth } from '@/contexts/AuthContext';
 
 // ─── Resend-verification inline prompt ───────────────────────────────────────
 
@@ -59,6 +60,7 @@ function ResendPrompt({
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { hydrateAuth } = useAuth();
 
   const [formError, setFormError] = useState<string | null>(null);
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
@@ -90,9 +92,9 @@ function LoginForm() {
     try {
       const response = await login(data);
 
-      // Emit a custom event so AuthContext can hydrate from the login response
-      // without needing a round-trip to GET /auth/me.
-      window.dispatchEvent(new CustomEvent('pdftalk:login', { detail: response }));
+      // Hydrate AuthContext directly with the login response
+      // without needing a round-trip to GET /auth/me or an insecure window event.
+      hydrateAuth(response);
 
       // Navigate to intended destination or dashboard
       const next = searchParams.get('next');

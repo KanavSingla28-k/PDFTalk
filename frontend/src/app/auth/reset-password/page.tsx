@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, Suspense } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
@@ -15,8 +15,15 @@ import { PasswordRulesList } from '@/hooks/usePasswordRules';
 
 function ResetPasswordForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const token = searchParams.get('token');
+  const [token, setToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    const match = hash.match(/#token=([^&]+)/);
+    if (match) {
+      setToken(match[1]);
+    }
+  }, []);
 
   const [formError, setFormError] = useState<string | null>(null);
 

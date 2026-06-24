@@ -20,6 +20,7 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   logout: () => void;
+  hydrateAuth: (data: LoginResponse) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -177,26 +178,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ─── Listen for Login Events ────────────────────────────────────────────────
+  // ─── Hydrate Auth State ─────────────────────────────────────────────────────
 
-  useEffect(() => {
-    const handleLoginEvent = (event: Event) => {
-      const customEvent = event as CustomEvent<LoginResponse>;
-      const { access_token, expires_in, user } = customEvent.detail;
-
-      accessTokenRef.current = access_token;
-      setState({ user, accessToken: access_token, isLoading: false });
-      scheduleRefresh(expires_in);
-    };
-
-    window.addEventListener('pdftalk:login', handleLoginEvent);
-    return () => window.removeEventListener('pdftalk:login', handleLoginEvent);
+  const hydrateAuth = useCallback((data: LoginResponse) => {
+    const { access_token, expires_in, user } = data;
+    accessTokenRef.current = access_token;
+    setState({ user, accessToken: access_token, isLoading: false });
+    scheduleRefresh(expires_in);
   }, [scheduleRefresh]);
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <AuthContext.Provider value={{ ...state, logout }}>
+    <AuthContext.Provider value={{ ...state, logout, hydrateAuth }}>
       {children}
     </AuthContext.Provider>
   );

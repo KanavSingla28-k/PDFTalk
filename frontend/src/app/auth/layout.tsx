@@ -5,6 +5,8 @@ export const metadata: Metadata = {
   title: { template: '%s — PDFTalk', default: 'PDFTalk' },
 };
 
+export const dynamic = 'force-dynamic';
+
 /**
  * Auth layout — shared shell for /auth/login, /auth/register, /auth/verify-email.
  * Renders a centred card on a subtle gradient background.

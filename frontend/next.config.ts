@@ -5,7 +5,7 @@ const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://13.207.100.137/api';
 
 const cspHeader = `
   default-src 'self';
-  script-src 'self' 'unsafe-eval' 'unsafe-inline';
+  script-src 'self' 'unsafe-eval';
   style-src 'self' 'unsafe-inline';
   img-src 'self' blob: data:;
   font-src 'self';
@@ -17,6 +17,7 @@ const cspHeader = `
 `.replace(/\s{2,}/g, ' ').trim();
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   output: 'standalone',
   transpilePackages: [
     'react-markdown',
