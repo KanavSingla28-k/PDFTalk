@@ -131,17 +131,22 @@ jobs:
               || { echo "ERROR: docker compose pull failed — aborting deploy"; exit 1; }
 
             echo "==> Backing up database"
-            # NOTE: every \$ below MUST stay escaped. This text passes through an
-            # *unquoted* SSH heredoc first (the local runner shell sees it before
-            # it's ever sent over SSH), then through the remote shell, then through
-            # the nested "sh -c" running inside the postgres container. Escaping
-            # \$POSTGRES_USER / \$POSTGRES_DB / \$GIT_SHA defers ALL expansion to
-            # the innermost shell, where POSTGRES_USER/POSTGRES_DB actually live
-            # (set via the postgres service's `environment:` block) and GIT_SHA
-            # is already exported a few lines above in this same remote session.
-            # An earlier version of this line under-escaped these and silently
-            # sent empty strings, causing "pg_dump -U \"\"" to fall back to the
-            # OS user (root) and fail with: role "root" does not exist.
+            # NOTE: every dollar-sign below MUST stay escaped as backslash-dollar.
+            # This text passes through an UNQUOTED SSH heredoc first (the local
+            # runner shell sees it before it is ever sent over SSH), then through
+            # the remote shell, then through the nested sh -c running inside the
+            # postgres container. Escaping defers ALL expansion of POSTGRES_USER,
+            # POSTGRES_DB, and GIT_SHA to the innermost shell, where POSTGRES_USER
+            # and POSTGRES_DB actually live (set via the postgres service environment
+            # block in docker-compose.yml) and GIT_SHA is already exported a few
+            # lines above in this same remote session.
+            # An earlier version of this line under-escaped these and silently sent
+            # empty strings, causing pg_dump -U to fall back to the OS user root and
+            # fail with: role root does not exist.
+            # Do not use backticks in this comment block -- bash treats backtick
+            # pairs as command substitution even inside a comment in some heredoc
+            # parsing paths, which previously caused a spurious
+            # "environment:: command not found" line at script start.
             docker compose exec -T postgres sh -c 'pg_dump -U "\$POSTGRES_USER" -d "\$POSTGRES_DB" -F c -f /var/lib/postgresql/data/backup_\$GIT_SHA.dump' \
               || { echo "ERROR: pg_dump backup failed — aborting deploy"; exit 1; }
             docker compose exec -T postgres sh -c "find /var/lib/postgresql/data -name 'backup_*.dump' -mtime +7 -delete"
