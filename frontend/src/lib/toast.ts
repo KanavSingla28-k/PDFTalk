@@ -29,6 +29,12 @@ export const apiToast = {
         return;
       }
       
+      // Deduplicate auth errors so we don't spam the screen when multiple requests fail
+      if (err.code === ERROR_CODES.INVALID_TOKEN || err.code === ERROR_CODES.TOKEN_EXPIRED) {
+        toast.error(err.message, { id: 'auth-error' });
+        return;
+      }
+      
       // Fallback 502 S3 deletion and standard 5xx errors are mapped automatically
       // inside `toApiError` -> `ERROR_MESSAGES[ERROR_CODES.UNKNOWN_5XX]`
       toast.error(err.message);
@@ -37,6 +43,11 @@ export const apiToast = {
 
     if (err instanceof Error) {
       toast.error(err.message);
+      return;
+    }
+
+    if (typeof err === 'string') {
+      toast.error(err);
       return;
     }
 

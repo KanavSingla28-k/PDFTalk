@@ -137,8 +137,22 @@ export function configureApiClient(config: {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
+export function getApiBaseUrl(): string {
+  let base = env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
+  
+  if (typeof window !== 'undefined') {
+    try {
+      const parsed = new URL(base);
+      base = `${window.location.origin}${parsed.pathname}`;
+    } catch {
+      base = `${window.location.origin}${base.startsWith('/') ? base : '/' + base}`;
+    }
+  }
+  return base;
+}
+
 function buildUrl(path: string): string {
-  const base = env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
+  const base = getApiBaseUrl();
   const normalised = path.startsWith('/') ? path : `/${path}`;
   return `${base}${normalised}`;
 }

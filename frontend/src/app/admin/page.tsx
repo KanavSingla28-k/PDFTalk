@@ -1,7 +1,8 @@
 "use client";
 import { useEffect, useState, useCallback } from "react";
+import { getApiBaseUrl } from "@/lib/api";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "";
+const API = getApiBaseUrl();
 
 // ── Types ───────────────────────────────────────────────────────────────────
 

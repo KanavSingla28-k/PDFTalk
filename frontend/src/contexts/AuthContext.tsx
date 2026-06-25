@@ -3,7 +3,12 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { refreshToken, logout as apiLogout } from '@/lib/auth.api';
-import { configureApiClient } from '@/lib/api';
+import {
+  apiFetch,
+  configureApiClient,
+  getApiBaseUrl,
+  type ErrorCode,
+} from '@/lib/api';
 import { env } from '@/env';
 import type { LoginResponse } from '@/lib/auth.api';
 
@@ -123,8 +128,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           await doRefreshFn();
         }
 
+        const baseUrl = getApiBaseUrl();
         const res = await fetch(
-          `${env.NEXT_PUBLIC_API_URL}/auth/me`,
+          `${baseUrl}/auth/me`,
           {
             credentials: 'include',
             headers: accessTokenRef.current

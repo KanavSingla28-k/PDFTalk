@@ -8,7 +8,7 @@
  *  POST /auth/logout
  */
 
-import { apiRequest, apiFetch } from '@/lib/api';
+import { apiRequest, apiFetch, getApiBaseUrl } from '@/lib/api';
 import { env } from '@/env';
 
 // ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ export async function login(data: LoginRequest): Promise<LoginResponse> {
 export async function refreshToken(): Promise<RefreshResponse> {
   // We bypass apiFetch's auth-retry entirely — fetch directly with credentials.
   // This prevents infinite loops when the refresh itself returns 401.
-  const baseUrl = env.NEXT_PUBLIC_API_URL.replace(/\/$/, '');
+  const baseUrl = getApiBaseUrl();
   const response = await fetch(`${baseUrl}/auth/refresh`, {
     method: 'POST',
     credentials: 'include',
