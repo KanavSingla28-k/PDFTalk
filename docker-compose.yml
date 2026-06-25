@@ -105,6 +105,11 @@ services:
 
   api:
     image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-api:${GIT_SHA:-latest}
+    # pull_policy: always — forces `docker compose run` / `up` to always pull the
+    # resolved tag from GHCR rather than considering the local `build:` block as
+    # a fallback. Without this, `docker compose run api ...` could attempt a local
+    # build (and fail on registry auth for base images like ghcr.io/astral-sh/uv)
+    # whenever GIT_SHA resolves to ":latest" in a given shell context.
     pull_policy: always
     build:
       context: ./backend

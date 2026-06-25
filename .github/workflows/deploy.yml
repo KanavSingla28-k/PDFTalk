@@ -127,23 +127,52 @@ jobs:
             docker system prune -af --volumes || true
 
             echo "==> Pulling Docker images (SHA: \$GIT_SHA)"
-            docker compose pull api worker frontend
+            docker compose pull api worker frontend \
+              || { echo "ERROR: docker compose pull failed — aborting deploy"; exit 1; }
 
             echo "==> Backing up database"
-            docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -F c -f /var/lib/postgresql/data/backup_'"$GIT_SHA"'.dump'
+            # NOTE: every \$ below MUST stay escaped. This text passes through an
+            # *unquoted* SSH heredoc first (the local runner shell sees it before
+            # it's ever sent over SSH), then through the remote shell, then through
+            # the nested "sh -c" running inside the postgres container. Escaping
+            # \$POSTGRES_USER / \$POSTGRES_DB / \$GIT_SHA defers ALL expansion to
+            # the innermost shell, where POSTGRES_USER/POSTGRES_DB actually live
+            # (set via the postgres service's `environment:` block) and GIT_SHA
+            # is already exported a few lines above in this same remote session.
+            # An earlier version of this line under-escaped these and silently
+            # sent empty strings, causing "pg_dump -U \"\"" to fall back to the
+            # OS user (root) and fail with: role "root" does not exist.
+            docker compose exec -T postgres sh -c 'pg_dump -U "\$POSTGRES_USER" -d "\$POSTGRES_DB" -F c -f /var/lib/postgresql/data/backup_\$GIT_SHA.dump' \
+              || { echo "ERROR: pg_dump backup failed — aborting deploy"; exit 1; }
             docker compose exec -T postgres sh -c "find /var/lib/postgresql/data -name 'backup_*.dump' -mtime +7 -delete"
 
             echo "==> Running DB migrations"
-            docker compose run --rm --no-deps api alembic upgrade head
+            docker compose run --rm --no-deps api alembic upgrade head \
+              || { echo "ERROR: alembic migration failed — aborting deploy"; exit 1; }
 
             echo "==> Fixing prometheus_multiproc volume permissions (B-1 fix for existing volume)"
-            docker compose run --rm --no-deps --user root api chown -R appuser:appuser /tmp/prometheus_multiproc
+            docker compose run --rm --no-deps --user root api chown -R appuser:appuser /tmp/prometheus_multiproc \
+              || { echo "ERROR: prometheus_multiproc permission fix failed — aborting deploy"; exit 1; }
 
             echo "==> Restarting API, worker, and frontend"
-            docker compose up -d --no-deps api worker frontend
+            docker compose up -d --no-deps --force-recreate api worker frontend \
+              || { echo "ERROR: container recreate failed — aborting deploy"; exit 1; }
 
             echo "==> Reloading nginx (picks up any config changes)"
             docker compose exec -T nginx nginx -s reload || docker compose up -d --no-deps nginx
+
+            echo "==> Verifying frontend container is on the expected SHA"
+            RUNNING_IMAGE=\$(docker inspect pdftalk-frontend-prod --format '{{.Config.Image}}')
+            echo "Running frontend image: \$RUNNING_IMAGE"
+            case "\$RUNNING_IMAGE" in
+              *"\$GIT_SHA"*)
+                echo "OK: frontend container is running the expected SHA (\$GIT_SHA)"
+                ;;
+              *)
+                echo "ERROR: frontend container image (\$RUNNING_IMAGE) does not match expected SHA (\$GIT_SHA) — aborting deploy"
+                exit 1
+                ;;
+            esac
 
             echo "==> Deploy complete"
           EOF
