@@ -113,22 +113,30 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          ssh -i /tmp/deploy_key -o ConnectTimeout=30 ubuntu@${{ secrets.LIGHTSAIL_IP }} << EOF
+          ssh -i /tmp/deploy_key -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=10 ubuntu@${{ secrets.LIGHTSAIL_IP }} << EOF
             set -e
+            set -x
+            trap 'echo "MARKER:TRAP_EXIT code=\$? line=\$LINENO"' EXIT
             cd /opt/pdftalk
 
             export GIT_SHA=$GITHUB_SHA
             export GH_REPO=${GITHUB_REPOSITORY,,}
 
+            echo "MARKER:START"
             echo "==> Logging into GHCR"
+            set +x
             echo "$GITHUB_TOKEN" | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
+            set -x
+            echo "MARKER:LOGIN_DONE"
 
             echo "==> Pruning old images and builder cache to free up space"
             docker system prune -af --volumes || true
+            echo "MARKER:PRUNE_DONE"
 
             echo "==> Pulling Docker images (SHA: \$GIT_SHA)"
             docker compose pull api worker frontend \
               || { echo "ERROR: docker compose pull failed — aborting deploy"; exit 1; }
+            echo "MARKER:PULL_DONE"
 
             echo "==> Backing up database"
             # NOTE: every dollar-sign below MUST stay escaped as backslash-dollar.
@@ -149,22 +157,29 @@ jobs:
             # "environment:: command not found" line at script start.
             docker compose exec -T postgres sh -c 'pg_dump -U "\$POSTGRES_USER" -d "\$POSTGRES_DB" -F c -f /var/lib/postgresql/data/backup_\$GIT_SHA.dump' \
               || { echo "ERROR: pg_dump backup failed — aborting deploy"; exit 1; }
-            docker compose exec -T postgres sh -c "find /var/lib/postgresql/data -name 'backup_*.dump' -mtime +7 -delete"
+            echo "MARKER:PGDUMP_DONE"
+            docker compose exec -T postgres sh -c "find /var/lib/postgresql/data -name 'backup_*.dump' -mtime +7 -delete" \
+              || echo "WARNING: backup cleanup failed — continuing deploy"
+            echo "MARKER:BACKUP_CLEANUP_DONE"
 
             echo "==> Running DB migrations"
-            docker compose run --rm --no-deps api alembic upgrade head \
+            docker compose run -T --rm --no-deps api alembic upgrade head \
               || { echo "ERROR: alembic migration failed — aborting deploy"; exit 1; }
+            echo "MARKER:MIGRATIONS_DONE"
 
             echo "==> Fixing prometheus_multiproc volume permissions (B-1 fix for existing volume)"
-            docker compose run --rm --no-deps --user root api chown -R appuser:appuser /tmp/prometheus_multiproc \
+            docker compose run -T --rm --no-deps --user root api chown -R appuser:appuser /tmp/prometheus_multiproc \
               || { echo "ERROR: prometheus_multiproc permission fix failed — aborting deploy"; exit 1; }
+            echo "MARKER:PERMFIX_DONE"
 
             echo "==> Restarting API, worker, and frontend"
             docker compose up -d --no-deps --force-recreate api worker frontend \
               || { echo "ERROR: container recreate failed — aborting deploy"; exit 1; }
+            echo "MARKER:RECREATE_DONE"
 
             echo "==> Reloading nginx (picks up any config changes)"
             docker compose exec -T nginx nginx -s reload || docker compose up -d --no-deps nginx
+            echo "MARKER:NGINX_RELOAD_DONE"
 
             echo "==> Verifying frontend container is on the expected SHA"
             RUNNING_IMAGE=\$(docker inspect pdftalk-frontend-prod --format '{{.Config.Image}}')
@@ -180,6 +195,8 @@ jobs:
             esac
 
             echo "==> Deploy complete"
+            echo "MARKER:DEPLOY_COMPLETE"
+            trap - EXIT
           EOF
 
       - name: Smoke test
