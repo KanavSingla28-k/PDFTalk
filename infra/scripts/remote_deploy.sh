@@ -2,11 +2,11 @@
 # infra/scripts/remote_deploy.sh
 #
 # Runs ON the Lightsail instance. Invoked by .github/workflows/deploy.yml via
-# ssh ... bash -s < remote_deploy.sh with GIT_SHA, GH_REPO, GITHUB_TOKEN,
+# ssh ... bash /opt/pdftalk/remote_deploy.sh with GIT_SHA, GH_REPO, GITHUB_TOKEN,
 # and GITHUB_ACTOR exported as real environment variables on the SSH command
-# line (not interpolated into a heredoc string). This avoids the multi-layer
-# quoting/escaping that previously caused silent truncation when this logic
-# lived inline inside an unquoted heredoc in the workflow file.
+# line. Executing from the file directly prevents premature silent truncation 
+# that occurs when piping the script to bash -s via stdin, as commands like
+# docker compose exec consume the remaining stdin.
 set -euo pipefail
 set -x
 
@@ -43,22 +43,23 @@ echo "==> Backing up database"
 # sh -c running inside the container -- never by this script's shell. Single-quoting the
 # whole sh -c argument is sufficient and correct here because this script is
 # no longer passed through a heredoc; there is only one layer of shell left
-# to defer past.
-docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -F c -f "/var/lib/postgresql/data/backup_'"$GIT_SHA"'.dump"' \
+# to defer past. We also redirect stdin from /dev/null to prevent docker compose exec
+# from trying to consume any stdin.
+docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -F c -f "/var/lib/postgresql/data/backup_'"$GIT_SHA"'.dump"' < /dev/null \
   || { echo "ERROR: pg_dump backup failed — aborting deploy"; exit 1; }
 echo "MARKER:PGDUMP_DONE"
 
-docker compose exec -T postgres sh -c "find /var/lib/postgresql/data -name 'backup_*.dump' -mtime +7 -delete" \
+docker compose exec -T postgres sh -c "find /var/lib/postgresql/data -name 'backup_*.dump' -mtime +7 -delete" < /dev/null \
   || echo "WARNING: backup cleanup failed — continuing deploy"
 echo "MARKER:BACKUP_CLEANUP_DONE"
 
 echo "==> Running DB migrations"
-docker compose run -T --rm --no-deps api alembic upgrade head \
+docker compose run -T --rm --no-deps api alembic upgrade head < /dev/null \
   || { echo "ERROR: alembic migration failed — aborting deploy"; exit 1; }
 echo "MARKER:MIGRATIONS_DONE"
 
 echo "==> Fixing prometheus_multiproc volume permissions (B-1 fix for existing volume)"
-docker compose run -T --rm --no-deps --user root api chown -R appuser:appuser /tmp/prometheus_multiproc \
+docker compose run -T --rm --no-deps --user root api chown -R appuser:appuser /tmp/prometheus_multiproc < /dev/null \
   || { echo "ERROR: prometheus_multiproc permission fix failed — aborting deploy"; exit 1; }
 echo "MARKER:PERMFIX_DONE"
 
@@ -68,7 +69,7 @@ docker compose up -d --no-deps --force-recreate api worker frontend \
 echo "MARKER:RECREATE_DONE"
 
 echo "==> Reloading nginx (picks up any config changes)"
-docker compose exec -T nginx nginx -s reload || docker compose up -d --no-deps nginx
+docker compose exec -T nginx nginx -s reload < /dev/null || docker compose up -d --no-deps nginx
 echo "MARKER:NGINX_RELOAD_DONE"
 
 echo "==> Verifying frontend container is on the expected SHA"

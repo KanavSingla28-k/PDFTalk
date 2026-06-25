@@ -114,21 +114,13 @@ jobs:
 
       - name: Deploy
         run: |
-          # The remote script (infra/scripts/remote_deploy.sh) is piped to a
-          # remote bash -s over SSH, with the variables it needs passed as
-          # real shell-assigned environment variables prefixed on that same
-          # remote command — NOT interpolated into a heredoc string from this
-          # workflow file. This removes every layer of nested quoting/escaping
-          # that previously caused the deploy session to silently truncate
-          # partway through the script (confirmed via the EXIT trap firing
-          # with code=0 right after the pg_dump line in earlier runs — the
-          # remote shell was receiving an incomplete script and treating it
-          # as a complete one).
-          chmod +x infra/scripts/remote_deploy.sh
+          # We execute the script directly from the remote filesystem instead of
+          # piping it via stdin. Piped scripts get consumed by commands that read
+          # from stdin (like `docker compose exec`), causing premature silent
+          # truncation.
           ssh -i /tmp/deploy_key -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=10 \
             ubuntu@${{ secrets.LIGHTSAIL_IP }} \
-            "GIT_SHA='${{ github.sha }}' GH_REPO='${{ env.GH_REPO }}' GITHUB_TOKEN='${{ secrets.GITHUB_TOKEN }}' GITHUB_ACTOR='${{ github.actor }}' bash -s" \
-            < infra/scripts/remote_deploy.sh
+            "GIT_SHA='${{ github.sha }}' GH_REPO='${{ env.GH_REPO }}' GITHUB_TOKEN='${{ secrets.GITHUB_TOKEN }}' GITHUB_ACTOR='${{ github.actor }}' bash /opt/pdftalk/remote_deploy.sh"
 
       - name: Smoke test
         # Wait for containers to pass their healthchecks before probing.
