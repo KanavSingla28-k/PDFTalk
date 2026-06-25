@@ -130,7 +130,7 @@ jobs:
             docker compose pull api worker frontend
 
             echo "==> Backing up database"
-            docker compose exec -T postgres sh -c 'pg_dump -U "\${POSTGRES_USER:-pdftalk}" -d "\${POSTGRES_DB:-pdftalk}" -F c -f /var/lib/postgresql/data/backup_'$GIT_SHA'.dump'
+            docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB" -F c -f /var/lib/postgresql/data/backup_'"$GIT_SHA"'.dump'
             docker compose exec -T postgres sh -c "find /var/lib/postgresql/data -name 'backup_*.dump' -mtime +7 -delete"
 
             echo "==> Running DB migrations"

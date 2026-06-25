@@ -105,6 +105,7 @@ services:
 
   api:
     image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-api:${GIT_SHA:-latest}
+    pull_policy: always
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -134,6 +135,7 @@ services:
 
   worker:
     image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-worker:${GIT_SHA:-latest}
+    pull_policy: always
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
@@ -170,6 +172,7 @@ services:
 
   frontend:
     image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-frontend:${GIT_SHA:-latest}
+    pull_policy: always
     build:
       context: ./frontend
       dockerfile: Dockerfile
