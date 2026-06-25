@@ -74,9 +74,14 @@ async def readiness_check() -> JSONResponse:
         r["status"] == "ok" for r in (db_result, redis_result, s3_result)
     )
 
+    try:
+        version = importlib.metadata.version("pdftalk-backend")
+    except importlib.metadata.PackageNotFoundError:
+        version = "unknown"
+
     body = {
         "status": "ok" if all_ok else "degraded",
-        "version": importlib.metadata.version("pdftalk"),
+        "version": version,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "checks": {
             "db": db_result,
