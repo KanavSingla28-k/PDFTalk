@@ -152,11 +152,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: data.email,
         };
 
-        accessTokenRef.current = data.access_token ?? null;
+        // If /auth/me was called with an existing Bearer token, it does not
+        // return a new access_token. We must preserve the existing one.
+        const finalAccessToken = data.access_token ?? accessTokenRef.current;
+        accessTokenRef.current = finalAccessToken;
 
         setState({
           user,
-          accessToken: data.access_token ?? null,
+          accessToken: finalAccessToken,
           isLoading: false,
         });
 
