@@ -87,6 +87,7 @@ erDiagram
     User ||--o{ Chat : "starts"
     User ||--o{ RefreshToken : "has"
     User ||--o{ EmailVerification : "receives"
+    User ||--o{ PasswordReset : "requests"
     
     Document ||--o{ Chunk : "split into"
     Document ||--o{ JobLog : "generates"
@@ -96,24 +97,28 @@ erDiagram
     User {
         uuid id PK
         string email
-        string full_name
+        string email_lower
+        string password_hash
+        boolean is_verified
         boolean is_active
     }
     
     Document {
-        string id PK
+        uuid id PK
         uuid user_id FK
-        string title
+        string filename
         string s3_key
         string status
     }
     
     Chunk {
         uuid id PK
-        string document_id FK
-        text text_content
+        uuid document_id FK
+        uuid user_id FK
+        int chunk_index
+        text text
+        int token_count
         vector embedding
-        int page_number
     }
     
     Chat {
@@ -128,6 +133,13 @@ erDiagram
         uuid chat_id FK
         string role
         text content
+    }
+    
+    PasswordReset {
+        uuid id PK
+        uuid user_id FK
+        string token_hash
+        datetime expires_at
     }
 ```
 
@@ -154,7 +166,8 @@ pdftalk/
 │   ├── app/
 │   │   ├── auth/            # Authentication logic & password hashing
 │   │   ├── core/            # App configuration & settings
-│   │   ├── db/              # SQLAlchemy models & sessions
+│   │   ├── db/              # SQLAlchemy sessions & base class
+│   │   ├── models/          # ORM models (User, Document, Chunk, Chat…)
 │   │   ├── middleware/      # Security, CORS, and logging middleware
 │   │   ├── routers/         # API endpoint definitions
 │   │   ├── services/        # Business logic (LLM, RAG, File handling)
@@ -252,10 +265,11 @@ The backend exposes a highly structured RESTful API. Below are the core endpoint
 | `POST` | `/auth/register` | Register a new user |
 | `POST` | `/auth/login` | Authenticate and retrieve JWT |
 | `POST` | `/auth/verify` | Verify user email address |
-| `POST` | `/documents/` | Upload and ingest a new PDF |
+| `POST` | `/documents/initiate-upload` | Step 1: Validate metadata & receive a presigned S3 PUT URL |
+| `POST` | `/documents/confirm-upload` | Step 2: Confirm S3 upload succeeded & enqueue ingest job |
 | `GET`  | `/documents/` | Retrieve a list of user documents |
 | `DELETE`| `/documents/{id}` | Permanently delete a document & embeddings |
-| `POST` | `/query/` | Ask a question against a specific document |
+| `POST` | `/query/` | Ask a question against one or more documents |
 | `GET`  | `/chats/` | Retrieve chat history |
 | `GET`  | `/health/` | Service healthiness and readiness checks |
 
