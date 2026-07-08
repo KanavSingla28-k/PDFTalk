@@ -45,8 +45,17 @@ export default function ForgotPasswordPage() {
   if (isSuccess) {
     return (
       <div className="flex flex-col items-center text-center">
-        <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-          <svg className="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div
+          className="mb-6 flex h-12 w-12 items-center justify-center rounded-full"
+          style={{ background: 'var(--success-50)' }}
+        >
+          <svg
+            className="h-6 w-6"
+            style={{ color: 'var(--success-500)' }}
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" />
           </svg>
         </div>

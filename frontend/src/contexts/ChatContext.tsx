@@ -44,7 +44,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setChats(res.items);
     } catch (e) {
       console.error(e);
-      apiToast.error('Failed to load chats');
+      apiToast.error(e);
     } finally {
       setIsLoadingChats(false);
     }
@@ -68,7 +68,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       setActiveChat(chat);
     } catch (e) {
       console.error(e);
-      apiToast.error('Failed to load chat details');
+      apiToast.error(e);
       throw e;
     }
   };
@@ -82,7 +82,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) {
       console.error(e);
-      apiToast.error('Failed to rename chat');
+      apiToast.error(e);
       throw e;
     }
   };
@@ -96,7 +96,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) {
       console.error(e);
-      apiToast.error('Failed to delete chat');
+      apiToast.error(e);
       throw e;
     }
   };
@@ -215,7 +215,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
       await truncateChatMessages(activeChat.id, messageId);
     } catch (e) {
       console.error(e);
-      apiToast.error('Failed to retry message');
+      apiToast.error(e);
       return;
     }
 

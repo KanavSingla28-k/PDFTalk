@@ -165,7 +165,7 @@ export async function streamAnswer(
             try {
                 const parsed = JSON.parse(dataStr);
                 onEvent({ type: 'meta', missing_document_ids: parsed.missing_document_ids || [] });
-            } catch (e) {}
+            } catch {}
             continue;
         }
 

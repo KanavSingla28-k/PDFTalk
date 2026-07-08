@@ -1,32 +1,43 @@
 'use client';
 
 import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useState, Suspense } from 'react';
+import { useRouter } from 'next/navigation';
+import { useState, useEffect, Suspense } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 
 import { resetPassword } from '@/lib/auth.api';
-import { ApiError } from '@/lib/api';
+import { ApiError, ERROR_CODES } from '@/lib/api';
 import { resetPasswordSchema, type ResetPasswordFormValues } from '@/lib/auth.schemas';
 import { Button, PasswordInput, FormError, Skeleton } from '@/components/ui';
+import { PasswordRulesList } from '@/hooks/usePasswordRules';
 
 function ResetPasswordForm() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const token = searchParams.get('token');
+  const [token, setToken] = useState<string | null>(null);
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    const match = hash.match(/#token=([^&]+)/);
+    if (match) {
+      setToken(match[1]);
+    }
+  }, []);
 
   const [formError, setFormError] = useState<string | null>(null);
 
   const {
     register: formRegister,
     handleSubmit,
+    watch,
     formState: { errors, isSubmitting },
   } = useForm<ResetPasswordFormValues>({
     resolver: zodResolver(resetPasswordSchema),
     mode: 'onTouched',
   });
+
+  const passwordValue = watch('password') ?? '';
 
   if (!token) {
     return (
@@ -52,11 +63,8 @@ function ResetPasswordForm() {
       toast.success('Password updated successfully. Please log in.');
       router.push('/auth/login');
     } catch (err) {
-      if (err instanceof ApiError && err.code === 'INVALID_OR_EXPIRED_TOKEN') {
+      if (err instanceof ApiError && err.code === ERROR_CODES.INVALID_OR_EXPIRED_TOKEN) {
         setFormError('This password reset link is invalid or has expired.');
-      } else if (err instanceof ApiError && err.code === 'FILE_VALIDATION_FAILED') {
-         // Should not happen, but fallback
-        setFormError(err.message);
       } else {
         setFormError('Something went wrong. Please try again.');
       }
@@ -90,14 +98,18 @@ function ResetPasswordForm() {
           </div>
         )}
 
-        <PasswordInput
-          id="reset-password-new"
-          label="New password"
-          autoComplete="new-password"
-          placeholder="Must be at least 8 characters"
-          error={errors.password?.message}
-          {...formRegister('password')}
-        />
+        <div>
+          <PasswordInput
+            id="reset-password-new"
+            label="New password"
+            autoComplete="new-password"
+            placeholder="Must be at least 8 characters"
+            error={errors.password?.message}
+            {...formRegister('password')}
+          />
+          {/* F-3: Live password rules — mirrors the register form for consistency */}
+          <PasswordRulesList password={passwordValue} show={passwordValue.length > 0} />
+        </div>
 
         <PasswordInput
           id="reset-password-confirm"

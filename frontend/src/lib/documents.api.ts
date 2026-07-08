@@ -229,7 +229,8 @@ export async function uploadDocument(
     });
   } catch (err) {
     if (err instanceof ApiError && err.code === ERROR_CODES.FILE_VALIDATION_FAILED) {
-      throw new UploadApiError(err.code, err.message, err.status, err.retryAfter);
+      const details = err.details as { reason?: string } | undefined;
+      throw new UploadApiError(err.code, err.message, err.status, err.retryAfter, details?.reason);
     }
     throw err;
   }

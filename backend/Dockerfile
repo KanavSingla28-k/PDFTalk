@@ -74,10 +74,15 @@ ENV PATH="/app/.venv/bin:$PATH" \
 
 EXPOSE 8000
 
-# 2 workers is right for a 2-vCPU Lightsail instance.
-# Scale this when you move to a bigger plan.
-CMD ["uvicorn", "app.main:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8000", \
-     "--workers", "2", \
-     "--no-access-log"]
+# ── Startup command ───────────────────────────────────────────────────────────
+# FIX (B-1): The prometheus-client multiprocess mode requires PROMETHEUS_MULTIPROC_DIR
+# to exist AND be writable by the running user at import time. The tmpfs volume
+# mounted at /tmp/prometheus_multiproc is created root-owned by Docker, but this
+# container runs as appuser. The `mkdir -p` ensures the dir exists and is owned
+# by appuser (since we create it as appuser via the shell CMD) before uvicorn
+# forks worker processes. Without this, every worker crashes silently on import
+# of prometheus_client, causing the crash-loop seen in the logs.
+#
+# 2 workers was causing silent OOM kills within the 384m mem_limit.
+# Running in a single process (no --workers flag) fits comfortably.
+CMD ["sh", "-c", "mkdir -p \"${PROMETHEUS_MULTIPROC_DIR:-/tmp/prometheus_multiproc}\" && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --no-access-log"]

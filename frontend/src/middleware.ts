@@ -4,10 +4,15 @@ import type { NextRequest } from 'next/server';
 // Routes that do NOT require authentication
 const PUBLIC_ROUTES_REGEX = /^(\/auth\/(login|register|verify-email|forgot-password|reset-password)|\/admin)/;
 
+// These auth routes must remain accessible even for authenticated users
+// (users click email links to reset password or verify email while logged in)
+const ALWAYS_ACCESSIBLE_AUTH_ROUTES = /^\/auth\/(reset-password|verify-email)/;
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isPublicRoute = PUBLIC_ROUTES_REGEX.test(pathname);
+  const isAlwaysAccessible = ALWAYS_ACCESSIBLE_AUTH_ROUTES.test(pathname);
   // Check for the presence of the refresh_token cookie directly.
   // Real validation happens server-side / in AuthContext on the client.
   const hasSession = request.cookies.has('refresh_token');
@@ -20,7 +25,8 @@ export function middleware(request: NextRequest) {
   }
 
   // Authenticated trying to hit a public auth page → send to dashboard
-  if (hasSession && isPublicRoute) {
+  // EXCEPT: reset-password and verify-email must stay accessible (email link flows)
+  if (hasSession && isPublicRoute && !isAlwaysAccessible) {
     const response = NextResponse.redirect(new URL('/dashboard/documents', request.url));
     // Clear legacy path="/auth" cookie that causes infinite redirect loops
     response.cookies.delete({

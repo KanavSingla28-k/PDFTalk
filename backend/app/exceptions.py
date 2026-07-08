@@ -20,6 +20,8 @@ Response shape (all errors):
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+import logging
 import uuid
 from app.utils.openai_client import (
     CircuitBreakerOpenError,
@@ -27,6 +29,9 @@ from app.utils.openai_client import (
     OpenAIRetryExhaustedError,
     DailyQueryQuotaExceededError,
 )
+
+logger = logging.getLogger(__name__)
+
 
 
 # ---------------------------------------------------------------------------
@@ -544,5 +549,19 @@ def register_exception_handlers(app: FastAPI) -> None:
             content={
                 "error": "INVALID_DOCUMENT_SELECTION",
                 "message": "Invalid document selection",
+            },
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def request_validation_exception_handler(
+        request: Request,
+        exc: RequestValidationError,
+    ) -> JSONResponse:
+        logger.warning("Validation error on %s %s: %s", request.method, request.url, exc.errors())
+        return JSONResponse(
+            status_code=422,
+            content={
+                "error": "VALIDATION_ERROR",
+                "message": "The request contained invalid data.",
             },
         )

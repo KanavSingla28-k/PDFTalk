@@ -50,8 +50,13 @@ async def _send_email(subject: str, body: str, alert_name: str) -> None:
         return
     try:
         resend.api_key = settings.RESEND_API_KEY
+        if settings.EMAIL_FROM_DOMAIN and "<" in settings.EMAIL_FROM_DOMAIN and ">" in settings.EMAIL_FROM_DOMAIN:
+            alert_sender = settings.EMAIL_FROM_DOMAIN
+        else:
+            alert_sender = f"PDFTalk Alerts <alerts@{settings.EMAIL_FROM_DOMAIN}>"
+            
         resend.Emails.send({
-            "from":    f"PDFTalk Alerts <alerts@{settings.EMAIL_FROM_DOMAIN}>",
+            "from":    alert_sender,
             "to":      [settings.ALERT_EMAIL_TO],
             "subject": subject,
             "text":    body,

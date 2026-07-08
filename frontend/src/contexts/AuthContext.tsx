@@ -3,7 +3,12 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { refreshToken, logout as apiLogout } from '@/lib/auth.api';
-import { configureApiClient } from '@/lib/api';
+import {
+  apiFetch,
+  configureApiClient,
+  getApiBaseUrl,
+  type ErrorCode,
+} from '@/lib/api';
 import { env } from '@/env';
 import type { LoginResponse } from '@/lib/auth.api';
 
@@ -20,6 +25,7 @@ interface AuthState {
 
 interface AuthContextValue extends AuthState {
   logout: () => void;
+  hydrateAuth: (data: LoginResponse) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -55,17 +61,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearSession = useCallback(() => {
     setState({ user: null, accessToken: null, isLoading: false });
     accessTokenRef.current = null;
-    sessionStorage.removeItem('pdftalk_user');
     if (refreshTimerRef.current) {
       clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = null;
     }
   }, []);
 
-  const logout = useCallback(async () => {
+  const logout = useCallback(() => {
     clearSession();
-    await apiLogout();
+    // Navigate immediately — don't wait for the revocation round-trip
     router.push('/auth/login');
+    // Revoke server-side refresh token in the background (best-effort)
+    apiLogout().catch(() => {
+      // Ignore errors — local session is already cleared
+    });
   }, [clearSession, router]);
 
   const scheduleRefresh = useCallback((expiresInSeconds: number) => {
@@ -81,7 +90,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         accessTokenRef.current = data.access_token;
         setState((prev) => ({ ...prev, accessToken: data.access_token }));
         scheduleRefresh(data.expires_in);
-      } catch (err) {
+      } catch {
         // Silent refresh failed -> session dead
         clearSession();
         router.push('/auth/login');
@@ -115,8 +124,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function restoreSession() {
       try {
+        if (!accessTokenRef.current) {
+          await doRefreshFn();
+        }
+
+        const baseUrl = getApiBaseUrl();
         const res = await fetch(
-          `${env.NEXT_PUBLIC_API_URL}/auth/me`,
+          `${baseUrl}/auth/me`,
           {
             credentials: 'include',
             headers: accessTokenRef.current
@@ -138,15 +152,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           email: data.email,
         };
 
-        accessTokenRef.current = data.access_token ?? null;
+        // If /auth/me was called with an existing Bearer token, it does not
+        // return a new access_token. We must preserve the existing one.
+        const finalAccessToken = data.access_token ?? accessTokenRef.current;
+        accessTokenRef.current = finalAccessToken;
 
         setState({
           user,
-          accessToken: data.access_token ?? null,
+          accessToken: finalAccessToken,
           isLoading: false,
         });
-
-        sessionStorage.setItem('pdftalk_user', JSON.stringify(user));
 
         if (data.expires_in) {
           scheduleRefresh(data.expires_in);
@@ -161,7 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
 
         if (!isPublicRoute && pathname !== '/') {
-          window.location.href = '/auth/login';
+          router.replace('/auth/login');
         }
       }
     }
@@ -176,26 +191,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ─── Listen for Login Events ────────────────────────────────────────────────
+  // ─── Hydrate Auth State ─────────────────────────────────────────────────────
 
-  useEffect(() => {
-    const handleLoginEvent = (event: Event) => {
-      const customEvent = event as CustomEvent<LoginResponse>;
-      const { access_token, expires_in, user } = customEvent.detail;
-
-      accessTokenRef.current = access_token;
-      setState({ user, accessToken: access_token, isLoading: false });
-      scheduleRefresh(expires_in);
-    };
-
-    window.addEventListener('pdftalk:login', handleLoginEvent);
-    return () => window.removeEventListener('pdftalk:login', handleLoginEvent);
+  const hydrateAuth = useCallback((data: LoginResponse) => {
+    const { access_token, expires_in, user } = data;
+    accessTokenRef.current = access_token;
+    setState({ user, accessToken: access_token, isLoading: false });
+    scheduleRefresh(expires_in);
   }, [scheduleRefresh]);
 
   // ─── Render ─────────────────────────────────────────────────────────────────
 
   return (
-    <AuthContext.Provider value={{ ...state, logout }}>
+    <AuthContext.Provider value={{ ...state, logout, hydrateAuth }}>
       {children}
     </AuthContext.Provider>
   );

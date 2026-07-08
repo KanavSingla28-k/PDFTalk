@@ -18,6 +18,9 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - uses: actions/checkout@v4
@@ -88,7 +91,13 @@ jobs:
     environment: production   # Manual approval gate lives here
 
     steps:
-      - name: Transfer images to Lightsail
+      - uses: actions/checkout@v4
+
+      - name: Lowercase repository name
+        run: |
+          echo "GH_REPO=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+
+      - name: Set up SSH key
         run: |
           mkdir -p ~/.ssh
           echo "${{ secrets.LIGHTSAIL_SSH_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
@@ -96,50 +105,26 @@ jobs:
           echo "${{ secrets.LIGHTSAIL_SSH_KEY }}" > /tmp/deploy_key
           chmod 600 /tmp/deploy_key
 
-      - name: Deploy
-        env:
-          GITHUB_SHA: ${{ github.sha }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_ACTOR: ${{ github.actor }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Copy deployment files
         run: |
-          ssh -i /tmp/deploy_key -o ConnectTimeout=30 ubuntu@${{ secrets.LIGHTSAIL_IP }} << EOF
-            set -e
-            cd /opt/pdftalk
+          ssh -i /tmp/deploy_key -o ConnectTimeout=30 ubuntu@${{ secrets.LIGHTSAIL_IP }} "mkdir -p /opt/pdftalk/infra/scripts"
+          scp -i /tmp/deploy_key -o ConnectTimeout=30 docker-compose.yml ubuntu@${{ secrets.LIGHTSAIL_IP }}:/opt/pdftalk/docker-compose.yml
+          scp -i /tmp/deploy_key -o ConnectTimeout=30 -r infra ubuntu@${{ secrets.LIGHTSAIL_IP }}:/opt/pdftalk/
+          scp -i /tmp/deploy_key -o ConnectTimeout=30 infra/scripts/remote_deploy.sh ubuntu@${{ secrets.LIGHTSAIL_IP }}:/opt/pdftalk/remote_deploy.sh
 
-            export GIT_SHA=$GITHUB_SHA
-            export GH_REPO=\${GITHUB_REPOSITORY,,}
-
-            echo "==> Logging into GHCR"
-            echo "$GITHUB_TOKEN" | docker login ghcr.io -u $GITHUB_ACTOR --password-stdin
-
-            echo "==> Pulling Docker images (SHA: \$GIT_SHA)"
-            docker compose pull api worker frontend
-
-            echo "==> Backing up database"
-            docker compose exec -T postgres sh -c "pg_dump -U \\\$\${POSTGRES_USER:-pdftalk} -d \\\$\${POSTGRES_DB:-pdftalk} -F c -f /var/lib/postgresql/data/backup_\$GIT_SHA.dump"
-            docker compose exec -T postgres sh -c "find /var/lib/postgresql/data -name 'backup_*.dump' -mtime +7 -delete"
-
-            echo "==> Running DB migrations"
-            docker compose run --rm --no-deps api alembic upgrade head
-
-            echo "==> Restarting API, worker, and frontend"
-            docker compose up -d --no-deps api worker frontend
-
-            echo "==> Reloading nginx (picks up any config changes)"
-            docker compose exec -T nginx nginx -s reload || docker compose up -d --no-deps nginx
-
-            echo "==> Pruning old images (keeping images newer than 72h)"
-            docker image prune -f --filter "until=72h"
-            docker builder prune -af --filter "until=72h"
-
-            echo "==> Deploy complete"
-          EOF
+      - name: Deploy
+        run: |
+          # We execute the script directly from the remote filesystem instead of
+          # piping it via stdin. Piped scripts get consumed by commands that read
+          # from stdin (like `docker compose exec`), causing premature silent
+          # truncation.
+          ssh -i /tmp/deploy_key -o ConnectTimeout=30 -o ServerAliveInterval=15 -o ServerAliveCountMax=10 \
+            ubuntu@${{ secrets.LIGHTSAIL_IP }} \
+            "GIT_SHA='${{ github.sha }}' GH_REPO='${{ env.GH_REPO }}' GITHUB_TOKEN='${{ secrets.GITHUB_TOKEN }}' GITHUB_ACTOR='${{ github.actor }}' bash /opt/pdftalk/remote_deploy.sh"
 
       - name: Smoke test
         # Wait for containers to pass their healthchecks before probing.
-        # Hitting the IP directly over HTTP (SSL deferred until T-09/T-10).
-        # TODO T-10: change http:// to https:// and use secrets.APP_DOMAIN
+        # Hitting the domain over HTTPS to validate DNS, TLS, and Nginx.
         run: |
           echo "Waiting for API to become healthy..."
           sleep 15
@@ -149,7 +134,7 @@ jobs:
                --max-time 10 \
                --retry 3 \
                --retry-delay 5 \
-               http://${{ secrets.LIGHTSAIL_IP }}/api/live
+               https://${{ secrets.APP_DOMAIN }}/api/live
           echo ""
           echo "Smoke test passed."
 

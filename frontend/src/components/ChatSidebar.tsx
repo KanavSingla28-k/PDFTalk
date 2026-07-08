@@ -21,7 +21,7 @@ export function ChatSidebar() {
     if (editValue.trim() !== '') {
       try {
         await renameChat(chatId, editValue.trim());
-      } catch (e) {
+      } catch {
         // handle error silently, toast is shown in context
       }
     }

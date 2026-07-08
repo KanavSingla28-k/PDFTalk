@@ -70,12 +70,12 @@ _reset_limiter = RateLimiter(
 # Cookie helpers — single source of truth for refresh-token cookie settings
 #
 # All attributes (secure, samesite, path, max_age) are defined ONCE here.
-# When TLS goes live (T-10) flip secure=False → True in _COOKIE_SECURE only.
+# TLS is live — cookies are secure in production.
 # ---------------------------------------------------------------------------
 
 _COOKIE_KEY = "refresh_token"
 _COOKIE_MAX_AGE = 60 * 60 * 24 * 7   # 7 days — matches REFRESH_TOKEN_EXPIRE_DAYS
-_COOKIE_SECURE = False                # TODO: flip to True once TLS cert is in place (T-10)
+_COOKIE_SECURE = settings.is_production
 _COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
 _COOKIE_PATH = "/"
 
@@ -172,8 +172,9 @@ async def resend_verification(
                 # Delete the stale verification row first so we don't accumulate orphaned tokens
                 await user_service._delete_pending_verification(db, existing.id)
                 await send_verification_email_for_user(str(existing.id), existing.email, db)
-                await db.commit()
+                await db.commit()  # B-4 fix: commit inside try only when both ops succeed
             except Exception as exc:
+                await db.rollback()  # B-4 fix: roll back the token deletion if delivery fails
                 logger.warning(
                     "resend_verification: email delivery failed for %s: %s",
                     existing.email,
@@ -532,8 +533,10 @@ async def forgot_password(
     
     try:
         await initiate_password_reset(email=payload.email, db=db)
-    except Exception as exc:
-        _log.error("forgot_password_failed", email=payload.email, error=str(exc))
+    except RuntimeError as exc:
+        # B-3 fix: only swallow email delivery failures (RuntimeError from send_*_email).
+        # DB errors and other unexpected failures propagate normally as 500.
+        _log.error("forgot_password_email_delivery_failed", email=payload.email, error=str(exc))
         
     return RegisterResponse(message="If an account with that email exists, you'll receive an email shortly.")
 

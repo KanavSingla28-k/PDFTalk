@@ -14,7 +14,7 @@ import {
   type DocumentRecord,
   type DocumentStatus,
 } from '@/lib/documents.api';
-import { ApiError, ERROR_CODES } from '@/lib/api';
+import { ApiError } from '@/lib/api';
 import { Button, Spinner, Skeleton, FileTypeIcon } from '@/components/ui';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -107,18 +107,15 @@ function DocumentCard({
 }: {
   doc: DocumentRecord;
   isNew: boolean;
-  onDelete: (id: string) => void;
+  onDelete: (id: string) => Promise<boolean>;
   pollingError?: string | null;
 }) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDelete = async () => {
     setIsDeleting(true);
-    try {
-      await onDelete(doc.document_id);
-    } finally {
-      // If it fails, the parent will show a toast and keep the doc in the list,
-      // so we need to reset the button state.
+    const success = await onDelete(doc.document_id);
+    if (!success) {
       setIsDeleting(false);
     }
   };
@@ -191,7 +188,7 @@ function DocumentCard({
 
         <button
           onClick={handleDelete}
-          disabled={isDeleting || (!isTerminal && doc.status !== 'FAILED')}
+          disabled={isDeleting}
           className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--error-600)] hover:bg-[var(--error-50)] disabled:opacity-50 transition-colors"
           title="Delete document"
         >
@@ -226,6 +223,7 @@ function DocumentsContent() {
   // ── Fetch Documents ──
   useEffect(() => {
     let mounted = true;
+    const currentControllers = pollingControllers.current;
 
     async function fetchDocs() {
       try {
@@ -249,7 +247,7 @@ function DocumentsContent() {
     return () => {
       mounted = false;
       // Cleanup all active polling on unmount
-      Object.values(pollingControllers.current).forEach((ctrl) => ctrl.abort());
+      Object.values(currentControllers).forEach((ctrl) => ctrl.abort());
     };
   }, []);
 
@@ -297,25 +295,29 @@ function DocumentsContent() {
     });
   }, []);
 
+  // Track documents we've already started polling to avoid redundant checks
+  const seenForPolling = useRef<Set<string>>(new Set());
+
   // Check for non-terminal documents to start polling.
-  // PENDING_UPLOAD is included so that documents loaded from the list while
-  // an upload from another tab/session is still in-progress will auto-update
-  // to PENDING (after confirm-upload) or FAILED (after stale cleanup) without
-  // requiring a manual page refresh.
   useEffect(() => {
     documents.forEach((doc) => {
+      if (seenForPolling.current.has(doc.document_id)) return;
+
       if (
         doc.status === 'PENDING_UPLOAD' ||
         doc.status === 'PENDING' ||
         doc.status === 'PROCESSING'
       ) {
         startPolling(doc.document_id);
+        seenForPolling.current.add(doc.document_id);
+      } else if (doc.status === 'READY' || doc.status === 'FAILED') {
+        seenForPolling.current.add(doc.document_id);
       }
     });
   }, [documents, startPolling]);
 
   // ── Delete Handler ──
-  const handleDelete = async (docId: string) => {
+  const handleDelete = async (docId: string): Promise<boolean> => {
     try {
       await deleteDocument(docId);
       
@@ -327,6 +329,7 @@ function DocumentsContent() {
 
       setDocuments((prev) => prev.filter((d) => d.document_id !== docId));
       toast.success('Document deleted successfully.');
+      return true;
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 404) {
@@ -340,7 +343,7 @@ function DocumentsContent() {
       } else {
         apiToast.error(err);
       }
-      throw err; // Re-throw to reset button state in DocumentCard
+      return false; // Return false to reset button state in DocumentCard
     }
   };
 
@@ -399,7 +402,7 @@ function DocumentsContent() {
               onClick={() => setFilterType(opt.value)}
               className={`whitespace-nowrap px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${
                 filterType === opt.value
-                  ? 'bg-[var(--gray-900)] text-white'
+                  ? 'bg-[var(--gray-900)] text-[var(--surface-bg)]'
                   : 'text-[var(--gray-600)] hover:bg-[var(--gray-100)]'
               }`}
             >

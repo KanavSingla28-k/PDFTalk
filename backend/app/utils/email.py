@@ -29,7 +29,10 @@ if not settings.LOG_EMAILS_ONLY:
 # ── Sender identity ───────────────────────────────────────────────────────────
 # Must match a verified domain in your Resend dashboard.
 # For local dev you can use Resend's sandbox: onboarding@resend.dev
-SENDER = settings.FROM_EMAIL        #TODO: @gmail.com not allowed switch after domain creation "PDFTalk [EMAIL_ADDRESS]"
+if "<" in settings.FROM_EMAIL and ">" in settings.FROM_EMAIL:
+    SENDER = settings.FROM_EMAIL
+else:
+    SENDER = f"PDFTalk <{settings.FROM_EMAIL}>"
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -143,7 +146,7 @@ async def send_password_reset_email(to_email: str, reset_url: str) -> None:
 
 def send_password_reset_email_sync(to_email: str, raw_token: str) -> None:
     frontend_url = settings.APP_URL.rstrip('/')
-    reset_url = f"{frontend_url}/auth/reset-password?token={raw_token}"
+    reset_url = f"{frontend_url}/auth/reset-password#token={raw_token}"
     asyncio.run(send_password_reset_email(to_email=to_email, reset_url=reset_url))
 
 

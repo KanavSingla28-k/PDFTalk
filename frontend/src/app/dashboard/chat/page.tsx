@@ -6,8 +6,7 @@ import { toast } from 'sonner';
 import { formatDistanceToNow, format } from 'date-fns';
 
 import { listDocuments, type DocumentRecord } from '@/lib/documents.api';
-import { streamAnswer, getSseErrorMessage, type StreamEvent } from '@/lib/query.api';
-import { ERROR_CODES } from '@/lib/api';
+
 import { Button, Spinner, Modal } from '@/components/ui';
 import Link from 'next/link';
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
@@ -436,12 +435,12 @@ function ChatContent() {
   const searchParams = useSearchParams();
   const initDocId = searchParams.get('doc');
 
-  const { activeChat, sendMessage, isStreaming, abortStream, createNewChat, loadChat } = useChat();
+  const { activeChat, sendMessage, isStreaming, abortStream, createNewChat } = useChat();
 
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   const [isLoadingDocs, setIsLoadingDocs] = useState(true);
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
   const [showDocModal, setShowDocModal] = useState(false);
 
   // ── Document Loading ──
@@ -465,7 +464,7 @@ function ChatContent() {
         } else if (res.items.length > 0 && !initDocId) {
           setSelectedDocs(new Set([res.items[0].document_id]));
         }
-      } catch (err) {
+      } catch {
         if (mounted) toast.error('Failed to load documents.');
       } finally {
         if (mounted) setIsLoadingDocs(false);
@@ -480,7 +479,7 @@ function ChatContent() {
     if (activeChat && activeChat.document_ids) {
       setSelectedDocs(new Set(activeChat.document_ids));
     }
-  }, [activeChat?.id]);
+  }, [activeChat]);
 
   // ── Auto-scroll to bottom ──
   useEffect(() => {

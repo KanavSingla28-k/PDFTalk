@@ -263,7 +263,8 @@ function VerifyEmailContent() {
   // ── Case 3: ?token= is present (user clicking a link — backend handles this
   // via redirect. We should never render this state because the backend
   // redirects before the browser loads the Next.js page.
-  // If it does render (e.g. the backend is down), show a neutral fallback.
+  // If it does render (e.g. the backend is down), show a spinner + resend form
+  // so the user has an action path rather than being stuck forever.
   return (
     <>
       <div className="flex flex-col items-center gap-2 text-center mb-6">
@@ -276,13 +277,25 @@ function VerifyEmailContent() {
           Verifying…
         </h1>
         <p className="text-sm" style={{ color: 'var(--gray-500)' }}>
-          If this page doesn&apos;t redirect automatically,{' '}
-          <Link href="/auth/login" className="font-medium hover:underline" style={{ color: 'var(--brand-600)' }}>
-            go to login
-          </Link>
-          .
+          If this page doesn&apos;t redirect automatically, the link may have expired.
+          Enter your email below to get a fresh verification link.
         </p>
       </div>
+
+      <ResendForm
+        cooldown={countdown}
+        onCooldownStart={(s) => countdown.start(s)}
+      />
+
+      <p className="mt-4 text-center text-sm" style={{ color: 'var(--gray-500)' }}>
+        <Link
+          href="/auth/login"
+          className="font-medium hover:underline"
+          style={{ color: 'var(--brand-600)' }}
+        >
+          Back to login
+        </Link>
+      </p>
     </>
   );
 }

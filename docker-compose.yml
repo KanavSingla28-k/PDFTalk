@@ -16,6 +16,7 @@ volumes:
     driver_opts:
       type: tmpfs
       device: tmpfs
+      o: size=64m,mode=1777
 
 # ──────────────────────────────────────────────────────────────────────────
 # INSTANCE: pdftalk-production — 2 vCPU / 2 GB RAM / 60 GB SSD (ap-south-1)
@@ -104,6 +105,12 @@ services:
 
   api:
     image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-api:${GIT_SHA:-latest}
+    # pull_policy: always — forces `docker compose run` / `up` to always pull the
+    # resolved tag from GHCR rather than considering the local `build:` block as
+    # a fallback. Without this, `docker compose run api ...` could attempt a local
+    # build (and fail on registry auth for base images like ghcr.io/astral-sh/uv)
+    # whenever GIT_SHA resolves to ":latest" in a given shell context.
+    pull_policy: always
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -133,6 +140,7 @@ services:
 
   worker:
     image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-worker:${GIT_SHA:-latest}
+    pull_policy: always
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
@@ -161,7 +169,7 @@ services:
     mem_limit: 512m
     mem_reservation: 320m
     healthcheck:
-      test: ["CMD", "python", "-c", "import redis; r=redis.from_url('redis://redis'); r.ping()"]
+      test: ["CMD", "python", "-c", "import os, redis; r=redis.from_url(f\"redis://:{os.environ.get('REDIS_PASSWORD', '')}@redis:6379/0\"); r.ping()"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -169,6 +177,7 @@ services:
 
   frontend:
     image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-frontend:${GIT_SHA:-latest}
+    pull_policy: always
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -194,9 +203,12 @@ services:
     restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./infra/nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
       - app_logs:/var/log/nginx
+      - ./certbot/www:/var/www/certbot:ro
+      - ./certbot/conf:/etc/nginx/ssl:ro
     networks:
       - internal
       - external

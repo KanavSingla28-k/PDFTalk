@@ -60,6 +60,8 @@ class Settings(BaseSettings):
 
     MAX_DOCS_PER_USER: int = 20
     MAX_DAILY_TOKENS_PER_USER: int = 100000
+    CONTEXT_TOKEN_BUDGET: int = 3000
+    HISTORY_TOKEN_BUDGET: int = 1500
     RETRIEVAL_TOP_K: int = 5
     # Cosine distance ceiling for retrieved chunks. Chunks whose distance
     # exceeds this value are considered off-topic and dropped from the context

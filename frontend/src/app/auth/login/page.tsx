@@ -7,21 +7,20 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { toast } from 'sonner';
 
-import { login, register, resendVerification } from '@/lib/auth.api';
+import { login, resendVerification } from '@/lib/auth.api';
 import { ApiError, ERROR_CODES } from '@/lib/api';
 import { loginSchema, type LoginFormValues } from '@/lib/auth.schemas';
 import { Button, Input, PasswordInput, FormError, Skeleton } from '@/components/ui';
 import { useCountdown } from '@/hooks/useCountdown';
+import { useAuth } from '@/contexts/AuthContext';
 
 // ─── Resend-verification inline prompt ───────────────────────────────────────
 
 function ResendPrompt({
-  email,
   onResend,
   isResending,
   cooldown,
 }: {
-  email: string;
   onResend: () => void;
   isResending: boolean;
   cooldown: number;
@@ -61,6 +60,7 @@ function ResendPrompt({
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const { hydrateAuth } = useAuth();
 
   const [formError, setFormError] = useState<string | null>(null);
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
@@ -92,14 +92,9 @@ function LoginForm() {
     try {
       const response = await login(data);
 
-      // Store user + token in sessionStorage for AuthContext to pick up (T-49).
-      // Access token itself is NOT stored here — AuthContext owns that.
-      sessionStorage.setItem(
-        'pdftalk_user',
-        JSON.stringify({ id: response.user.id, email: response.user.email }),
-      );
-      // Emit a custom event so AuthContext (once mounted) can hydrate from this
-      window.dispatchEvent(new CustomEvent('pdftalk:login', { detail: response }));
+      // Hydrate AuthContext directly with the login response
+      // without needing a round-trip to GET /auth/me or an insecure window event.
+      hydrateAuth(response);
 
       // Navigate to intended destination or dashboard
       const next = searchParams.get('next');
@@ -191,7 +186,6 @@ function LoginForm() {
         {/* Unverified email prompt */}
         {unverifiedEmail && (
           <ResendPrompt
-            email={unverifiedEmail}
             onResend={handleResend}
             isResending={isResending}
             cooldown={countdown.remaining}

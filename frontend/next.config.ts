@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 import withBundleAnalyzer from "@next/bundle-analyzer";
 
-const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://13.207.100.137/api';
+const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://pdftalk.kanavsingla.fyi/api';
 
 const cspHeader = `
   default-src 'self';
@@ -17,6 +17,7 @@ const cspHeader = `
 `.replace(/\s{2,}/g, ' ').trim();
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   output: 'standalone',
   transpilePackages: [
     'react-markdown',
