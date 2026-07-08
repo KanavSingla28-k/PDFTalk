@@ -178,7 +178,8 @@ def _run(db: Session, document_id: uuid.UUID) -> None:
     documents_processed_total.labels(user_id=str(doc.user_id)).inc()
     openai_tokens_used_total.labels(kind="embedding").inc(total_tokens)
     
-    end_to_end_latency = (doc.updated_at - doc.created_at).total_seconds()
+    created_at = doc.created_at.replace(tzinfo=timezone.utc) if doc.created_at.tzinfo is None else doc.created_at
+    end_to_end_latency = (doc.updated_at - created_at).total_seconds()
     document_end_to_end_latency_seconds.observe(end_to_end_latency)
 
     logger.info(

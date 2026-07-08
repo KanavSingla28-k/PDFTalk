@@ -24,6 +24,7 @@ from sqlalchemy.orm import sessionmaker
 # ---------------------------------------------------------------------------
 # Environment setup — MUST be first, before any app.* import
 # ---------------------------------------------------------------------------
+os.environ.setdefault("ENVIRONMENT", "development")
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://pdftalk:test@localhost/pdftalk_test")
 os.environ.setdefault("REDIS_URL", "redis://:test@localhost:6379")
 
