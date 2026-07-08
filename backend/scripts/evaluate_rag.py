@@ -4,7 +4,6 @@ import csv
 import json
 import structlog
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import AsyncSessionLocal
 from app.models.user import User
@@ -156,7 +155,7 @@ async def run_evaluation(user_email: str):
 
         # 7. Print final score
         accuracy = (correct_count / len(qa_pairs)) * 100
-        logger.info(f"\\n--- EVALUATION COMPLETE ---")
+        logger.info("\\n--- EVALUATION COMPLETE ---")
         logger.info(f"Total Questions: {len(qa_pairs)}")
         logger.info(f"Correct Answers: {correct_count}")
         logger.info(f"Accuracy: {accuracy:.1f}%")
