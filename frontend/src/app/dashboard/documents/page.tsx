@@ -188,7 +188,7 @@ function DocumentCard({
 
         <button
           onClick={handleDelete}
-          disabled={isDeleting || (!isTerminal && doc.status !== 'FAILED')}
+          disabled={isDeleting}
           className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs font-medium text-[var(--error-600)] hover:bg-[var(--error-50)] disabled:opacity-50 transition-colors"
           title="Delete document"
         >

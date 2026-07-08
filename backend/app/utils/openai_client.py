@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import structlog
 import time
-from typing import AsyncIterator, Callable, Any
+from typing import AsyncIterator, Callable, Any, overload, Literal
 
 from openai import AsyncOpenAI, APIStatusError, RateLimitError
 from openai.types.chat import ChatCompletionMessageParam
@@ -211,6 +211,26 @@ async def create_embeddings(texts: list[str]) -> list[list[float]]:
     response = await _guarded_call(_factory)
     return [item.embedding for item in sorted(response.data, key=lambda x: x.index)]
 
+
+@overload
+async def chat_complete(
+    messages: list[ChatCompletionMessageParam],
+    *,
+    stream: Literal[False] = False,
+    model: str = "gpt-4o-mini",
+    max_tokens: int = 1024,
+) -> str:
+    ...
+
+@overload
+async def chat_complete(
+    messages: list[ChatCompletionMessageParam],
+    *,
+    stream: Literal[True],
+    model: str = "gpt-4o-mini",
+    max_tokens: int = 1024,
+) -> AsyncIterator[str]:
+    ...
 
 async def chat_complete(
     messages: list[ChatCompletionMessageParam],
