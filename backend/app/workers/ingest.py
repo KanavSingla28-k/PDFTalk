@@ -24,6 +24,7 @@ from app.utils.metrics import (
     documents_failed_total,
     processing_duration_seconds,
     openai_tokens_used_total,
+    document_end_to_end_latency_seconds,
 )
 
 logger = structlog.get_logger(__name__)
@@ -176,6 +177,9 @@ def _run(db: Session, document_id: uuid.UUID) -> None:
     # Metrics — after commit so we only count genuinely successful ingestions
     documents_processed_total.labels(user_id=str(doc.user_id)).inc()
     openai_tokens_used_total.labels(kind="embedding").inc(total_tokens)
+    
+    end_to_end_latency = (doc.updated_at - doc.created_at).total_seconds()
+    document_end_to_end_latency_seconds.observe(end_to_end_latency)
 
     logger.info(
         "ingest.completed",

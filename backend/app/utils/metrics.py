@@ -34,6 +34,12 @@ processing_duration_seconds = Histogram(
     buckets=[5, 10, 30, 60, 120, 300, 600],
 )
 
+document_end_to_end_latency_seconds = Histogram(
+    "pdftalk_document_end_to_end_latency_seconds",
+    "Wall-clock time from document creation to READY status, including queue time",
+    buckets=[5, 10, 30, 60, 120, 300, 600],
+)
+
 queue_length = Gauge(
     "pdftalk_queue_length",
     "Current number of jobs waiting in the RQ ingest queue",
