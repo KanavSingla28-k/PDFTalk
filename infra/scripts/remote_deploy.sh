@@ -53,6 +53,10 @@ docker compose exec -T postgres sh -c "find /var/lib/postgresql/data -name 'back
   || echo "WARNING: backup cleanup failed — continuing deploy"
 echo "MARKER:BACKUP_CLEANUP_DONE"
 
+echo "==> Syncing database password"
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "ALTER USER \"$POSTGRES_USER\" WITH PASSWORD '\''$POSTGRES_PASSWORD'\'';"' < /dev/null \
+  || echo "WARNING: password sync failed"
+
 echo "==> Running DB migrations"
 docker compose run -T --rm --no-deps api alembic upgrade head < /dev/null \
   || { echo "ERROR: alembic migration failed — aborting deploy"; exit 1; }
