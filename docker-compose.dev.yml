@@ -6,8 +6,8 @@ services:
 
     environment:
       POSTGRES_DB: pdftalk
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: pdftalk
+      POSTGRES_PASSWORD: 3wYd8pmybim4JXe8vmmNQf37zzpY0Oll     # pragma: allowlist secret
 
     ports:
       - "5433:5432"
@@ -16,7 +16,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U pdftalk"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -27,7 +27,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: pdftalk-redis
-    command: redis-server --requirepass pdftalk_redis --appendonly yes
+    command: redis-server --requirepass FCVPvJkWzjPrVGhHBkENqxR4lzo36hCV --appendonly yes
     ports:
       - "6379:6379"
     volumes:

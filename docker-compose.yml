@@ -229,7 +229,6 @@ services:
 
   prometheus:
     image: prom/prometheus:v2.51.0
-    profiles: ["observability"]
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
@@ -266,7 +265,6 @@ services:
 
   alertmanager:
     image: prom/alertmanager:v0.27.0
-    profiles: ["observability"]
     env_file:
       - .env
     entrypoint: ["/docker-entrypoint.sh"]
@@ -277,5 +275,48 @@ services:
     networks:
       - internal
     restart: unless-stopped
+    mem_limit: 48m
+    mem_reservation: 32m
+
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: pdftalk-node-exporter
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+      - "--collector.textfile.directory=/textfile_collector"
+    network_mode: host
+    pid: host
+    volumes:
+      - "/:/host:ro,rslave"
+      - "./textfile_collector:/textfile_collector:ro"
+    mem_limit: 48m
+    mem_reservation: 32m
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.58.0
+    container_name: pdftalk-redis-exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+    networks:
+      - internal
+    depends_on:
+      redis:
+        condition: service_healthy
+    mem_limit: 48m
+    mem_reservation: 32m
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.24.0
+    container_name: pdftalk-blackbox-exporter
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/blackbox_exporter/blackbox.yml"
+    volumes:
+      - ./monitoring/blackbox.yml:/etc/blackbox_exporter/blackbox.yml:ro
+    networks:
+      - internal
     mem_limit: 48m
     mem_reservation: 32m
