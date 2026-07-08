@@ -110,6 +110,32 @@
           "legendFormat": "{{error_code}}"
         }
       ]
+    },
+    {
+      "id": 9,
+      "title": "Messages / min",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 32, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(pdftalk_messages_total[1m]) * 60",
+          "legendFormat": "messages/min"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Blocked Queries / min",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 32, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus" },
+          "expr": "rate(pdftalk_chat_query_blocked_total[1m]) * 60",
+          "legendFormat": "blocked/min"
+        }
+      ]
     }
   ]
 }
