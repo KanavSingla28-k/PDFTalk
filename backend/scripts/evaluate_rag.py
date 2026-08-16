@@ -1,6 +1,6 @@
 import argparse
 import asyncio
-import csv
+# import csv
 import json
 import structlog
 from sqlalchemy import select
@@ -16,7 +16,7 @@ from app.services.prompt import build_messages
 logger = structlog.get_logger(__name__)
 
 
-async def generate_qa_pairs(text_chunks: list[str], num_pairs: int = 20) -> list[dict]:
+async def generate_qa_pairs(text_chunks: list[str], num_pairs: int = 100) -> list[dict]:
     """Uses LLM to generate Q&A pairs from text chunks."""
     logger.info("Generating Q&A pairs via LLM...")
     prompt = f"""
@@ -160,15 +160,15 @@ async def run_evaluation(user_email: str):
         logger.info(f"Correct Answers: {correct_count}")
         logger.info(f"Accuracy: {accuracy:.1f}%")
         
-        # Save to CSV
-        output_file = "rag_evaluation_results.csv"
-        with open(output_file, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=["question", "expected_answer", "generated_answer", "is_correct"])
-            writer.writeheader()
-            for r in results:
-                writer.writerow(r)
+        # # Save to CSV
+        # output_file = "rag_evaluation_results.csv"
+        # with open(output_file, "w", newline="", encoding="utf-8") as f:
+        #     writer = csv.DictWriter(f, fieldnames=["question", "expected_answer", "generated_answer", "is_correct"])
+        #     writer.writeheader()
+        #     for r in results:
+        #         writer.writerow(r)
                 
-        logger.info(f"Detailed results saved to {output_file}")
+        # logger.info(f"Detailed results saved to {output_file}")
 
 
 if __name__ == "__main__":
