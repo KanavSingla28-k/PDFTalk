@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copy only the dependency manifest first so Docker can cache this layer.
 # The venv is rebuilt only when pyproject.toml or uv.lock changes.
 COPY pyproject.toml uv.lock ./
+COPY vendor/ ./vendor/
 
 # --no-dev       : skip pytest, fakeredis, moto, etc.
 # --frozen       : fail if uv.lock is out of sync with pyproject.toml

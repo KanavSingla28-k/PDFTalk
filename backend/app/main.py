@@ -7,6 +7,12 @@ from fastapi import FastAPI, Request, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+
+# Sentinel integration-------------------------------
+from app.core.sentinel import guard as sentinel_guard
+from app.core.sentinel import redis as sentinel_redis
+# -------------------------------------------------------
+
 from app.db.session import check_db_connection, engine
 from app.exceptions import register_exception_handlers
 from app.middleware.logging import RequestLoggingMiddleware
@@ -22,19 +28,28 @@ from app.routers.chats import router as chat_router
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    # --- startup ---
-    configure_logging()          # structlog must be configured before any log calls
+    configure_logging()
 
     await check_db_connection()
 
     r = get_redis()
     await r.ping()
 
+    # Sentinel load scripts
+    await sentinel_guard.load_scripts()
+
+    print(
+        "Sentinel scripts loaded:",
+        sentinel_guard._loader.sha("token_bucket"),
+        sentinel_guard._loader.sha("sliding_window"),
+)
+    # ------------------------------------------------------
+
     yield
 
-    # --- shutdown ---
     await engine.dispose()
     await get_pool().aclose()
+    await sentinel_redis.aclose()
 
 
 _docs_url    = None if settings.is_production else "/docs"

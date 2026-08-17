@@ -1,0 +1,13 @@
+﻿HTTP/1.1 429 Too Many Requests
+date: Mon, 17 Aug 2026 07:08:57 GMT
+server: uvicorn
+content-length: 32
+content-type: application/json
+x-frame-options: DENY
+x-content-type-options: nosniff
+referrer-policy: strict-origin-when-cross-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+content-security-policy: default-src 'none'
+x-request-id: 4ed4d1bd-0cb1-4c76-84a7-d868932a06ef
+
+{"detail":"rate limit exceeded"}

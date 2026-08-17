@@ -8,6 +8,10 @@ from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
+# Sentinel integration--------------------------------
+from app.core.sentinel import guard as sentinel_guard
+# ------------------------------------------------------
+
 from app.auth.dependencies import get_verified_user
 from app.db.session import get_db
 from app.models.document import (
@@ -61,6 +65,11 @@ _upload_limiter = RateLimiter(
     fail_open=True,
 )
 
+# Sentinel rate limiter---------------------------
+_sentinel_upload_guard = sentinel_guard.guard_for(
+    "pdftalk.documents.upload"
+)
+
 @router.post(
     "/upload",
     status_code=status.HTTP_202_ACCEPTED,
@@ -71,7 +80,7 @@ async def upload_document_endpoint(
     file: UploadFile = File(...),
     current_user: User = Depends(get_verified_user),
     db: AsyncSession = Depends(get_db),
-    _rate: None = Depends(_upload_limiter), 
+    _sentinel: None = Depends(_sentinel_upload_guard),
 ) -> DocumentUploadResponse:
     """
     Upload a document for RAG ingestion.

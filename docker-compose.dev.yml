@@ -35,6 +35,21 @@ services:
     networks:
       - internal
 
+  sentinel-redis:
+    image: redis:7-alpine
+    container_name: pdftalk-sentinel-redis
+    command:
+      - redis-server
+      - --requirepass
+      - ${SENTINEL_REDIS_PASSWORD}
+      - --maxmemory
+      - 128mb
+      - --maxmemory-policy
+      - noeviction
+    restart: unless-stopped
+    networks:
+      - internal
+
   api:
     build:
       context: ./backend
@@ -43,9 +58,9 @@ services:
       - "8000:8000"
 
     environment:
-      ENV_FILE: .env.docker   # tells config.py which file to load
+      ENV_FILE: .env.local   # tells config.py which file to load
     env_file:
-      - ./backend/.env.docker
+      - ./backend/.env.local
 
     volumes:
       - ./backend:/app
@@ -58,6 +73,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_started
+      # sentinel-redis:
+      #   condition: service_started
 
     networks:
       - internal
@@ -67,9 +86,9 @@ services:
       context: ./backend
 
     environment:
-      ENV_FILE: .env.docker
+      ENV_FILE: .env.local
     env_file:
-      - ./backend/.env.docker
+      - ./backend/.env.local
 
     volumes:
       - ./backend:/app

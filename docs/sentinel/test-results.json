@@ -1,0 +1,76 @@
+{
+  "test_run": {
+    "date": "2026-08-17T12:35:00+05:30",
+    "commit": "f79ad3166983126aa5888a0a9ea521f45bb62895",
+    "sentinel_version": "0.1.0",
+    "python_version": "3.12.14",
+    "redis_version": "7.4.9",
+    "status": "PASS_WITH_LIMITATIONS",
+    "note": "Limitations are pre-existing PDFTalk auth/logging issues, not Sentinel defects. See integration-test-report.md."
+  },
+  "tests": [
+    {
+      "id": "S1",
+      "name": "normal_rate_limit",
+      "expected": "3 allowed, 4th denied",
+      "actual": "3x 202, 4th 429 {'detail': 'rate limit exceeded'}",
+      "status": "PASS"
+    },
+    {
+      "id": "S2",
+      "name": "redis_state_inspection",
+      "expected": "sentinel:v1:<sha256>:<endpoint>:<version> key, TTL ~120s, state string current:previous:window_start",
+      "actual": "string key, VALUE '3:0:...', TTL 108s, MEMORY_USAGE 176 bytes",
+      "status": "PASS"
+    },
+    {
+      "id": "S3",
+      "name": "redis_failure_fail_closed",
+      "expected": "503 rate limiter unavailable, no upload side effects",
+      "actual": "503 {'detail': 'rate limiter unavailable'}; no S3/DB/queue artifacts",
+      "status": "PASS"
+    },
+    {
+      "id": "S4",
+      "name": "redis_recovery",
+      "expected": "202 after Redis restart",
+      "actual": "202 Accepted (document 8645fd78-c74b-4c76-a838-add54c68e7a7)",
+      "status": "PASS"
+    },
+    {
+      "id": "S5",
+      "name": "multi_process_shared_limit",
+      "expected": "shared 3-request limit across 2 processes",
+      "actual": "A:202, B:202, A:202, B:429; single shared Redis key count=3",
+      "status": "PASS"
+    },
+    {
+      "id": "S6",
+      "name": "multi_user_independent_limits",
+      "expected": "user A 3 allowed + denied; user B 1st allowed",
+      "actual": "A: 202,202,202,429; B: 202; two distinct hashed keys",
+      "status": "PASS"
+    },
+    {
+      "id": "S7",
+      "name": "authentication_interaction",
+      "expected": "no unexpected 5xx for auth failures",
+      "actual": "missing/malformed/expired JWT -> 401; nonexistent user -> 401; non-UUID sub -> 500 (pre-existing PDFTalk bug in get_current_user, not Sentinel)",
+      "status": "PASS_WITH_KNOWN_ISSUE"
+    },
+    {
+      "id": "S8",
+      "name": "script_reload_restart",
+      "expected": "app continues functioning after Redis restart (NoScriptError recovery)",
+      "actual": "scripts flushed (0 0), auto re-loaded on demand (0 1), full cycle 202,202,202,429 post-restart",
+      "status": "PASS"
+    },
+    {
+      "id": "S9",
+      "name": "observability_no_secret_leakage",
+      "expected": "decisions observable, no JWT/password in logs",
+      "actual": "metrics carry decision_reason (allowed=3, rate_limited=1); 0 JWT-like strings; 0 redis passwords in logs; sentinel structured extra fields dropped by PDFTalk logging config",
+      "status": "PASS"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+﻿=== date ===
+2026-08-17T12:37:00+05:30
+=== docker ps ===
+CONTAINER ID                                                       IMAGE                    COMMAND                                                                                                                         CREATED        STATUS                  PORTS                                         NAMES
+d34ff6ecbde06485215043337ad9bed2c9ff7589519c143090165fe34990bd17   pdftalk-api              ".venv/bin/uvicorn app.main:app --reload --host 0.0.0.0 --port 8000"                                                            9 hours ago    Up About an hour        0.0.0.0:8000->8000/tcp, [::]:8000->8000/tcp   pdftalk-api-1
+65634f59bc0713940615ffc383e65472b6b3d0f5459b54122bd95f1bdb70e831   redis:7-alpine           "docker-entrypoint.sh redis-server --requirepass <REDACTED> --appendonly yes"                                                9 hours ago    Up 9 hours              0.0.0.0:6379->6379/tcp, [::]:6379->6379/tcp   pdftalk-redis
+172c87d0a8fa0c672eb7d7037934e5ba7b5b0acc44f42f0bf362ef8451a6202b   pgvector/pgvector:pg15   "docker-entrypoint.sh postgres"                                                                                                 10 hours ago   Up 10 hours (healthy)   0.0.0.0:5433->5432/tcp, [::]:5433->5432/tcp   pdftalk-postgres
+051da70dfaa9fe22bd87637932c151f74ec43043345153f388e7d2d7cfc3bdde   redis:7-alpine           "docker-entrypoint.sh redis-server --requirepass <REDACTED> --maxmemory 128mb --maxmemory-policy noeviction"   10 hours ago   Up 19 minutes           6379/tcp                                      pdftalk-sentinel-redis
+=== api python ===
+Python 3.12.14
+=== sentinel package (api) ===
+Name: sentinel
+Version: 0.1.0
+=== redis-server versions ===
+Redis server v=7.4.9 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=b4acab9aea09546d
+Redis server v=7.4.9 sha=00000000:0 malloc=jemalloc-5.3.0 bits=64 build=b4acab9aea09546d
+=== postgres version ===
+ PostgreSQL 15.18 (Debian 15.18-1.pgdg12+1) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit
+
+=== git commit ===
+f79ad3166983126aa5888a0a9ea521f45bb62895
+=== docker images ===
+pdftalk-api:latest d3909005be37
+pdftalk-worker:latest bb49d56d1a74
+ghcr.io/kanavsingla28-k/pdftalk/pdftalk-api:latest d6ba60d5872e
+nginx:alpine 8b1e78743a03
+pgvector/pgvector:pg15 bd12d6788a61
+postgres:15-alpine df7bca0066e6
+redis:7-alpine 6ab0b6e73817
+nginx:1.25-alpine 516475cc129d
+prom/prometheus:v2.51.0 5ccad477d005

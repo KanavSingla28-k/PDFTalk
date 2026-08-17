@@ -1,0 +1,13 @@
+﻿HTTP/1.1 503 Service Unavailable
+date: Mon, 17 Aug 2026 07:10:08 GMT
+server: uvicorn
+content-length: 37
+content-type: application/json
+x-frame-options: DENY
+x-content-type-options: nosniff
+referrer-policy: strict-origin-when-cross-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+content-security-policy: default-src 'none'
+x-request-id: 102f0256-ab9b-4e8e-8d6e-23b6da749264
+
+{"detail":"rate limiter unavailable"}

@@ -1,0 +1,11 @@
+﻿=== sentinel redis ping ===
+PONG
+=== maxmemory ===
+maxmemory
+134217728
+=== maxmemory-policy ===
+maxmemory-policy
+noeviction
+=== normal redis ping ===
+PONG
+=== sentinel keys before tests ===

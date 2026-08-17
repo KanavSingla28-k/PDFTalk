@@ -1,0 +1,500 @@
+﻿api-1  |     |   File "/app/app/middleware/security.py", line 9, in dispatch
+api-1  |     |     response = await call_next(request)
+api-1  |     |                ^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
+api-1  |     |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
+api-1  |     |     await self.app(scope, receive_or_disconnect, send_no_error)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/prometheus_fastapi_instrumentator/middleware.py", line 176, in __call__
+api-1  |     |     raise exc
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/prometheus_fastapi_instrumentator/middleware.py", line 174, in __call__
+api-1  |     |     await self.app(scope, receive, send_wrapper)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+api-1  |     |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+api-1  |     |     raise exc
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+api-1  |     |     await app(scope, receive, sender)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+api-1  |     |     await self.app(scope, receive, send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
+api-1  |     |     await self.middleware_stack(scope, receive, send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 680, in app
+api-1  |     |     await route.handle(scope, receive, send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 276, in handle
+api-1  |     |     await self.app(scope, receive, send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 134, in app
+api-1  |     |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+api-1  |     |     raise exc
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+api-1  |     |     await app(scope, receive, sender)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 120, in app
+api-1  |     |     response = await f(request)
+api-1  |     |                ^^^^^^^^^^^^^^^^
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 457, in app
+api-1  |     |     solved_result = await solve_dependencies(
+api-1  |     |                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py", line 649, in solve_dependencies
+api-1  |     |     solved_result = await solve_dependencies(
+api-1  |     |                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py", line 678, in solve_dependencies
+api-1  |     |     solved = await call(**solved_result.values)
+api-1  |     |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/app/app/auth/dependencies.py", line 78, in get_current_user
+api-1  |     |     return uuid.UUID(user_id_str)
+api-1  |     |            ^^^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/usr/local/lib/python3.12/uuid.py", line 178, in __init__
+api-1  |     |     raise ValueError('badly formed hexadecimal UUID string')
+api-1  |     | ValueError: badly formed hexadecimal UUID string
+api-1  |     +------------------------------------
+api-1  | 
+api-1  | The above exception was the direct cause of the following exception:
+api-1  | 
+api-1  | Traceback (most recent call last):
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 421, in run_asgi
+api-1  |     result = await app(  # type: ignore[func-returns-value]
+api-1  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 62, in __call__
+api-1  |     return await self.app(scope, receive, send)
+api-1  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1159, in __call__
+api-1  |     await super().__call__(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/applications.py", line 90, in __call__
+api-1  |     await self.middleware_stack(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+api-1  |     raise exc
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+api-1  |     await self.app(scope, receive, _send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 88, in __call__
+api-1  |     await self.app(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 191, in __call__
+api-1  |     with recv_stream, send_stream, collapse_excgroups():
+api-1  |                                    ^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/usr/local/lib/python3.12/contextlib.py", line 158, in __exit__
+api-1  |     self.gen.throw(value)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+api-1  |     raise exc
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
+api-1  |     response = await self.dispatch_func(request, call_next)
+api-1  |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/app/middleware/logging.py", line 60, in dispatch
+api-1  |     response: Response = await call_next(request)
+api-1  |                          ^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
+api-1  |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
+api-1  |     await self.app(scope, receive_or_disconnect, send_no_error)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 191, in __call__
+api-1  |     with recv_stream, send_stream, collapse_excgroups():
+api-1  |                                    ^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/usr/local/lib/python3.12/contextlib.py", line 158, in __exit__
+api-1  |     self.gen.throw(value)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+api-1  |     raise exc
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
+api-1  |     response = await self.dispatch_func(request, call_next)
+api-1  |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/app/middleware/security.py", line 9, in dispatch
+api-1  |     response = await call_next(request)
+api-1  |                ^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
+api-1  |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
+api-1  |     await self.app(scope, receive_or_disconnect, send_no_error)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/prometheus_fastapi_instrumentator/middleware.py", line 176, in __call__
+api-1  |     raise exc
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/prometheus_fastapi_instrumentator/middleware.py", line 174, in __call__
+api-1  |     await self.app(scope, receive, send_wrapper)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+api-1  |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+api-1  |     raise exc
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+api-1  |     await app(scope, receive, sender)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+api-1  |     await self.app(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
+api-1  |     await self.middleware_stack(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 680, in app
+api-1  |     await route.handle(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 276, in handle
+api-1  |     await self.app(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 134, in app
+api-1  |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+api-1  |     raise exc
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+api-1  |     await app(scope, receive, sender)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 120, in app
+api-1  |     response = await f(request)
+api-1  |                ^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 457, in app
+api-1  |     solved_result = await solve_dependencies(
+api-1  |                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py", line 649, in solve_dependencies
+api-1  |     solved_result = await solve_dependencies(
+api-1  |                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py", line 678, in solve_dependencies
+api-1  |     solved = await call(**solved_result.values)
+api-1  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/app/auth/dependencies.py", line 78, in get_current_user
+api-1  |     return uuid.UUID(user_id_str)
+api-1  |            ^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/usr/local/lib/python3.12/uuid.py", line 178, in __init__
+api-1  |     raise ValueError('badly formed hexadecimal UUID string')
+api-1  | ValueError: badly formed hexadecimal UUID string
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/4dfc8aad-215e-495e-b959-7a8318b1cd67/sentinel-test.pdf", "event": "s3_upload_success", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "5255919c-4ba1-48d7-b8c3-510648cc9948", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T06:56:19.776348Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "4dfc8aad-215e-495e-b959-7a8318b1cd67", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/4dfc8aad-215e-495e-b959-7a8318b1cd67/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "5255919c-4ba1-48d7-b8c3-510648cc9948", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T06:56:19.776540Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "4dfc8aad-215e-495e-b959-7a8318b1cd67", "status": "PENDING", "event": "document_db_created", "request_id": "5255919c-4ba1-48d7-b8c3-510648cc9948", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T06:56:19.792128Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 991, "client_ip": "172.20.0.1", "event": "request.completed", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "5255919c-4ba1-48d7-b8c3-510648cc9948", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T06:56:20.498527Z"}
+api-1  | INFO:     172.20.0.1:51484 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/20fe2545-0aa1-4d1f-b5aa-0918b40307a3/sentinel-test.pdf", "event": "s3_upload_success", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "4e507be7-bcae-4ad0-9444-7f36cc023d1e", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T06:56:33.333890Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "20fe2545-0aa1-4d1f-b5aa-0918b40307a3", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/20fe2545-0aa1-4d1f-b5aa-0918b40307a3/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "4e507be7-bcae-4ad0-9444-7f36cc023d1e", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T06:56:33.334102Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "20fe2545-0aa1-4d1f-b5aa-0918b40307a3", "status": "PENDING", "event": "document_db_created", "request_id": "4e507be7-bcae-4ad0-9444-7f36cc023d1e", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T06:56:33.339004Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 206, "client_ip": "172.20.0.1", "event": "request.completed", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "4e507be7-bcae-4ad0-9444-7f36cc023d1e", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T06:56:33.340807Z"}
+api-1  | INFO:     172.20.0.1:40034 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/6d22e227-d85e-4cba-8807-cfc2a309889e/sentinel-test.pdf", "event": "s3_upload_success", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "b4598080-6c66-40cb-8efe-088b90d07a2d", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T06:56:35.137123Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "6d22e227-d85e-4cba-8807-cfc2a309889e", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/6d22e227-d85e-4cba-8807-cfc2a309889e/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "b4598080-6c66-40cb-8efe-088b90d07a2d", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T06:56:35.137290Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "6d22e227-d85e-4cba-8807-cfc2a309889e", "status": "PENDING", "event": "document_db_created", "request_id": "b4598080-6c66-40cb-8efe-088b90d07a2d", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T06:56:35.142469Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 89, "client_ip": "172.20.0.1", "event": "request.completed", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "b4598080-6c66-40cb-8efe-088b90d07a2d", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T06:56:35.143726Z"}
+api-1  | INFO:     172.20.0.1:40048 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"event": "rate limit decision denied", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "16115b72-48c8-4e37-93cb-30eb39a3b60d", "level": "warning", "logger": "sentinel", "timestamp": "2026-08-17T06:56:36.662297Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 429, "duration_ms": 3, "client_ip": "172.20.0.1", "event": "request.completed", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "16115b72-48c8-4e37-93cb-30eb39a3b60d", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T06:56:36.662921Z"}
+api-1  | INFO:     172.20.0.1:40058 - "POST /documents/upload HTTP/1.1" 429 Too Many Requests
+api-1  | WARNING:  WatchFiles detected changes in 'scratch/sentinel_verify_scripts.py'. Reloading...
+api-1  | INFO:     Shutting down
+api-1  | INFO:     Waiting for application shutdown.
+api-1  | INFO:     Application shutdown complete.
+api-1  | INFO:     Finished server process [378]
+api-1  | INFO:     Started server process [597]
+api-1  | INFO:     Waiting for application startup.
+api-1  | Sentinel scripts loaded: 2d6cf97450738b4fd1c37af44d625158288f6610 63a6d7d7423bb84fb0fc6a030c00b1557a8cf851
+api-1  | INFO:     Application startup complete.
+api-1  | WARNING:  WatchFiles detected changes in 'scratch/sentinel_verify_scripts.py'. Reloading...
+api-1  | INFO:     Shutting down
+api-1  | INFO:     Waiting for application shutdown.
+api-1  | INFO:     Application shutdown complete.
+api-1  | INFO:     Finished server process [597]
+api-1  | INFO:     Started server process [672]
+api-1  | INFO:     Waiting for application startup.
+api-1  | Sentinel scripts loaded: 2d6cf97450738b4fd1c37af44d625158288f6610 63a6d7d7423bb84fb0fc6a030c00b1557a8cf851
+api-1  | INFO:     Application startup complete.
+api-1  | WARNING:  WatchFiles detected changes in 'scratch/gen_special_tokens.py', 'scratch/gen_token.py'. Reloading...
+api-1  | INFO:     Shutting down
+api-1  | INFO:     Waiting for application shutdown.
+api-1  | INFO:     Application shutdown complete.
+api-1  | INFO:     Finished server process [672]
+api-1  | INFO:     Started server process [744]
+api-1  | INFO:     Waiting for application startup.
+api-1  | Sentinel scripts loaded: 2d6cf97450738b4fd1c37af44d625158288f6610 63a6d7d7423bb84fb0fc6a030c00b1557a8cf851
+api-1  | INFO:     Application startup complete.
+api-1  | WARNING:  WatchFiles detected changes in 'scratch/redis_state.py'. Reloading...
+api-1  | INFO:     Shutting down
+api-1  | INFO:     Waiting for application shutdown.
+api-1  | INFO:     Application shutdown complete.
+api-1  | INFO:     Finished server process [744]
+api-1  | INFO:     Started server process [796]
+api-1  | INFO:     Waiting for application startup.
+api-1  | Sentinel scripts loaded: 2d6cf97450738b4fd1c37af44d625158288f6610 63a6d7d7423bb84fb0fc6a030c00b1557a8cf851
+api-1  | INFO:     Application startup complete.
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/4b5fe669-65bf-4348-8f44-6100feef7159/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "6b778267-e820-4072-af0c-7ae43772595e", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:08:43.542797Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "4b5fe669-65bf-4348-8f44-6100feef7159", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/4b5fe669-65bf-4348-8f44-6100feef7159/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "6b778267-e820-4072-af0c-7ae43772595e", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:08:43.543002Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "4b5fe669-65bf-4348-8f44-6100feef7159", "status": "PENDING", "event": "document_db_created", "request_id": "6b778267-e820-4072-af0c-7ae43772595e", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:08:43.554675Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 1022, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "6b778267-e820-4072-af0c-7ae43772595e", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:08:44.323764Z"}
+api-1  | INFO:     172.20.0.1:56062 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/99804e2d-40bf-47aa-a260-e4dc6a9dc5f0/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "35bd707e-2f8e-4bd6-b718-c8c5cac8d735", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:08:49.117631Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "99804e2d-40bf-47aa-a260-e4dc6a9dc5f0", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/99804e2d-40bf-47aa-a260-e4dc6a9dc5f0/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "35bd707e-2f8e-4bd6-b718-c8c5cac8d735", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:08:49.117859Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "99804e2d-40bf-47aa-a260-e4dc6a9dc5f0", "status": "PENDING", "event": "document_db_created", "request_id": "35bd707e-2f8e-4bd6-b718-c8c5cac8d735", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:08:49.124884Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 93, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "35bd707e-2f8e-4bd6-b718-c8c5cac8d735", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:08:49.126943Z"}
+api-1  | INFO:     172.20.0.1:46440 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/9af9b7fa-91e8-4b48-9745-d95353c5f9d5/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "745549f0-c66c-4529-8165-3c4707e57ba3", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:08:53.932477Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "9af9b7fa-91e8-4b48-9745-d95353c5f9d5", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/9af9b7fa-91e8-4b48-9745-d95353c5f9d5/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "745549f0-c66c-4529-8165-3c4707e57ba3", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:08:53.932647Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "9af9b7fa-91e8-4b48-9745-d95353c5f9d5", "status": "PENDING", "event": "document_db_created", "request_id": "745549f0-c66c-4529-8165-3c4707e57ba3", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:08:53.939661Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 85, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "745549f0-c66c-4529-8165-3c4707e57ba3", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:08:53.941093Z"}
+api-1  | INFO:     172.20.0.1:46446 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"event": "rate limit decision denied", "request_id": "4ed4d1bd-0cb1-4c76-84a7-d868932a06ef", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "warning", "logger": "sentinel", "timestamp": "2026-08-17T07:08:58.308311Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 429, "duration_ms": 5, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "4ed4d1bd-0cb1-4c76-84a7-d868932a06ef", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:08:58.309115Z"}
+api-1  | INFO:     172.20.0.1:46454 - "POST /documents/upload HTTP/1.1" 429 Too Many Requests
+api-1  | {"method": "GET", "path": "/metrics", "status_code": 200, "duration_ms": 4, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "6b25f692-2538-4eea-8ba1-8c26c1a6bee2", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:09:52.621930Z"}
+api-1  | INFO:     172.20.0.1:37742 - "GET /metrics HTTP/1.1" 200 OK
+api-1  | {"event": "rate limit decision denied", "request_id": "102f0256-ab9b-4e8e-8d6e-23b6da749264", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "warning", "logger": "sentinel", "timestamp": "2026-08-17T07:10:09.308030Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 503, "duration_ms": 27, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "102f0256-ab9b-4e8e-8d6e-23b6da749264", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:10:09.309086Z"}
+api-1  | INFO:     172.20.0.1:39048 - "POST /documents/upload HTTP/1.1" 503 Service Unavailable
+api-1  | {"event": "Future exception was never retrieved\nfuture: <Future finished exception=gaierror(-2, 'Name or service not known')>", "exc_info": ["<class 'socket.gaierror'>", "gaierror(-2, 'Name or service not known')", null], "level": "error", "logger": "asyncio", "timestamp": "2026-08-17T07:10:13.261973Z"}
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/8645fd78-c74b-4c76-a838-add54c68e7a7/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "fedc56d8-abb8-4353-a571-bf189c706f64", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:10:42.767764Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "8645fd78-c74b-4c76-a838-add54c68e7a7", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/8645fd78-c74b-4c76-a838-add54c68e7a7/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "fedc56d8-abb8-4353-a571-bf189c706f64", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:10:42.767973Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "8645fd78-c74b-4c76-a838-add54c68e7a7", "status": "PENDING", "event": "document_db_created", "request_id": "fedc56d8-abb8-4353-a571-bf189c706f64", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:10:42.773879Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 190, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "fedc56d8-abb8-4353-a571-bf189c706f64", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:10:42.775723Z"}
+api-1  | INFO:     172.20.0.1:51364 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | WARNING:  WatchFiles detected changes in 'scratch/req.py'. Reloading...
+api-1  | INFO:     Shutting down
+api-1  | INFO:     Waiting for application shutdown.
+api-1  | INFO:     Application shutdown complete.
+api-1  | INFO:     Finished server process [796]
+api-1  | INFO:     Started server process [980]
+api-1  | INFO:     Waiting for application startup.
+api-1  | Sentinel scripts loaded: 2d6cf97450738b4fd1c37af44d625158288f6610 63a6d7d7423bb84fb0fc6a030c00b1557a8cf851
+api-1  | INFO:     Application startup complete.
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/3ee71f32-475a-4df6-b461-a472e38b4efd/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "1c725406-0f1f-4edb-a01f-089cafcf09b2", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:12:49.945732Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "3ee71f32-475a-4df6-b461-a472e38b4efd", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/3ee71f32-475a-4df6-b461-a472e38b4efd/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "1c725406-0f1f-4edb-a01f-089cafcf09b2", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:12:49.945939Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "3ee71f32-475a-4df6-b461-a472e38b4efd", "status": "PENDING", "event": "document_db_created", "request_id": "1c725406-0f1f-4edb-a01f-089cafcf09b2", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:12:49.953455Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 3327, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "1c725406-0f1f-4edb-a01f-089cafcf09b2", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:12:50.657005Z"}
+api-1  | INFO:     172.20.0.1:55696 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/69b885aa-c1ea-4e5b-b88b-33ddee2aa9c8/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "d6f4fea7-5de6-4146-a77e-ec398854b86b", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:13:20.225808Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "69b885aa-c1ea-4e5b-b88b-33ddee2aa9c8", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/69b885aa-c1ea-4e5b-b88b-33ddee2aa9c8/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "d6f4fea7-5de6-4146-a77e-ec398854b86b", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:13:20.226136Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "69b885aa-c1ea-4e5b-b88b-33ddee2aa9c8", "status": "PENDING", "event": "document_db_created", "request_id": "d6f4fea7-5de6-4146-a77e-ec398854b86b", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:13:20.233246Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 212, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "d6f4fea7-5de6-4146-a77e-ec398854b86b", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:13:20.234910Z"}
+api-1  | INFO:     172.20.0.1:40404 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/b6d35570-e5d2-42e7-b1be-cc0f8d606479/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "67210f18-a0bc-47f7-8b32-c58cb3036e54", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:13:44.649970Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "b6d35570-e5d2-42e7-b1be-cc0f8d606479", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/b6d35570-e5d2-42e7-b1be-cc0f8d606479/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "67210f18-a0bc-47f7-8b32-c58cb3036e54", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:13:44.650145Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "b6d35570-e5d2-42e7-b1be-cc0f8d606479", "status": "PENDING", "event": "document_db_created", "request_id": "67210f18-a0bc-47f7-8b32-c58cb3036e54", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:13:44.654957Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 235, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "67210f18-a0bc-47f7-8b32-c58cb3036e54", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:13:44.657045Z"}
+api-1  | INFO:     172.20.0.1:47528 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/b7523300-557f-4477-b9e9-39af6db59c46/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "790aef51-a3ad-41f9-9a60-a743441dd9d0", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:13:48.890324Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "b7523300-557f-4477-b9e9-39af6db59c46", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/b7523300-557f-4477-b9e9-39af6db59c46/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "790aef51-a3ad-41f9-9a60-a743441dd9d0", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:13:48.890504Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "b7523300-557f-4477-b9e9-39af6db59c46", "status": "PENDING", "event": "document_db_created", "request_id": "790aef51-a3ad-41f9-9a60-a743441dd9d0", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:13:48.895132Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 105, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "790aef51-a3ad-41f9-9a60-a743441dd9d0", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:13:48.896890Z"}
+api-1  | INFO:     172.20.0.1:54044 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/070a6012-61c6-4aea-9755-1f5a22f928e1/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "95541d12-914b-4117-b31d-b0d9cea9d442", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:13:54.333883Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "070a6012-61c6-4aea-9755-1f5a22f928e1", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/070a6012-61c6-4aea-9755-1f5a22f928e1/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "95541d12-914b-4117-b31d-b0d9cea9d442", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:13:54.334061Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "070a6012-61c6-4aea-9755-1f5a22f928e1", "status": "PENDING", "event": "document_db_created", "request_id": "95541d12-914b-4117-b31d-b0d9cea9d442", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:13:54.338079Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 103, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "95541d12-914b-4117-b31d-b0d9cea9d442", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:13:54.339577Z"}
+api-1  | INFO:     172.20.0.1:54046 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"event": "rate limit decision denied", "request_id": "22f8ecba-66ac-40d9-81f3-453ed5d5781f", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "warning", "logger": "sentinel", "timestamp": "2026-08-17T07:13:57.717250Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 429, "duration_ms": 3, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "22f8ecba-66ac-40d9-81f3-453ed5d5781f", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:13:57.718138Z"}
+api-1  | INFO:     172.20.0.1:54050 - "POST /documents/upload HTTP/1.1" 429 Too Many Requests
+api-1  | {"key": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7/8c7e5784-5f14-4114-bbf2-c2c3a71ec11c/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "22c67159-5864-4b2e-b285-8ab2bfb83ee7", "user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:14:14.206300Z"}
+api-1  | {"user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "document_id": "8c7e5784-5f14-4114-bbf2-c2c3a71ec11c", "s3_key": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7/8c7e5784-5f14-4114-bbf2-c2c3a71ec11c/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "22c67159-5864-4b2e-b285-8ab2bfb83ee7", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:14:14.206503Z"}
+api-1  | {"user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "document_id": "8c7e5784-5f14-4114-bbf2-c2c3a71ec11c", "status": "PENDING", "event": "document_db_created", "request_id": "22c67159-5864-4b2e-b285-8ab2bfb83ee7", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:14:14.212178Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 219, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "22c67159-5864-4b2e-b285-8ab2bfb83ee7", "user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:14:14.213923Z"}
+api-1  | INFO:     172.20.0.1:48120 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 401, "duration_ms": 1, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "c926dcbf-23f1-4798-b729-add4070117f0", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:14:31.709838Z"}
+api-1  | INFO:     172.20.0.1:50330 - "POST /documents/upload HTTP/1.1" 401 Unauthorized
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 401, "duration_ms": 1, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "d40c4b63-acf4-4557-b148-1b34e70e630d", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:14:32.580262Z"}
+api-1  | INFO:     172.20.0.1:50344 - "POST /documents/upload HTTP/1.1" 401 Unauthorized
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 401, "duration_ms": 0, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "7481d9fb-f309-4737-a160-2eed6330b336", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:14:36.031117Z"}
+api-1  | INFO:     172.20.0.1:50352 - "POST /documents/upload HTTP/1.1" 401 Unauthorized
+api-1  | {"method": "POST", "path": "/documents/upload", "client_ip": "172.20.0.1", "duration_ms": 0, "error": "ValueError", "exc_info": true, "event": "request.error", "request_id": "f0f0cd88-60b1-40cf-b2a0-21f7cb0fe21b", "user_id": "not-a-valid-uuid", "level": "error", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:14:37.369704Z"}
+api-1  | INFO:     172.20.0.1:50366 - "POST /documents/upload HTTP/1.1" 500 Internal Server Error
+api-1  | ERROR:    Exception in ASGI application
+api-1  |   + Exception Group Traceback (most recent call last):
+api-1  |   |   File "/app/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 81, in collapse_excgroups
+api-1  |   |     yield
+api-1  |   |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 192, in __call__
+api-1  |   |     async with anyio.create_task_group() as task_group:
+api-1  |   |                ^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   |   File "/app/.venv/lib/python3.12/site-packages/anyio/_backends/_asyncio.py", line 799, in __aexit__
+api-1  |   |     raise BaseExceptionGroup(
+api-1  |   | ExceptionGroup: unhandled errors in a TaskGroup (1 sub-exception)
+api-1  |   +-+---------------- 1 ----------------
+api-1  |     | Traceback (most recent call last):
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 421, in run_asgi
+api-1  |     |     result = await app(  # type: ignore[func-returns-value]
+api-1  |     |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 62, in __call__
+api-1  |     |     return await self.app(scope, receive, send)
+api-1  |     |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1159, in __call__
+api-1  |     |     await super().__call__(scope, receive, send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/applications.py", line 90, in __call__
+api-1  |     |     await self.middleware_stack(scope, receive, send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+api-1  |     |     raise exc
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+api-1  |     |     await self.app(scope, receive, _send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 88, in __call__
+api-1  |     |     await self.app(scope, receive, send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 191, in __call__
+api-1  |     |     with recv_stream, send_stream, collapse_excgroups():
+api-1  |     |                                    ^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/usr/local/lib/python3.12/contextlib.py", line 158, in __exit__
+api-1  |     |     self.gen.throw(value)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+api-1  |     |     raise exc
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
+api-1  |     |     response = await self.dispatch_func(request, call_next)
+api-1  |     |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/app/app/middleware/logging.py", line 60, in dispatch
+api-1  |     |     response: Response = await call_next(request)
+api-1  |     |                          ^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
+api-1  |     |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
+api-1  |     |     await self.app(scope, receive_or_disconnect, send_no_error)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 191, in __call__
+api-1  |     |     with recv_stream, send_stream, collapse_excgroups():
+api-1  |     |                                    ^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/usr/local/lib/python3.12/contextlib.py", line 158, in __exit__
+api-1  |     |     self.gen.throw(value)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+api-1  |     |     raise exc
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
+api-1  |     |     response = await self.dispatch_func(request, call_next)
+api-1  |     |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/app/app/middleware/security.py", line 9, in dispatch
+api-1  |     |     response = await call_next(request)
+api-1  |     |                ^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
+api-1  |     |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
+api-1  |     |     await self.app(scope, receive_or_disconnect, send_no_error)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/prometheus_fastapi_instrumentator/middleware.py", line 176, in __call__
+api-1  |     |     raise exc
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/prometheus_fastapi_instrumentator/middleware.py", line 174, in __call__
+api-1  |     |     await self.app(scope, receive, send_wrapper)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+api-1  |     |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+api-1  |     |     raise exc
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+api-1  |     |     await app(scope, receive, sender)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+api-1  |     |     await self.app(scope, receive, send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
+api-1  |     |     await self.middleware_stack(scope, receive, send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 680, in app
+api-1  |     |     await route.handle(scope, receive, send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 276, in handle
+api-1  |     |     await self.app(scope, receive, send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 134, in app
+api-1  |     |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+api-1  |     |     raise exc
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+api-1  |     |     await app(scope, receive, sender)
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 120, in app
+api-1  |     |     response = await f(request)
+api-1  |     |                ^^^^^^^^^^^^^^^^
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 457, in app
+api-1  |     |     solved_result = await solve_dependencies(
+api-1  |     |                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py", line 649, in solve_dependencies
+api-1  |     |     solved_result = await solve_dependencies(
+api-1  |     |                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/app/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py", line 678, in solve_dependencies
+api-1  |     |     solved = await call(**solved_result.values)
+api-1  |     |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/app/app/auth/dependencies.py", line 78, in get_current_user
+api-1  |     |     return uuid.UUID(user_id_str)
+api-1  |     |            ^^^^^^^^^^^^^^^^^^^^^^
+api-1  |     |   File "/usr/local/lib/python3.12/uuid.py", line 178, in __init__
+api-1  |     |     raise ValueError('badly formed hexadecimal UUID string')
+api-1  |     | ValueError: badly formed hexadecimal UUID string
+api-1  |     +------------------------------------
+api-1  | 
+api-1  | The above exception was the direct cause of the following exception:
+api-1  | 
+api-1  | Traceback (most recent call last):
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/uvicorn/protocols/http/httptools_impl.py", line 421, in run_asgi
+api-1  |     result = await app(  # type: ignore[func-returns-value]
+api-1  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/uvicorn/middleware/proxy_headers.py", line 62, in __call__
+api-1  |     return await self.app(scope, receive, send)
+api-1  |            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/applications.py", line 1159, in __call__
+api-1  |     await super().__call__(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/applications.py", line 90, in __call__
+api-1  |     await self.middleware_stack(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 186, in __call__
+api-1  |     raise exc
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/errors.py", line 164, in __call__
+api-1  |     await self.app(scope, receive, _send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/cors.py", line 88, in __call__
+api-1  |     await self.app(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 191, in __call__
+api-1  |     with recv_stream, send_stream, collapse_excgroups():
+api-1  |                                    ^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/usr/local/lib/python3.12/contextlib.py", line 158, in __exit__
+api-1  |     self.gen.throw(value)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+api-1  |     raise exc
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
+api-1  |     response = await self.dispatch_func(request, call_next)
+api-1  |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/app/middleware/logging.py", line 60, in dispatch
+api-1  |     response: Response = await call_next(request)
+api-1  |                          ^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
+api-1  |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
+api-1  |     await self.app(scope, receive_or_disconnect, send_no_error)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 191, in __call__
+api-1  |     with recv_stream, send_stream, collapse_excgroups():
+api-1  |                                    ^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/usr/local/lib/python3.12/contextlib.py", line 158, in __exit__
+api-1  |     self.gen.throw(value)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/_utils.py", line 87, in collapse_excgroups
+api-1  |     raise exc
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 193, in __call__
+api-1  |     response = await self.dispatch_func(request, call_next)
+api-1  |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/app/middleware/security.py", line 9, in dispatch
+api-1  |     response = await call_next(request)
+api-1  |                ^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 168, in call_next
+api-1  |     raise app_exc from app_exc.__cause__ or app_exc.__context__
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/base.py", line 144, in coro
+api-1  |     await self.app(scope, receive_or_disconnect, send_no_error)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/prometheus_fastapi_instrumentator/middleware.py", line 176, in __call__
+api-1  |     raise exc
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/prometheus_fastapi_instrumentator/middleware.py", line 174, in __call__
+api-1  |     await self.app(scope, receive, send_wrapper)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/middleware/exceptions.py", line 63, in __call__
+api-1  |     await wrap_app_handling_exceptions(self.app, conn)(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+api-1  |     raise exc
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+api-1  |     await app(scope, receive, sender)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/middleware/asyncexitstack.py", line 18, in __call__
+api-1  |     await self.app(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 660, in __call__
+api-1  |     await self.middleware_stack(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 680, in app
+api-1  |     await route.handle(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 276, in handle
+api-1  |     await self.app(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 134, in app
+api-1  |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+api-1  |     raise exc
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+api-1  |     await app(scope, receive, sender)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 120, in app
+api-1  |     response = await f(request)
+api-1  |                ^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 457, in app
+api-1  |     solved_result = await solve_dependencies(
+api-1  |                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py", line 649, in solve_dependencies
+api-1  |     solved_result = await solve_dependencies(
+api-1  |                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py", line 678, in solve_dependencies
+api-1  |     solved = await call(**solved_result.values)
+api-1  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/app/auth/dependencies.py", line 78, in get_current_user
+api-1  |     return uuid.UUID(user_id_str)
+api-1  |            ^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/usr/local/lib/python3.12/uuid.py", line 178, in __init__
+api-1  |     raise ValueError('badly formed hexadecimal UUID string')
+api-1  | ValueError: badly formed hexadecimal UUID string
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 401, "duration_ms": 3, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "bcf8c4bf-fc3b-41b0-9bb5-c2b59726e892", "user_id": "00000000-0000-4000-8000-000000000000", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:14:41.637260Z"}
+api-1  | INFO:     172.20.0.1:36954 - "POST /documents/upload HTTP/1.1" 401 Unauthorized
+api-1  | {"key": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7/41cc892e-182e-491c-a8aa-9b194639361c/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "ed2fc252-0cbf-43cb-bef4-1333f369f819", "user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:15:43.439625Z"}
+api-1  | {"user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "document_id": "41cc892e-182e-491c-a8aa-9b194639361c", "s3_key": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7/41cc892e-182e-491c-a8aa-9b194639361c/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "ed2fc252-0cbf-43cb-bef4-1333f369f819", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:15:43.439839Z"}
+api-1  | {"user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "document_id": "41cc892e-182e-491c-a8aa-9b194639361c", "status": "PENDING", "event": "document_db_created", "request_id": "ed2fc252-0cbf-43cb-bef4-1333f369f819", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:15:43.444658Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 216, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "ed2fc252-0cbf-43cb-bef4-1333f369f819", "user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:15:43.446394Z"}
+api-1  | INFO:     172.20.0.1:60418 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"key": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7/b0614f59-131d-4632-801e-00773205276b/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "77e05199-9922-41db-8f66-9adc2f2bddfc", "user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:15:48.734023Z"}
+api-1  | {"user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "document_id": "b0614f59-131d-4632-801e-00773205276b", "s3_key": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7/b0614f59-131d-4632-801e-00773205276b/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "77e05199-9922-41db-8f66-9adc2f2bddfc", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:15:48.734195Z"}
+api-1  | {"user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "document_id": "b0614f59-131d-4632-801e-00773205276b", "status": "PENDING", "event": "document_db_created", "request_id": "77e05199-9922-41db-8f66-9adc2f2bddfc", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:15:48.739062Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 89, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "77e05199-9922-41db-8f66-9adc2f2bddfc", "user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:15:48.740385Z"}
+api-1  | INFO:     172.20.0.1:37838 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"key": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7/fca6e762-1e4b-45b9-abb5-6c9b1309ba29/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "7f801761-90cf-43d1-b051-9efa33810252", "user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:15:52.987202Z"}
+api-1  | {"user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "document_id": "fca6e762-1e4b-45b9-abb5-6c9b1309ba29", "s3_key": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7/fca6e762-1e4b-45b9-abb5-6c9b1309ba29/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "7f801761-90cf-43d1-b051-9efa33810252", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:15:52.987375Z"}
+api-1  | {"user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "document_id": "fca6e762-1e4b-45b9-abb5-6c9b1309ba29", "status": "PENDING", "event": "document_db_created", "request_id": "7f801761-90cf-43d1-b051-9efa33810252", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:15:52.993084Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 110, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "7f801761-90cf-43d1-b051-9efa33810252", "user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:15:52.994425Z"}
+api-1  | INFO:     172.20.0.1:37854 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"event": "rate limit decision denied", "request_id": "49f14cbb-0ee3-4e40-9cbd-72c3df5beff3", "user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "level": "warning", "logger": "sentinel", "timestamp": "2026-08-17T07:15:57.479889Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 429, "duration_ms": 3, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "49f14cbb-0ee3-4e40-9cbd-72c3df5beff3", "user_id": "e3d821da-0cdb-4d16-a65c-7bd28b24eed7", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:15:57.480460Z"}
+api-1  | INFO:     172.20.0.1:37858 - "POST /documents/upload HTTP/1.1" 429 Too Many Requests

@@ -1,0 +1,10 @@
+﻿=== docker restart pdftalk-sentinel-redis ===
+pdftalk-sentinel-redis
+=== ping ===
+PONG
+=== SCRIPT EXISTS immediately after restart (expect 0 0) ===
+0
+0
+=== sentinel keys after restart (expect none) ===
+sentinel:v1:48716045f3d524fe08e166a27636d5f8d7119869a3eec43a9a00f171398c22ff:pdftalk.documents.upload:1
+sentinel:v1:7a0a7c6d9535925fba597a4b97a3fb9b53085b77ce1597228a5e76acbffc6f8e:pdftalk.documents.upload:1

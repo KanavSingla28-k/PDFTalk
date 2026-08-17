@@ -32,6 +32,7 @@ dependencies = [
     "prometheus-client>=0.20.0",
     "prometheus-fastapi-instrumentator>=7.0.0",
     "pyjwt[crypto]>=2.13.0",
+    "sentinel",
 ]
 
 [tool.setuptools.packages.find]
@@ -57,6 +58,9 @@ testpaths = ["tests"]
 markers = [
     "integration: marks tests as integration tests requiring real PG + OpenAI",
 ]
+
+[tool.uv.sources]
+sentinel = { path = "vendor/sentinel-0.1.0-py3-none-any.whl" }
 
 [dependency-groups]
 dev = [

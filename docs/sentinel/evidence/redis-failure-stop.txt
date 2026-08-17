@@ -1,0 +1,5 @@
+﻿=== stop sentinel redis ===
+pdftalk-sentinel-redis
+=== confirm stopped ===
+=== ping attempt (expect failure) ===
+Error response from daemon: container 051da70dfaa9fe22bd87637932c151f74ec43043345153f388e7d2d7cfc3bdde is not running

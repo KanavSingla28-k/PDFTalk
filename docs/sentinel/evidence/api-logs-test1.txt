@@ -1,0 +1,100 @@
+﻿api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/routing.py", line 276, in handle
+api-1  |     await self.app(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 134, in app
+api-1  |     await wrap_app_handling_exceptions(app, request)(scope, receive, send)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 53, in wrapped_app
+api-1  |     raise exc
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/starlette/_exception_handler.py", line 42, in wrapped_app
+api-1  |     await app(scope, receive, sender)
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 120, in app
+api-1  |     response = await f(request)
+api-1  |                ^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/routing.py", line 457, in app
+api-1  |     solved_result = await solve_dependencies(
+api-1  |                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py", line 649, in solve_dependencies
+api-1  |     solved_result = await solve_dependencies(
+api-1  |                     ^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/.venv/lib/python3.12/site-packages/fastapi/dependencies/utils.py", line 678, in solve_dependencies
+api-1  |     solved = await call(**solved_result.values)
+api-1  |              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/app/app/auth/dependencies.py", line 78, in get_current_user
+api-1  |     return uuid.UUID(user_id_str)
+api-1  |            ^^^^^^^^^^^^^^^^^^^^^^
+api-1  |   File "/usr/local/lib/python3.12/uuid.py", line 178, in __init__
+api-1  |     raise ValueError('badly formed hexadecimal UUID string')
+api-1  | ValueError: badly formed hexadecimal UUID string
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/4dfc8aad-215e-495e-b959-7a8318b1cd67/sentinel-test.pdf", "event": "s3_upload_success", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "5255919c-4ba1-48d7-b8c3-510648cc9948", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T06:56:19.776348Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "4dfc8aad-215e-495e-b959-7a8318b1cd67", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/4dfc8aad-215e-495e-b959-7a8318b1cd67/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "5255919c-4ba1-48d7-b8c3-510648cc9948", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T06:56:19.776540Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "4dfc8aad-215e-495e-b959-7a8318b1cd67", "status": "PENDING", "event": "document_db_created", "request_id": "5255919c-4ba1-48d7-b8c3-510648cc9948", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T06:56:19.792128Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 991, "client_ip": "172.20.0.1", "event": "request.completed", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "5255919c-4ba1-48d7-b8c3-510648cc9948", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T06:56:20.498527Z"}
+api-1  | INFO:     172.20.0.1:51484 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/20fe2545-0aa1-4d1f-b5aa-0918b40307a3/sentinel-test.pdf", "event": "s3_upload_success", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "4e507be7-bcae-4ad0-9444-7f36cc023d1e", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T06:56:33.333890Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "20fe2545-0aa1-4d1f-b5aa-0918b40307a3", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/20fe2545-0aa1-4d1f-b5aa-0918b40307a3/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "4e507be7-bcae-4ad0-9444-7f36cc023d1e", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T06:56:33.334102Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "20fe2545-0aa1-4d1f-b5aa-0918b40307a3", "status": "PENDING", "event": "document_db_created", "request_id": "4e507be7-bcae-4ad0-9444-7f36cc023d1e", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T06:56:33.339004Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 206, "client_ip": "172.20.0.1", "event": "request.completed", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "4e507be7-bcae-4ad0-9444-7f36cc023d1e", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T06:56:33.340807Z"}
+api-1  | INFO:     172.20.0.1:40034 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/6d22e227-d85e-4cba-8807-cfc2a309889e/sentinel-test.pdf", "event": "s3_upload_success", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "b4598080-6c66-40cb-8efe-088b90d07a2d", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T06:56:35.137123Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "6d22e227-d85e-4cba-8807-cfc2a309889e", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/6d22e227-d85e-4cba-8807-cfc2a309889e/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "b4598080-6c66-40cb-8efe-088b90d07a2d", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T06:56:35.137290Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "6d22e227-d85e-4cba-8807-cfc2a309889e", "status": "PENDING", "event": "document_db_created", "request_id": "b4598080-6c66-40cb-8efe-088b90d07a2d", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T06:56:35.142469Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 89, "client_ip": "172.20.0.1", "event": "request.completed", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "b4598080-6c66-40cb-8efe-088b90d07a2d", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T06:56:35.143726Z"}
+api-1  | INFO:     172.20.0.1:40048 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"event": "rate limit decision denied", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "16115b72-48c8-4e37-93cb-30eb39a3b60d", "level": "warning", "logger": "sentinel", "timestamp": "2026-08-17T06:56:36.662297Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 429, "duration_ms": 3, "client_ip": "172.20.0.1", "event": "request.completed", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "request_id": "16115b72-48c8-4e37-93cb-30eb39a3b60d", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T06:56:36.662921Z"}
+api-1  | INFO:     172.20.0.1:40058 - "POST /documents/upload HTTP/1.1" 429 Too Many Requests
+api-1  | WARNING:  WatchFiles detected changes in 'scratch/sentinel_verify_scripts.py'. Reloading...
+api-1  | INFO:     Shutting down
+api-1  | INFO:     Waiting for application shutdown.
+api-1  | INFO:     Application shutdown complete.
+api-1  | INFO:     Finished server process [378]
+api-1  | INFO:     Started server process [597]
+api-1  | INFO:     Waiting for application startup.
+api-1  | Sentinel scripts loaded: 2d6cf97450738b4fd1c37af44d625158288f6610 63a6d7d7423bb84fb0fc6a030c00b1557a8cf851
+api-1  | INFO:     Application startup complete.
+api-1  | WARNING:  WatchFiles detected changes in 'scratch/sentinel_verify_scripts.py'. Reloading...
+api-1  | INFO:     Shutting down
+api-1  | INFO:     Waiting for application shutdown.
+api-1  | INFO:     Application shutdown complete.
+api-1  | INFO:     Finished server process [597]
+api-1  | INFO:     Started server process [672]
+api-1  | INFO:     Waiting for application startup.
+api-1  | Sentinel scripts loaded: 2d6cf97450738b4fd1c37af44d625158288f6610 63a6d7d7423bb84fb0fc6a030c00b1557a8cf851
+api-1  | INFO:     Application startup complete.
+api-1  | WARNING:  WatchFiles detected changes in 'scratch/gen_special_tokens.py', 'scratch/gen_token.py'. Reloading...
+api-1  | INFO:     Shutting down
+api-1  | INFO:     Waiting for application shutdown.
+api-1  | INFO:     Application shutdown complete.
+api-1  | INFO:     Finished server process [672]
+api-1  | INFO:     Started server process [744]
+api-1  | INFO:     Waiting for application startup.
+api-1  | Sentinel scripts loaded: 2d6cf97450738b4fd1c37af44d625158288f6610 63a6d7d7423bb84fb0fc6a030c00b1557a8cf851
+api-1  | INFO:     Application startup complete.
+api-1  | WARNING:  WatchFiles detected changes in 'scratch/redis_state.py'. Reloading...
+api-1  | INFO:     Shutting down
+api-1  | INFO:     Waiting for application shutdown.
+api-1  | INFO:     Application shutdown complete.
+api-1  | INFO:     Finished server process [744]
+api-1  | INFO:     Started server process [796]
+api-1  | INFO:     Waiting for application startup.
+api-1  | Sentinel scripts loaded: 2d6cf97450738b4fd1c37af44d625158288f6610 63a6d7d7423bb84fb0fc6a030c00b1557a8cf851
+api-1  | INFO:     Application startup complete.
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/4b5fe669-65bf-4348-8f44-6100feef7159/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "6b778267-e820-4072-af0c-7ae43772595e", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:08:43.542797Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "4b5fe669-65bf-4348-8f44-6100feef7159", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/4b5fe669-65bf-4348-8f44-6100feef7159/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "6b778267-e820-4072-af0c-7ae43772595e", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:08:43.543002Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "4b5fe669-65bf-4348-8f44-6100feef7159", "status": "PENDING", "event": "document_db_created", "request_id": "6b778267-e820-4072-af0c-7ae43772595e", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:08:43.554675Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 1022, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "6b778267-e820-4072-af0c-7ae43772595e", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:08:44.323764Z"}
+api-1  | INFO:     172.20.0.1:56062 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/99804e2d-40bf-47aa-a260-e4dc6a9dc5f0/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "35bd707e-2f8e-4bd6-b718-c8c5cac8d735", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:08:49.117631Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "99804e2d-40bf-47aa-a260-e4dc6a9dc5f0", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/99804e2d-40bf-47aa-a260-e4dc6a9dc5f0/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "35bd707e-2f8e-4bd6-b718-c8c5cac8d735", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:08:49.117859Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "99804e2d-40bf-47aa-a260-e4dc6a9dc5f0", "status": "PENDING", "event": "document_db_created", "request_id": "35bd707e-2f8e-4bd6-b718-c8c5cac8d735", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:08:49.124884Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 93, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "35bd707e-2f8e-4bd6-b718-c8c5cac8d735", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:08:49.126943Z"}
+api-1  | INFO:     172.20.0.1:46440 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/9af9b7fa-91e8-4b48-9745-d95353c5f9d5/sentinel-test.pdf", "event": "s3_upload_success", "request_id": "745549f0-c66c-4529-8165-3c4707e57ba3", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.utils.s3_client", "timestamp": "2026-08-17T07:08:53.932477Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "9af9b7fa-91e8-4b48-9745-d95353c5f9d5", "s3_key": "941a368b-5699-45e9-9286-df3d0a0a7b5b/9af9b7fa-91e8-4b48-9745-d95353c5f9d5/sentinel-test.pdf", "size_bytes": 219, "event": "document_s3_uploaded", "request_id": "745549f0-c66c-4529-8165-3c4707e57ba3", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:08:53.932647Z"}
+api-1  | {"user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "document_id": "9af9b7fa-91e8-4b48-9745-d95353c5f9d5", "status": "PENDING", "event": "document_db_created", "request_id": "745549f0-c66c-4529-8165-3c4707e57ba3", "level": "info", "logger": "app.services.document_service", "timestamp": "2026-08-17T07:08:53.939661Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 202, "duration_ms": 85, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "745549f0-c66c-4529-8165-3c4707e57ba3", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:08:53.941093Z"}
+api-1  | INFO:     172.20.0.1:46446 - "POST /documents/upload HTTP/1.1" 202 Accepted
+api-1  | {"event": "rate limit decision denied", "request_id": "4ed4d1bd-0cb1-4c76-84a7-d868932a06ef", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "warning", "logger": "sentinel", "timestamp": "2026-08-17T07:08:58.308311Z"}
+api-1  | {"method": "POST", "path": "/documents/upload", "status_code": 429, "duration_ms": 5, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "4ed4d1bd-0cb1-4c76-84a7-d868932a06ef", "user_id": "941a368b-5699-45e9-9286-df3d0a0a7b5b", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:08:58.309115Z"}
+api-1  | INFO:     172.20.0.1:46454 - "POST /documents/upload HTTP/1.1" 429 Too Many Requests
+api-1  | {"method": "GET", "path": "/metrics", "status_code": 200, "duration_ms": 4, "client_ip": "172.20.0.1", "event": "request.completed", "request_id": "6b25f692-2538-4eea-8ba1-8c26c1a6bee2", "level": "info", "logger": "app.middleware.logging", "timestamp": "2026-08-17T07:09:52.621930Z"}
+api-1  | INFO:     172.20.0.1:37742 - "GET /metrics HTTP/1.1" 200 OK

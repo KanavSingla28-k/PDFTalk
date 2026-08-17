@@ -74,6 +74,8 @@ class Settings(BaseSettings):
     LOG_FORMAT: Optional[Literal["json", "pretty"]] = None
     MAX_DAILY_QUERIES_PER_USER: int = 500
 
+    SENTINEL_REDIS_PASSWORD: str | None = None
+
     model_config = {"env_file": env_file, "extra": "ignore", "ignored_types": (cached_property,)}
 
 settings: Settings = Settings()  # type: ignore[call-arg]

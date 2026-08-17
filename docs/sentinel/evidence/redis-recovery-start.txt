@@ -1,0 +1,7 @@
+﻿=== start sentinel redis ===
+pdftalk-sentinel-redis
+=== ping ===
+PONG
+=== SCRIPT EXISTS after restart ===
+0
+0

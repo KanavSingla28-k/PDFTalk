@@ -1,0 +1,13 @@
+﻿HTTP/1.1 202 Accepted
+date: Mon, 17 Aug 2026 07:14:13 GMT
+server: uvicorn
+content-length: 73
+content-type: application/json
+x-frame-options: DENY
+x-content-type-options: nosniff
+referrer-policy: strict-origin-when-cross-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+content-security-policy: default-src 'none'
+x-request-id: 22c67159-5864-4b2e-b285-8ab2bfb83ee7
+
+{"document_id":"8c7e5784-5f14-4114-bbf2-c2c3a71ec11c","status":"PENDING"}
