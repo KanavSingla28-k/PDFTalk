@@ -32,6 +32,7 @@ _BATCH_SIZE = 100  # OpenAI recommends <= 2048 inputs, 100 is a safe conservativ
 # Public sync entry point (called from the RQ worker — sync context)
 # ---------------------------------------------------------------------------
 
+
 def embed_texts(texts: list[str]) -> list[list[float]]:
     """
     Embed a list of strings and return L2-normalised vectors.
@@ -66,6 +67,7 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
 # Async implementation
 # ---------------------------------------------------------------------------
 
+
 async def _embed_texts_async(texts: list[str]) -> list[list[float]]:
     """
     Async core — batches texts, calls create_embeddings(), normalises results.
@@ -96,6 +98,7 @@ async def _embed_texts_async(texts: list[str]) -> list[list[float]]:
 # ---------------------------------------------------------------------------
 
 T = TypeVar("T")
+
 
 def _make_batches(items: list[T], size: int) -> list[list[T]]:
     """Split a list into consecutive sublists of at most `size` elements."""

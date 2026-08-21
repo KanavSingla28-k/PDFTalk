@@ -29,7 +29,6 @@ def _get_engine() -> Engine:
     return _sync_engine
 
 
-
 def handle_ingest_failure(
     job: Job,
     connection: Redis,

@@ -34,14 +34,14 @@ Context:
         response_text = await chat_complete(
             [{"role": "user", "content": prompt}],
             model="gpt-4o",  # Using a capable model for generation
-            max_tokens=4000
+            max_tokens=4000,
         )
         response_text = response_text.strip()
         if response_text.startswith("```json"):
             response_text = response_text[7:-3].strip()
         elif response_text.startswith("```"):
             response_text = response_text[3:-3].strip()
-        
+
         qa_pairs = json.loads(response_text)
         return qa_pairs
     except Exception as e:
@@ -66,16 +66,14 @@ Respond strictly with a JSON object with two keys:
 """
     try:
         response_text = await chat_complete(
-            [{"role": "user", "content": prompt}],
-            model="gpt-4o-mini",
-            max_tokens=200
+            [{"role": "user", "content": prompt}], model="gpt-4o-mini", max_tokens=200
         )
         response_text = response_text.strip()
         if response_text.startswith("```json"):
             response_text = response_text[7:-3].strip()
         elif response_text.startswith("```"):
             response_text = response_text[3:-3].strip()
-            
+
         result = json.loads(response_text)
         return result.get("is_correct", False)
     except Exception as e:
@@ -98,7 +96,7 @@ async def run_evaluation(user_email: str):
         if not documents:
             logger.error(f"No documents found for user {user_email}.")
             return
-            
+
         doc = documents[0]
         logger.info(f"Selected Document: {doc.filename} (ID: {doc.id})")
 
@@ -108,7 +106,7 @@ async def run_evaluation(user_email: str):
         if not chunks:
             logger.error(f"No chunks found for document {doc.id}.")
             return
-            
+
         text_chunks = [c.text for c in chunks]
 
         # 4. Generate Dataset
@@ -126,31 +124,30 @@ async def run_evaluation(user_email: str):
         for i, pair in enumerate(qa_pairs):
             question = pair["question"]
             expected = pair["answer"]
-            logger.info(f"[{i+1}/{len(qa_pairs)}] Question: {question}")
-            
+            logger.info(f"[{i + 1}/{len(qa_pairs)}] Question: {question}")
+
             # Run RAG
             retrieved = await retrieve_similar_chunks(
-                user_id=user.id,
-                document_ids=[doc.id],
-                query=question,
-                db=db
+                user_id=user.id, document_ids=[doc.id], query=question, db=db
             )
-            
+
             messages, _ = build_messages(retrieved, question, history_messages=[])
             generated_answer = await chat_complete(messages, model="gpt-4o-mini", max_tokens=1024)
-            
+
             # Grade
             is_correct = await grade_answer(question, expected, generated_answer)
             if is_correct:
                 correct_count += 1
-                
-            results.append({
-                "question": question,
-                "expected_answer": expected,
-                "generated_answer": generated_answer,
-                "is_correct": is_correct
-            })
-            
+
+            results.append(
+                {
+                    "question": question,
+                    "expected_answer": expected,
+                    "generated_answer": generated_answer,
+                    "is_correct": is_correct,
+                }
+            )
+
             logger.info(f"Correct: {is_correct}")
 
         # 7. Print final score
@@ -159,15 +156,17 @@ async def run_evaluation(user_email: str):
         logger.info(f"Total Questions: {len(qa_pairs)}")
         logger.info(f"Correct Answers: {correct_count}")
         logger.info(f"Accuracy: {accuracy:.1f}%")
-        
+
         # Save to CSV
         output_file = "rag_evaluation_results.csv"
         with open(output_file, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=["question", "expected_answer", "generated_answer", "is_correct"])
+            writer = csv.DictWriter(
+                f, fieldnames=["question", "expected_answer", "generated_answer", "is_correct"]
+            )
             writer.writeheader()
             for r in results:
                 writer.writerow(r)
-                
+
         logger.info(f"Detailed results saved to {output_file}")
 
 

@@ -38,24 +38,24 @@ def chunk_text(text_stream: str | Iterable[str]) -> list[ChunkData]:
 
         while len(buffer_tokens) >= CHUNK_SIZE:
             window = buffer_tokens[:CHUNK_SIZE]
-            chunks.append(ChunkData(
-                chunk_index=len(chunks),
-                text=enc.decode(window),
-                token_count=len(window),
-            ))
+            chunks.append(
+                ChunkData(
+                    chunk_index=len(chunks),
+                    text=enc.decode(window),
+                    token_count=len(window),
+                )
+            )
             buffer_tokens = buffer_tokens[CHUNK_STEP:]
 
     # Emit a trailing chunk only if it contains tokens that were not already
     # emitted as overlap from the previous chunk.
-    if buffer_tokens and (
-        not chunks or len(buffer_tokens) > CHUNK_OVERLAP
-    ):
+    if buffer_tokens and (not chunks or len(buffer_tokens) > CHUNK_OVERLAP):
         chunks.append(
             ChunkData(
                 chunk_index=len(chunks),
                 text=enc.decode(buffer_tokens),
                 token_count=len(buffer_tokens),
             )
-        )   
+        )
 
     return chunks

@@ -40,6 +40,7 @@ from app.services.file_validation import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_upload(data: bytes, filename: str = "test.bin") -> UploadFile:
     """Return a FastAPI UploadFile backed by an in-memory BytesIO."""
     return UploadFile(filename=filename, file=io.BytesIO(data))
@@ -65,8 +66,8 @@ _OVER_LIMIT = b"%PDF-1.4 " + b"x" * (MAX_FILE_SIZE_BYTES + 1)
 # _read_and_check_size
 # ---------------------------------------------------------------------------
 
-class TestReadAndCheckSize:
 
+class TestReadAndCheckSize:
     @pytest.mark.asyncio
     async def test_returns_bytes_within_limit(self):
         upload = _make_upload(_VALID_PDF)
@@ -100,8 +101,8 @@ class TestReadAndCheckSize:
 # _check_mime
 # ---------------------------------------------------------------------------
 
-class TestCheckMime:
 
+class TestCheckMime:
     def test_pdf_accepted(self):
         _check_mime(_VALID_PDF)  # no exception
 
@@ -133,8 +134,8 @@ class TestCheckMime:
 # _check_magic_bytes
 # ---------------------------------------------------------------------------
 
-class TestCheckMagicBytes:
 
+class TestCheckMagicBytes:
     def test_valid_pdf_passes(self):
         _check_magic_bytes(_VALID_PDF)  # no exception
 
@@ -167,8 +168,8 @@ class TestCheckMagicBytes:
 # validate_upload (integration — all three checks in sequence)
 # ---------------------------------------------------------------------------
 
-class TestValidateUpload:
 
+class TestValidateUpload:
     @pytest.mark.asyncio
     async def test_valid_pdf_returns_bytes(self):
         upload = _make_upload(_VALID_PDF)

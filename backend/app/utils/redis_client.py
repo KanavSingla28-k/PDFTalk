@@ -9,6 +9,7 @@ import asyncio
 # Dictionary mapping event loops to their connection pools
 _pools: dict[asyncio.AbstractEventLoop, aioredis.ConnectionPool] = {}
 
+
 def get_pool() -> aioredis.ConnectionPool:
     loop = asyncio.get_running_loop()
     if loop not in _pools:
@@ -19,8 +20,10 @@ def get_pool() -> aioredis.ConnectionPool:
         )
     return _pools[loop]
 
+
 def get_redis() -> aioredis.Redis:
     return aioredis.Redis(connection_pool=get_pool())
+
 
 def seconds_until_utc_midnight() -> int:
     """Returns seconds until the next UTC midnight, plus a 1-hour buffer."""
@@ -28,6 +31,7 @@ def seconds_until_utc_midnight() -> int:
     tomorrow = now + timedelta(days=1)
     midnight = datetime(tomorrow.year, tomorrow.month, tomorrow.day, tzinfo=timezone.utc)
     return int((midnight - now).total_seconds()) + 3600
+
 
 async def set_with_ttl(key: str, value: str, ttl_seconds: int) -> None:
     r = get_redis()
@@ -52,34 +56,41 @@ async def increment_counter(key: str, ttl_seconds: int | None = None) -> int:
         await r.expire(key, ttl_seconds)
     return count
 
+
 # Key builders — central place for all Redis key patterns
 def key_refresh_token(token_hash: str) -> str:
     return f"token:refresh:{token_hash}"
 
+
 def key_account_lockout(user_id: str) -> str:
     return f"lockout:{user_id}"
+
 
 def key_daily_token_quota(user_id: str) -> str:
     today = date.today().strftime("%Y%m%d")
     return f"quota:tokens:{user_id}:{today}"
 
+
 def key_daily_token_stats() -> str:
     today = date.today().strftime("%Y%m%d")
     return f"admin:stats:tokens:{today}"
 
+
 def key_daily_query_quota(user_id: str) -> str:
     today = date.today().strftime("%Y%m%d")
     return f"quota:queries:{user_id}:{today}"
-    
+
+
 def key_email_verify(token_hash: str) -> str:
     return f"emailverify:{token_hash}"
 
+
 async def increment_counter_by(
-    key: str, 
-    amount: int, 
+    key: str,
+    amount: int,
     ttl_seconds: int | None = None,
     stats_zset_key: str | None = None,
-    stats_member: str | None = None
+    stats_member: str | None = None,
 ) -> int:
     """Like increment_counter but adds `amount` instead of 1. Used for token quota tracking.
 
@@ -90,13 +101,13 @@ async def increment_counter_by(
     pipe = r.pipeline(transaction=True)
     pipe.incrby(key, amount)
     pipe.persist(key)  # no-op if key already has a TTL; prevents window from sliding
-    
+
     if stats_zset_key and stats_member:
         pipe.zincrby(stats_zset_key, amount, stats_member)
-        
+
     results = await pipe.execute()
     count: int = results[0]
-    
+
     if count == amount:
         # Guaranteed first write — PERSIST returned 1 (no prior TTL).
         if ttl_seconds:
@@ -104,7 +115,7 @@ async def increment_counter_by(
         if stats_zset_key:
             # 2 days TTL is enough for today's stats to be viewable tomorrow
             await r.expire(stats_zset_key, 172800)
-            
+
     return count
 
 
@@ -112,8 +123,10 @@ async def increment_counter_by(
 def key_circuit_breaker_failures() -> str:
     return "cb:openai:failures"
 
+
 def key_circuit_breaker_open_until() -> str:
     return "cb:openai:open_until"
+
 
 def get_sync_redis() -> sync_redis_lib.Redis:
     """

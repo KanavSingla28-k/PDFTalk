@@ -51,8 +51,8 @@ _SCRUBBED_KEYS: frozenset[str] = frozenset(
         "email",
         "email_lower",
         "authorization",
-        "content",          # document text — can be very large and contains user data
-        "text",             # chunk text — same reason
+        "content",  # document text — can be very large and contains user data
+        "text",  # chunk text — same reason
         "secret",
         "api_key",
         "openai_api_key",
@@ -106,21 +106,23 @@ def _copy_stdlib_extras(
 # Public configuration entry point
 # ---------------------------------------------------------------------------
 
+
 def configure_logging() -> None:
     shared_processors: List[Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
-        structlog.stdlib.add_logger_name,   # safe once stdlib is wired
+        structlog.stdlib.add_logger_name,  # safe once stdlib is wired
         structlog.processors.TimeStamper(fmt="iso"),
         _copy_stdlib_extras,
         _scrub_pii,
     ]
 
     structlog.configure(
-        processors=shared_processors + [
+        processors=shared_processors
+        + [
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
-        logger_factory=structlog.stdlib.LoggerFactory(),   # ← THIS is the missing line
+        logger_factory=structlog.stdlib.LoggerFactory(),  # ← THIS is the missing line
         wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
     )
@@ -140,6 +142,7 @@ def configure_logging() -> None:
     root_logger.handlers.clear()
     root_logger.addHandler(handler)
     root_logger.setLevel(logging.INFO)
+
 
 def _resolve_format() -> str:
     """Return 'json' or 'pretty' based on settings."""

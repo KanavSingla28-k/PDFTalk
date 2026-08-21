@@ -11,9 +11,8 @@ These tests verify that the PDFTalk/Sentinel integration correctly:
 """
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 from fastapi import HTTPException, Request, Response
-from starlette.responses import Response as StarletteResponse
 
 from app.core.sentinel import (
     _make_tenant_guard,

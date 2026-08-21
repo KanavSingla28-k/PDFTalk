@@ -10,11 +10,11 @@ from app.utils.s3_client import s3_client
 
 logger = structlog.get_logger()
 
+
 class MimeType(str, Enum):
     PDF = "application/pdf"
     TXT = "text/plain"
     MD = "text/markdown"
-
 
 
 def extract_text(s3_key: str, mime_type: str) -> Iterator[str]:
@@ -47,9 +47,11 @@ def extract_text(s3_key: str, mime_type: str) -> Iterator[str]:
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _download(s3_key: str) -> bytes:
     """Delegate to the S3 client wrapper."""
     return s3_client.download_file(s3_key)
+
 
 def _extract_pdf(raw: bytes, s3_key: str) -> str:
     """
@@ -63,11 +65,13 @@ def _extract_pdf(raw: bytes, s3_key: str) -> str:
 
     if doc.is_encrypted:
         if doc.authenticate("") == 0:
-            raise ExtractionError(reason="PDF is encrypted and could not be decrypted", s3_key=s3_key)
+            raise ExtractionError(
+                reason="PDF is encrypted and could not be decrypted", s3_key=s3_key
+            )
 
     try:
         pages: list[str] = []
-        for page_num, page in enumerate(doc, start=1):   
+        for page_num, page in enumerate(doc, start=1):
             try:
                 text = page.get_text("text").strip()
             except Exception as exc:
@@ -85,6 +89,7 @@ def _extract_pdf(raw: bytes, s3_key: str) -> str:
 
     full_text = "\n\n".join(pages)
     return _clean(full_text)
+
 
 def _ocr_page(page: fitz.Page, page_num: int, s3_key: str) -> str:
     """
@@ -110,14 +115,16 @@ def _ocr_page(page: fitz.Page, page_num: int, s3_key: str) -> str:
         logger.warning("OCR failed on page %d of %s: %s", page_num, s3_key, exc)
         return ""
 
+
 def _extract_plaintext_stream(body: Any, s3_key: str) -> Iterator[str]:
     """Stream decode TXT/MD bytes to strings with a safe UTF-8 fallback."""
     import codecs
+
     decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
-    
+
     text_buffer = []
     buffer_len = 0
-    
+
     try:
         # iter_chunks is provided by botocore StreamingBody
         for chunk in body.iter_chunks(chunk_size=65536):
@@ -130,11 +137,11 @@ def _extract_plaintext_stream(body: Any, s3_key: str) -> Iterator[str]:
                     yield _clean("".join(text_buffer), strip=False)
                     text_buffer.clear()
                     buffer_len = 0
-                    
+
         final_chunk = decoder.decode(b"", final=True)
         if final_chunk:
             text_buffer.append(final_chunk)
-            
+
         if text_buffer:
             yield _clean("".join(text_buffer), strip=True)
     except Exception as exc:
@@ -151,12 +158,12 @@ def _clean(text: str, strip: bool = True) -> str:
 
     # Strip non-printable control characters except \n and \t
     text = "".join(
-        ch for ch in text
-        if ch in ("\n", "\t") or not unicodedata.category(ch).startswith("C")
+        ch for ch in text if ch in ("\n", "\t") or not unicodedata.category(ch).startswith("C")
     )
 
     # Collapse runs of 3+ newlines down to 2 (preserve paragraph breaks, kill blank page gaps)
     import re
+
     text = re.sub(r"\n{3,}", "\n\n", text)
 
     return text.strip() if strip else text

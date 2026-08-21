@@ -26,6 +26,7 @@ logger = structlog.get_logger(__name__)
 # Typed exceptions
 # ---------------------------------------------------------------------------
 
+
 class CircuitBreakerOpenError(Exception):
     """Raised when the circuit breaker is open (OpenAI had repeated 5xx errors)."""
 
@@ -94,24 +95,23 @@ async def _record_failure() -> None:
             str(open_until),
             ttl_seconds=_CB_OPEN_SECONDS + 5,
         )
-        logger.error(
-            "Circuit breaker OPEN — OpenAI calls blocked for %d s", _CB_OPEN_SECONDS
-        )
+        logger.error("Circuit breaker OPEN — OpenAI calls blocked for %d s", _CB_OPEN_SECONDS)
 
 
 # ---------------------------------------------------------------------------
 # Quota helpers
 # ---------------------------------------------------------------------------
 
+
 async def check_and_increment_token_usage(user_id: str, tokens: int) -> None:
     key = rc.key_daily_token_quota(user_id)
     stats_key = rc.key_daily_token_stats()
     new_total = await rc.increment_counter_by(
-        key, 
-        tokens, 
+        key,
+        tokens,
         ttl_seconds=rc.seconds_until_utc_midnight(),
         stats_zset_key=stats_key,
-        stats_member=user_id
+        stats_member=user_id,
     )
 
     if new_total > settings.MAX_DAILY_TOKENS_PER_USER:
@@ -129,11 +129,7 @@ async def check_and_increment_token_usage(user_id: str, tokens: int) -> None:
 
 async def check_and_increment_query_usage(user_id: str) -> None:
     key = rc.key_daily_query_quota(user_id)
-    new_total = await rc.increment_counter_by(
-        key, 
-        1, 
-        ttl_seconds=rc.seconds_until_utc_midnight()
-    )
+    new_total = await rc.increment_counter_by(key, 1, ttl_seconds=rc.seconds_until_utc_midnight())
 
     if new_total > settings.MAX_DAILY_QUERIES_PER_USER:
         logger.warning(
@@ -157,9 +153,7 @@ _RETRY_BASE_DELAY = 5.0
 
 async def _guarded_call(coro_factory: Callable[[], Any]) -> Any:
     if await _is_circuit_open():
-        raise CircuitBreakerOpenError(
-            "OpenAI circuit breaker is open. Try again shortly."
-        )
+        raise CircuitBreakerOpenError("OpenAI circuit breaker is open. Try again shortly.")
 
     last_exc: Exception | None = None
 
@@ -201,6 +195,7 @@ async def _guarded_call(coro_factory: Callable[[], Any]) -> Any:
 # Public API
 # ---------------------------------------------------------------------------
 
+
 async def create_embeddings(texts: list[str]) -> list[list[float]]:
     def _factory() -> Any:
         return get_client().embeddings.create(
@@ -219,8 +214,8 @@ async def chat_complete(
     stream: Literal[False] = False,
     model: str = "gpt-4o-mini",
     max_tokens: int = 1024,
-) -> str:
-    ...
+) -> str: ...
+
 
 @overload
 async def chat_complete(
@@ -229,8 +224,8 @@ async def chat_complete(
     stream: Literal[True],
     model: str = "gpt-4o-mini",
     max_tokens: int = 1024,
-) -> AsyncIterator[str]:
-    ...
+) -> AsyncIterator[str]: ...
+
 
 async def chat_complete(
     messages: list[ChatCompletionMessageParam],
@@ -240,12 +235,14 @@ async def chat_complete(
     max_tokens: int = 1024,
 ) -> str | AsyncIterator[str]:
     if stream:
+
         async def _adapt() -> AsyncIterator[str]:
             async for delta, _ in _stream_chat_with_usage(
                 messages, model=model, max_tokens=max_tokens
             ):
                 if delta:
                     yield delta
+
         return _adapt()
 
     def _factory() -> Any:

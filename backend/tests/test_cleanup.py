@@ -84,9 +84,10 @@ def test_cleanup_stale_documents_job() -> None:
         db.commit()
 
     # Run the cleanup job while patching SessionLocal and Queue
-    with patch("app.workers.tasks.SessionLocal", SyncSession), \
-         patch("app.workers.tasks.Queue") as mock_queue_class:
-        
+    with (
+        patch("app.workers.tasks.SessionLocal", SyncSession),
+        patch("app.workers.tasks.Queue") as mock_queue_class,
+    ):
         mock_queue = MagicMock()
         mock_queue_class.return_value = mock_queue
 
@@ -132,13 +133,14 @@ def test_cleanup_stale_documents_job() -> None:
 
 def test_setup_stale_document_cleanup_already_scheduled() -> None:
     mock_conn = MagicMock()
-    with patch("rq.job.Job.fetch") as mock_fetch, \
-         patch("app.workers.tasks.Queue") as mock_queue_class:
-        
+    with (
+        patch("rq.job.Job.fetch") as mock_fetch,
+        patch("app.workers.tasks.Queue") as mock_queue_class,
+    ):
         mock_job = MagicMock()
         mock_job.get_status.return_value = "scheduled"
         mock_fetch.return_value = mock_job
-        
+
         mock_queue = MagicMock()
         mock_queue_class.return_value = mock_queue
 
@@ -150,9 +152,10 @@ def test_setup_stale_document_cleanup_already_scheduled() -> None:
 
 def test_setup_stale_document_cleanup_not_scheduled() -> None:
     mock_conn = MagicMock()
-    with patch("rq.job.Job.fetch", side_effect=NoSuchJobError("Job not found")), \
-         patch("app.workers.tasks.Queue") as mock_queue_class:
-        
+    with (
+        patch("rq.job.Job.fetch", side_effect=NoSuchJobError("Job not found")),
+        patch("app.workers.tasks.Queue") as mock_queue_class,
+    ):
         mock_queue = MagicMock()
         mock_queue_class.return_value = mock_queue
 

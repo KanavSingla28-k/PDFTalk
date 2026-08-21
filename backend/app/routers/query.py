@@ -76,17 +76,18 @@ async def ask(
 
     # Sort chat messages to pass to prompt builder
     chat.messages.sort(key=lambda m: m.created_at)
-    
-    messages, _included_chunks = build_messages(chunks, body.question, history_messages=chat.messages)
+
+    messages, _included_chunks = build_messages(
+        chunks, body.question, history_messages=chat.messages
+    )
 
     # Detect whether the LLM is going to use its graceful Rule-5 fallback.
     # Two signals indicate a low/no-relevance response:
     #   1. No chunks fit the token budget (included_chunks is empty).
     #   2. Every retrieved chunk exceeded the configured distance ceiling,
     #      meaning retrieval returned its "full-list fallback" (all irrelevant).
-    _is_fallback = (
-        not _included_chunks
-        or (bool(chunks) and all(c.distance > settings.RETRIEVAL_MAX_DISTANCE for c in chunks))
+    _is_fallback = not _included_chunks or (
+        bool(chunks) and all(c.distance > settings.RETRIEVAL_MAX_DISTANCE for c in chunks)
     )
 
     # Pre-stream message save
@@ -99,10 +100,10 @@ async def ask(
     )
     db.add(user_msg)
     messages_total.labels(role="user").inc()
-    
+
     if chat.title == "New Chat":
         chat.title = body.question[:50].strip()
-        
+
     await db.commit()
 
     # Increment here — after all pre-stream validation passes, before the
@@ -170,7 +171,7 @@ async def _sse_generator(
                     "chunk_index": c.chunk_index,
                 }
                 for c in included_chunks
-            ]
+            ],
         }
         yield f"data: {json.dumps(sources_data)}\n\n"
 
@@ -309,11 +310,9 @@ async def _sse_generator(
             )
             db.add(assistant_msg)
             messages_total.labels(role="assistant").inc()
-            
+
             # Use execute(update(...)) to bump updated_at without needing to load the chat
             await db.execute(
-                update(Chat)
-                .where(Chat.id == uuid.UUID(chat_id))
-                .values(updated_at=func.now())
+                update(Chat).where(Chat.id == uuid.UUID(chat_id)).values(updated_at=func.now())
             )
             await db.commit()

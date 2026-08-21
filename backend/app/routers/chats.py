@@ -21,11 +21,12 @@ from app.services import chats
 
 router = APIRouter(prefix="/chats", tags=["chats"])
 
+
 @router.post(
     "",
     response_model=ChatResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(chat_create_guard)]
+    dependencies=[Depends(chat_create_guard)],
 )
 async def create_chat(
     request: ChatCreateRequest,
@@ -38,6 +39,7 @@ async def create_chat(
         db=db,
     )
     return ChatResponse.model_validate(chat)
+
 
 @router.get("", response_model=ChatListResponse)
 async def list_chats(
@@ -58,6 +60,7 @@ async def list_chats(
         pages=pages,
     )
 
+
 @router.get("/{chat_id}", response_model=ChatDetailResponse)
 async def get_chat(
     chat_id: uuid.UUID = Path(...),
@@ -67,7 +70,7 @@ async def get_chat(
     chat, missing_document_ids = await chats.get_chat_with_messages(
         chat_id=chat_id, user_id=current_user.id, db=db
     )
-    
+
     # We construct the response explicitly because we need to inject missing_document_ids
     # which is not an attribute of the Chat ORM model
     return ChatDetailResponse(
@@ -77,8 +80,9 @@ async def get_chat(
         created_at=chat.created_at,
         updated_at=chat.updated_at,
         messages=[MessageResponse.model_validate(m) for m in chat.messages],
-        missing_document_ids=missing_document_ids
+        missing_document_ids=missing_document_ids,
     )
+
 
 @router.patch("/{chat_id}", response_model=ChatResponse)
 async def rename_chat(
@@ -92,6 +96,7 @@ async def rename_chat(
     )
     return ChatResponse.model_validate(chat)
 
+
 @router.delete("/{chat_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_chat(
     chat_id: uuid.UUID = Path(...),
@@ -99,6 +104,7 @@ async def delete_chat(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     await chats.delete_chat(chat_id=chat_id, user_id=current_user.id, db=db)
+
 
 @router.delete("/{chat_id}/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def truncate_chat_messages(

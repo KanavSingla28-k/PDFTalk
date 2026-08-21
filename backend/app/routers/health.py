@@ -8,7 +8,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.db.session import engine          # async engine, not get_db()
+from app.db.session import engine  # async engine, not get_db()
 from app.utils.redis_client import get_redis
 from app.utils.s3_client import s3_client
 
@@ -70,9 +70,7 @@ async def readiness_check() -> JSONResponse:
         return_exceptions=False,  # each helper catches its own exceptions
     )
 
-    all_ok = all(
-        r["status"] == "ok" for r in (db_result, redis_result, s3_result)
-    )
+    all_ok = all(r["status"] == "ok" for r in (db_result, redis_result, s3_result))
 
     try:
         version = importlib.metadata.version("pdftalk-backend")

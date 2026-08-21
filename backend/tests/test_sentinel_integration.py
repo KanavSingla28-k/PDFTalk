@@ -10,19 +10,21 @@ Run with: pytest -m integration
 import pytest
 import pytest_asyncio
 from uuid import uuid4
-from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from app.core.config import settings
-from app.core.sentinel import guard as sentinel_guard, redis as sentinel_redis
+from app.core.sentinel import guard as sentinel_guard
 from app.main import app
 
 
 def _sentinel_redis_available() -> bool:
     """Check if Sentinel Redis is available."""
     import redis.asyncio as redis
+
     try:
-        r = redis.from_url(settings.SENTINEL_REDIS_URL or "redis://:sentinel-local-dev-password@localhost:6379/0")
+        r = redis.from_url(
+            settings.SENTINEL_REDIS_URL or "redis://:sentinel-local-dev-password@localhost:6379/0"
+        )
         r.ping()
         r.close()
         return True
@@ -35,8 +37,7 @@ SENTINEL_REDIS_AVAILABLE = _sentinel_redis_available()
 
 @pytest.mark.integration
 @pytest.mark.skipif(
-    not SENTINEL_REDIS_AVAILABLE,
-    reason="Integration tests require running Sentinel Redis"
+    not SENTINEL_REDIS_AVAILABLE, reason="Integration tests require running Sentinel Redis"
 )
 class TestSentinelIntegration:
     """Integration tests with real Sentinel Redis."""
@@ -54,7 +55,10 @@ class TestSentinelIntegration:
     async def cleanup_redis(self):
         """Clean up Redis keys before and after each test."""
         import redis.asyncio as redis
-        r = redis.from_url(settings.SENTINEL_REDIS_URL or "redis://:sentinel-local-dev-password@localhost:6379/0")
+
+        r = redis.from_url(
+            settings.SENTINEL_REDIS_URL or "redis://:sentinel-local-dev-password@localhost:6379/0"
+        )
         # Delete all sentinel keys
         async for key in r.scan_iter("sentinel:*"):
             await r.delete(key)
@@ -71,7 +75,10 @@ class TestSentinelIntegration:
         for i in range(3):
             response = await client.post(
                 "/auth/register",
-                json={"email": f"test{i}@example.com", "password": "TestPassword123!"},        # pragma: allowlist secret
+                json={
+                    "email": f"test{i}@example.com",
+                    "password": "TestPassword123!",     # pragma: allowlist secret
+                },  
             )
             assert response.status_code == 202
 
@@ -81,14 +88,20 @@ class TestSentinelIntegration:
         for i in range(5):
             response = await client.post(
                 "/auth/register",
-                json={"email": f"limit{i}@example.com", "password": "TestPassword123!"},        # pragma: allowlist secret
+                json={
+                    "email": f"limit{i}@example.com",
+                    "password": "TestPassword123!",  # pragma: allowlist secret
+                },  
             )
             assert response.status_code == 202
 
         # 6th request should be 429
         response = await client.post(
             "/auth/register",
-            json={"email": "limit6@example.com", "password": "TestPassword123!"},        # pragma: allowlist secret
+            json={
+                "email": "limit6@example.com",
+                "password": "TestPassword123!",    # pragma: allowlist secret
+            },  
         )
         assert response.status_code == 429
         assert response.json()["error"] == "RATE_LIMIT_EXCEEDED"
@@ -99,7 +112,10 @@ class TestSentinelIntegration:
         for i in range(10):
             response = await client.post(
                 "/auth/login",
-                json={"email": f"login{i}@example.com", "password": "wrongpassword"},        # pragma: allowlist secret
+                json={
+                    "email": f"login{i}@example.com",
+                    "password": "wrongpassword",     # pragma: allowlist secret
+                },
             )
             # Wrong password returns 401, but should not be rate limited yet
             assert response.status_code == 401
@@ -107,7 +123,10 @@ class TestSentinelIntegration:
         # 11th request should be 429
         response = await client.post(
             "/auth/login",
-            json={"email": "login11@example.com", "password": "wrongpassword"},        # pragma: allowlist secret
+            json={
+                "email": "login11@example.com",
+                "password": "wrongpassword",    # pragma: allowlist secret
+            },  
         )
         assert response.status_code == 429
         assert response.json()["error"] == "RATE_LIMIT_EXCEEDED"
@@ -117,6 +136,7 @@ class TestSentinelIntegration:
         # First register and verify a user
         import jwt
         import time
+
         token = jwt.encode(
             {"sub": str(uuid4()), "exp": int(time.time()) + 3600},
             settings.JWT_SECRET_KEY,
@@ -138,6 +158,7 @@ class TestSentinelIntegration:
         """Upload and initiate-upload share the same rate limit counter."""
         import jwt
         import time
+
         token = jwt.encode(
             {"sub": str(uuid4()), "exp": int(time.time()) + 3600},
             settings.JWT_SECRET_KEY,
@@ -159,7 +180,11 @@ class TestSentinelIntegration:
         for i in range(2):
             response = await client.post(
                 "/documents/initiate-upload",
-                json={"filename": f"test{i}.pdf", "mime_type": "application/pdf", "file_size_bytes": 100},
+                json={
+                    "filename": f"test{i}.pdf",
+                    "mime_type": "application/pdf",
+                    "file_size_bytes": 100,
+                },
                 headers=headers,
             )
             assert response.status_code != 429
@@ -218,7 +243,6 @@ class TestSentinelIntegration:
 
     async def test_fail_open_behavior_on_redis_failure(self, client):
         """When Sentinel Redis fails, fail-open endpoints use emergency limiter."""
-        import redis.asyncio as redis
 
         # Stop Sentinel Redis by closing all connections
         # Note: This is a soft test - we can't easily stop Docker from here
@@ -230,7 +254,10 @@ class TestSentinelIntegration:
         """Allowed anonymous requests should receive the anonymous cookie."""
         response = await client.post(
             "/auth/register",
-            json={"email": "cookie_test@example.com", "password": "TestPassword123!"},        # pragma: allowlist secret
+            json={
+                "email": "cookie_test@example.com",
+                "password": "TestPassword123!",    # pragma: allowlist secret
+            },  
         )
         assert response.status_code == 202
         # Sentinel should set the anonymous cookie on allowed requests
@@ -242,7 +269,10 @@ class TestSentinelIntegration:
         # First, get a valid cookie
         response = await client.post(
             "/auth/register",
-            json={"email": "tamper_test@example.com", "password": "TestPassword123!"},        # pragma: allowlist secret
+            json={
+                "email": "tamper_test@example.com",
+                "password": "TestPassword123!",     # pragma: allowlist secret
+            },  
         )
         cookie_name = settings.ANONYMOUS_COOKIE_NAME
         cookie_value = response.cookies.get(cookie_name)
@@ -254,7 +284,10 @@ class TestSentinelIntegration:
         # Make request with tampered cookie
         response = await client.post(
             "/auth/register",
-            json={"email": "tamper_test2@example.com", "password": "TestPassword123!"},        # pragma: allowlist secret
+            json={
+                "email": "tamper_test2@example.com",
+                "password": "TestPassword123!",     # pragma: allowlist secret
+            },  
             cookies={cookie_name: tampered},
         )
         # Should still succeed (cookie re-minted) and not be 429 from bad cookie
@@ -271,7 +304,9 @@ class TestSentinelRedisRequirements:
         """Sentinel Redis must have noeviction policy."""
         import redis.asyncio as redis
 
-        r = redis.from_url(settings.SENTINEL_REDIS_URL or "redis://:sentinel-local-dev-password@localhost:6379/0")
+        r = redis.from_url(
+            settings.SENTINEL_REDIS_URL or "redis://:sentinel-local-dev-password@localhost:6379/0"
+        )
         config = await r.config_get("maxmemory-policy")
         assert config.get("maxmemory-policy") == "noeviction"
         maxmemory = await r.config_get("maxmemory")
@@ -293,7 +328,9 @@ class TestSentinelRedisRequirements:
         """Scripts should auto-reload after Redis flush."""
         import redis.asyncio as redis
 
-        r = redis.from_url(settings.SENTINEL_REDIS_URL or "redis://:sentinel-local-dev-password@localhost:6379/0")
+        r = redis.from_url(
+            settings.SENTINEL_REDIS_URL or "redis://:sentinel-local-dev-password@localhost:6379/0"
+        )
         # Flush scripts
         await r.script_flush()
         # Next request should trigger reload

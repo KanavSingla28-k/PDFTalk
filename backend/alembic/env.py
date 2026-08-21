@@ -25,6 +25,7 @@ if config.config_file_name is not None:
 # This is what --autogenerate diffs against.
 target_metadata = Base.metadata
 
+
 # --- DB URL: prefer environment variable over alembic.ini ---
 # In production/CI, set DATABASE_URL in the environment.
 # In local dev, it falls back to alembic.ini's sqlalchemy.url.

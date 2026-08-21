@@ -111,7 +111,9 @@ queries_total = Counter(
 stream_errors_total = Counter(
     "pdftalk_stream_errors_total",
     "SSE stream errors",
-    ["error_code"],  # "STREAM_TIMEOUT" | "DAILY_QUOTA_EXCEEDED" | "AI_SERVICE_UNAVAILABLE" | "STREAM_ERROR"
+    [
+        "error_code"
+    ],  # "STREAM_TIMEOUT" | "DAILY_QUOTA_EXCEEDED" | "AI_SERVICE_UNAVAILABLE" | "STREAM_ERROR"
 )
 
 messages_total = Counter(

@@ -50,6 +50,7 @@ _bearer = HTTPBearer(auto_error=False)
 # get_current_user — token validation only, no DB hit
 # ---------------------------------------------------------------------------
 
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> uuid.UUID:
@@ -84,6 +85,7 @@ async def get_current_user(
 # ---------------------------------------------------------------------------
 # get_verified_user — token + DB check (is_active + is_verified)
 # ---------------------------------------------------------------------------
+
 
 async def get_verified_user(
     user_id: uuid.UUID = Depends(get_current_user),

@@ -33,17 +33,19 @@ from app.utils.openai_client import (
 logger = logging.getLogger(__name__)
 
 
-
 # ---------------------------------------------------------------------------
 # Base
 # ---------------------------------------------------------------------------
 
+
 class PDFTalkError(Exception):
     """Root for all application-level exceptions."""
+
 
 # ---------------------------------------------------------------------------
 # PDFTalk Error
 # ---------------------------------------------------------------------------
+
 
 class RateLimitExceededError(PDFTalkError):
     def __init__(self, retry_after: int):
@@ -57,9 +59,11 @@ class RateLimiterUnavailableError(PDFTalkError):
     Maps to 503 with RATE_LIMITER_UNAVAILABLE error code.
     """
 
+
 # ---------------------------------------------------------------------------
 # Auth exceptions
 # ---------------------------------------------------------------------------
+
 
 class AuthError(PDFTalkError):
     """Base for all authentication / authorisation failures."""
@@ -100,7 +104,6 @@ class UserNotFoundError(AuthError):
     Token decoded successfully but the user_id in sub no longer exists in the DB.
     Maps to 401 (treat as invalid credential, not 404 — avoids user enumeration).
     """
-
 
 
 class InvalidCredentialsError(AuthError):
@@ -144,12 +147,13 @@ class QuotaExceededError(PDFTalkError):
     quota (per plan) has been reached.
 
     Maps to 429     Too Many Requests.
-        """
+    """
 
 
 # ---------------------------------------------------------------------------
 # Document-related exceptions
 # ---------------------------------------------------------------------------
+
 
 class DocumentNotFoundError(PDFTalkError):
     def __init__(self, document_id: uuid.UUID):
@@ -179,24 +183,23 @@ class InvalidStatusTransitionError(PDFTalkError):
         from_status: current status at the time of the attempt
         to_status:   the illegal target status
     """
+
     def __init__(
         self,
         document_id: uuid.UUID,
-        from_status: object,   # DocumentStatus enum — typed loosely to avoid circular import
+        from_status: object,  # DocumentStatus enum — typed loosely to avoid circular import
         to_status: object,
     ) -> None:
         self.document_id = document_id
         self.from_status = from_status
         self.to_status = to_status
-        super().__init__(
-            f"Document {document_id}: cannot transition "
-            f"{from_status} → {to_status}"
-        )
+        super().__init__(f"Document {document_id}: cannot transition {from_status} → {to_status}")
 
 
 # ---------------------------------------------------------------------------
 # File validation exceptions
 # ---------------------------------------------------------------------------
+
 
 class FileValidationError(PDFTalkError):
     """
@@ -222,10 +225,12 @@ class FileValidationError(PDFTalkError):
 # Ingestion / Processing exceptions
 # ---------------------------------------------------------------------------
 
+
 class ExtractionError(PDFTalkError):
     """
     Raised when text extraction from a document fails.
     """
+
     def __init__(self, reason: str, s3_key: str) -> None:
         self.reason = reason
         self.s3_key = s3_key
@@ -236,6 +241,7 @@ class ChunkingError(PDFTalkError):
     """
     Raised when chunking a document fails or limits are exceeded.
     """
+
     def __init__(self, message: str) -> None:
         super().__init__(message)
 
@@ -244,21 +250,27 @@ class ChunkingError(PDFTalkError):
 # Chat exceptions
 # ---------------------------------------------------------------------------
 
+
 class ChatNotFoundError(PDFTalkError):
     pass
+
 
 class MessageNotFoundError(PDFTalkError):
     pass
 
+
 class EmptyDocumentListError(PDFTalkError):
     pass
+
 
 class InvalidDocumentSelectionError(PDFTalkError):
     pass
 
+
 # ---------------------------------------------------------------------------
 # Registration handlers
 # ---------------------------------------------------------------------------
+
 
 def register_exception_handlers(app: FastAPI) -> None:
     """
@@ -272,9 +284,7 @@ def register_exception_handlers(app: FastAPI) -> None:
     """
 
     @app.exception_handler(ExpiredTokenError)
-    async def expired_token_handler(
-        request: Request, exc: ExpiredTokenError
-    ) -> JSONResponse:
+    async def expired_token_handler(request: Request, exc: ExpiredTokenError) -> JSONResponse:
         return JSONResponse(
             status_code=401,
             content={
@@ -284,9 +294,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(InvalidTokenError)
-    async def invalid_token_handler(
-        request: Request, exc: InvalidTokenError
-    ) -> JSONResponse:
+    async def invalid_token_handler(request: Request, exc: InvalidTokenError) -> JSONResponse:
         return JSONResponse(
             status_code=401,
             content={
@@ -296,9 +304,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(UserNotFoundError)
-    async def user_not_found_handler(
-        request: Request, exc: UserNotFoundError
-    ) -> JSONResponse:
+    async def user_not_found_handler(request: Request, exc: UserNotFoundError) -> JSONResponse:
         # 401, not 404 — don't reveal whether the user ever existed
         return JSONResponse(
             status_code=401,
@@ -309,9 +315,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(InactiveUserError)
-    async def inactive_user_handler(
-        request: Request, exc: InactiveUserError
-    ) -> JSONResponse:
+    async def inactive_user_handler(request: Request, exc: InactiveUserError) -> JSONResponse:
         return JSONResponse(
             status_code=403,
             content={
@@ -321,9 +325,7 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
 
     @app.exception_handler(UnverifiedUserError)
-    async def unverified_user_handler(
-        request: Request, exc: UnverifiedUserError
-    ) -> JSONResponse:
+    async def unverified_user_handler(request: Request, exc: UnverifiedUserError) -> JSONResponse:
         return JSONResponse(
             status_code=403,
             content={

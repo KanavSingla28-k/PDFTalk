@@ -10,8 +10,10 @@ from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
 import re
 
 from app.db.base import Base
+
 if TYPE_CHECKING:
     from app.models.user import User
+
 
 class RefreshToken(Base):
     __tablename__ = "refresh_tokens"
@@ -22,9 +24,7 @@ class RefreshToken(Base):
         Index("idx_refresh_tokens_token_hash", "token_hash"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -33,15 +33,11 @@ class RefreshToken(Base):
     # SHA-256 hash of the raw token. Raw token is in the browser's httpOnly cookie only.
     # If this table leaks, attackers get hashes — not usable tokens.
     token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
-    expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
-    revoked_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="refresh_tokens")
 
@@ -50,18 +46,14 @@ class EmailVerification(Base):
     __tablename__ = "email_verifications"
     __table_args__ = (Index("idx_email_verifications_token_hash", "token_hash"),)
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
     token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
-    expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -76,18 +68,14 @@ class PasswordReset(Base):
         Index("idx_password_resets_token_hash", "token_hash"),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
     )
     token_hash: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
-    expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False
-    )
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
@@ -154,6 +142,7 @@ class LoginRequest(BaseModel):
     email is normalised to lowercase in the service layer, not here —
     keeping the schema clean and the normalisation logic in one place.
     """
+
     email: EmailStr
     password: str
 
@@ -184,18 +173,22 @@ class LoginResponse(BaseModel):
     Included to save the frontend a round-trip to /auth/me immediately
     after login. Contains only safe, non-sensitive fields.
     """
+
     access_token: str
     token_type: str = "bearer"
-    expires_in: int   # seconds until access token expiry
+    expires_in: int  # seconds until access token expiry
     user: "UserInfo"
 
 
 class UserInfo(BaseModel):
     """Minimal user payload safe to include in the login response body."""
+
     id: str
     email: str
 
-    model_config = ConfigDict(from_attributes=True)  # allows construction from a SQLAlchemy User model
+    model_config = ConfigDict(
+        from_attributes=True
+    )  # allows construction from a SQLAlchemy User model
 
 
 class MeResponse(BaseModel):
@@ -210,6 +203,7 @@ class MeResponse(BaseModel):
     access token here so the frontend can restore its in-memory auth state
     in a single round trip.
     """
+
     id: str
     email: str
     access_token: str | None = None
@@ -222,14 +216,15 @@ class MeResponse(BaseModel):
 class RefreshResponse(BaseModel):
     """
     Returned by POST /auth/refresh.
- 
+
     Mirrors the token fields of LoginResponse without the user object —
     the caller only needs new tokens, not a repeated user lookup.
     """
+
     access_token: str
     token_type: str = "bearer"
     expires_in: int  # seconds until the new access token expires
- 
- 
+
+
 # Resolve forward reference
 LoginResponse.model_rebuild()

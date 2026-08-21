@@ -37,6 +37,7 @@ def _run_async(coro: Coroutine[Any, Any, T]) -> T:
     Run an async coroutine from a synchronous RQ worker context.
     """
     import asyncio
+
     loop = asyncio.new_event_loop()
     try:
         return loop.run_until_complete(coro)
@@ -132,9 +133,7 @@ def _run(db: Session, document_id: uuid.UUID) -> None:
     # 4b. Per-user daily token quota — charged BEFORE calling OpenAI      #
     #     so we never bill the account if the user is already over quota. #
     # ------------------------------------------------------------------ #
-    _run_async(
-        check_and_increment_token_usage(str(doc.user_id), total_tokens)
-    )
+    _run_async(check_and_increment_token_usage(str(doc.user_id), total_tokens))
 
     # ------------------------------------------------------------------ #
     # 5. Embed                                                            #
@@ -177,8 +176,12 @@ def _run(db: Session, document_id: uuid.UUID) -> None:
     # Metrics — after commit so we only count genuinely successful ingestions
     documents_processed_total.labels(user_id=str(doc.user_id)).inc()
     openai_tokens_used_total.labels(kind="embedding").inc(total_tokens)
-    
-    created_at = doc.created_at.replace(tzinfo=timezone.utc) if doc.created_at.tzinfo is None else doc.created_at
+
+    created_at = (
+        doc.created_at.replace(tzinfo=timezone.utc)
+        if doc.created_at.tzinfo is None
+        else doc.created_at
+    )
     end_to_end_latency = (doc.updated_at - created_at).total_seconds()
     document_end_to_end_latency_seconds.observe(end_to_end_latency)
 

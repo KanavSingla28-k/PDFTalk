@@ -13,6 +13,7 @@ from app.exceptions import ChunkingError
 
 pytestmark = pytest.mark.integration
 
+
 @pytest.mark.asyncio
 async def test_full_ingestion_pipeline(
     async_client: AsyncClient,
@@ -31,13 +32,13 @@ async def test_full_ingestion_pipeline(
     # 1. Upload a PDF
     # We need a sample PDF bytes
     sample_pdf_bytes = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n"
-    
+
     files = {"file": ("test.pdf", sample_pdf_bytes, "application/pdf")}
     resp = await async_client.post("/documents/upload", files=files, headers=auth_headers)
     assert resp.status_code == 202
-    
+
     doc_id = resp.json()["document_id"]
-    
+
     # Verify it's in the DB as PENDING
     result = await db.execute(select(Document).where(Document.id == uuid.UUID(doc_id)))
     doc = result.scalar_one()
@@ -58,12 +59,24 @@ async def test_full_ingestion_pipeline(
     # Actually, we should just mock extract_text and embed_texts to make this a fast and reliable test
     # instead of hitting PyMuPDF and OpenAI, since we're testing the integration flow of the worker & db.
     from unittest.mock import patch, AsyncMock
-    with patch("app.workers.ingest.extract_text", return_value="This is some extracted text from the PDF."), \
-     patch("app.workers.ingest.chunk_text", return_value=[ChunkData(chunk_index=0, text="This is some extracted text from the PDF.", token_count=10)]), \
-     patch("app.workers.ingest.embed_texts", return_value=[[0.1] * 1536]), \
-     patch("app.workers.ingest.check_and_increment_token_usage", new_callable=AsyncMock), \
-     patch("app.workers.ingest._run_async"):
-        
+
+    with (
+        patch(
+            "app.workers.ingest.extract_text",
+            return_value="This is some extracted text from the PDF.",
+        ),
+        patch(
+            "app.workers.ingest.chunk_text",
+            return_value=[
+                ChunkData(
+                    chunk_index=0, text="This is some extracted text from the PDF.", token_count=10
+                )
+            ],
+        ),
+        patch("app.workers.ingest.embed_texts", return_value=[[0.1] * 1536]),
+        patch("app.workers.ingest.check_and_increment_token_usage", new_callable=AsyncMock),
+        patch("app.workers.ingest._run_async"),
+    ):
         # Run worker logic via run_sync to share the in-memory test DB session
         await db.run_sync(_run, uuid.UUID(doc_id))
 
@@ -78,13 +91,10 @@ async def test_full_ingestion_pipeline(
     chunks = chunk_result.scalars().all()
     assert len(chunks) == doc.chunk_count
 
+
 @pytest.mark.asyncio
 async def test_ingestion_quota_exceeded(
-    async_client: AsyncClient,
-    db: AsyncSession,
-    auth_headers: dict,
-    verified_user,
-    s3_mock
+    async_client: AsyncClient, db: AsyncSession, auth_headers: dict, verified_user, s3_mock
 ):
     """Test what happens when the uploaded file or chunks exceed token quota."""
     sample_pdf_bytes = b"%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n"
@@ -94,12 +104,15 @@ async def test_ingestion_quota_exceeded(
     doc_id = resp.json()["document_id"]
 
     from unittest.mock import patch
-    
+
     # Return massive text that exceeds 500,000 tokens
     # Or just mock `_check_token_budget` to raise ValueError
-    with patch("app.workers.ingest.extract_text", return_value="Text."), \
-         patch("app.workers.ingest._check_token_budget", side_effect=ChunkingError("Quota exceeded")):
-        
+    with (
+        patch("app.workers.ingest.extract_text", return_value="Text."),
+        patch(
+            "app.workers.ingest._check_token_budget", side_effect=ChunkingError("Quota exceeded")
+        ),
+    ):
         with pytest.raises(ChunkingError, match="Quota exceeded"):
             try:
                 await db.run_sync(_run, uuid.UUID(doc_id))
@@ -114,10 +127,8 @@ async def test_ingestion_quota_exceeded(
     assert doc.error_message is not None
     assert "Quota exceeded" in doc.error_message
 
+
 @pytest.mark.asyncio
-async def test_upload_missing_file(
-    async_client: AsyncClient,
-    auth_headers: dict
-):
+async def test_upload_missing_file(async_client: AsyncClient, auth_headers: dict):
     resp = await async_client.post("/documents/upload", files={}, headers=auth_headers)
     assert resp.status_code == 422

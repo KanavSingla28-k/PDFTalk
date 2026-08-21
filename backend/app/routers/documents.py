@@ -46,6 +46,7 @@ RETRY_DELAYS = [60, 300, 900]
 
 logger = structlog.get_logger()
 
+
 @router.post(
     "/upload",
     status_code=status.HTTP_202_ACCEPTED,
@@ -65,6 +66,7 @@ async def upload_document_endpoint(
 
     try:
         from app.workers.ingest import run_ingest
+
         ingest_queue.enqueue(
             run_ingest,
             kwargs={"document_id": str(document.id)},
@@ -117,6 +119,7 @@ async def get_document_status(
         )
     except DocumentNotFoundError:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404, detail="Document not found.")
 
     return DocumentStatusResponse.model_validate(doc)
@@ -142,6 +145,7 @@ async def get_document_download_url_endpoint(
         )
     except DocumentNotFoundError:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404, detail="Document not found.")
 
     return DocumentDownloadUrlResponse(url=url)
@@ -255,6 +259,7 @@ async def retry_document_endpoint(
 
     try:
         from app.workers.ingest import run_ingest
+
         ingest_queue.enqueue(
             run_ingest,
             kwargs={"document_id": str(document.id)},
@@ -287,10 +292,10 @@ async def retry_document_endpoint(
     )
 
 
-
 # --------------------------------------------------------------------------- #
 # Presigned URL upload endpoints — Step 4                                      #
 # --------------------------------------------------------------------------- #
+
 
 @router.post(
     "/initiate-upload",
@@ -447,6 +452,7 @@ def _enqueue_ingest(document_id: uuid.UUID) -> None:
     enqueue configuration (timeout, retries, failure callback).
     """
     from app.workers.ingest import run_ingest
+
     ingest_queue.enqueue(
         run_ingest,
         kwargs={"document_id": str(document_id)},
@@ -459,6 +465,7 @@ def _enqueue_ingest(document_id: uuid.UUID) -> None:
 # --------------------------------------------------------------------------- #
 # Internal helpers                                                             #
 # --------------------------------------------------------------------------- #
+
 
 async def _list_with_count(
     db: AsyncSession,

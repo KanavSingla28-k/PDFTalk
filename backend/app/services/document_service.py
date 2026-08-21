@@ -58,6 +58,7 @@ intentional and critical for correctness:
   (corrupt PDF, wrong MIME type, size mismatch) is not permanently blocked.
 ─────────────────────────────────────────────────────────────────────────────
 """
+
 from __future__ import annotations
 from fastapi import UploadFile
 
@@ -78,7 +79,6 @@ from app.utils.s3_client import build_document_s3_key, s3_client
 
 
 logger = structlog.get_logger()
-
 
 
 async def get_document_for_user(
@@ -110,6 +110,7 @@ async def get_document_for_user(
     if doc is None:
         raise DocumentNotFoundError(document_id=document_id)
     return doc
+
 
 async def transition_status(
     db: AsyncSession,
@@ -162,6 +163,7 @@ async def transition_status(
 
     return document
 
+
 async def count_user_documents(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -196,11 +198,10 @@ async def count_user_documents(
     if status is not None:
         stmt = stmt.where(Document.status == status.value)
     if exclude_statuses:
-        stmt = stmt.where(
-            Document.status.notin_([s.value for s in exclude_statuses])
-        )
+        stmt = stmt.where(Document.status.notin_([s.value for s in exclude_statuses]))
     result = await db.execute(stmt)
     return result.scalar_one()
+
 
 async def get_user_documents(
     db: AsyncSession,
@@ -219,22 +220,16 @@ async def get_user_documents(
     stmt = select(Document).where(Document.user_id == user_id)
     if status is not None:
         stmt = stmt.where(Document.status == status.value)
-        
+
     if include_chunks:
         stmt = stmt.options(selectinload(Document.chunks))
     if include_job_logs:
         stmt = stmt.options(selectinload(Document.job_logs))
 
-    stmt = (
-        stmt.order_by(
-            Document.created_at.desc(), 
-            Document.id.desc()
-        )
-        .limit(limit)
-        .offset(offset)
-    )
+    stmt = stmt.order_by(Document.created_at.desc(), Document.id.desc()).limit(limit).offset(offset)
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
 
 async def upload_document(
     *,
@@ -244,17 +239,17 @@ async def upload_document(
 ) -> Document:
     """
     Validate, upload, and register a document for the authenticated user.
- 
+
     Steps (in order — fail fast on each):
       1. Quota check — COUNT non-FAILED docs for this user
       2. File validation — MIME type, magic bytes, size
       3. S3 upload
       4. DB insert (status=PENDING)
       5. Return the Document — caller (router) enqueues the RQ ingest job
- 
+
     Returns:
         The newly created Document ORM object (id and status populated).
- 
+
     Raises:
         QuotaExceededError    — user is at or over MAX_DOCS_PER_USER
         FileValidationError   — invalid MIME type, magic bytes, or size
@@ -282,7 +277,7 @@ async def upload_document(
             f"Document limit reached ({settings.MAX_DOCS_PER_USER}). "
             "Delete existing documents to upload more."
         )
- 
+
     # ------------------------------------------------------------------ #
     # 2. File validation                                                   #
     # ------------------------------------------------------------------ #
@@ -290,7 +285,7 @@ async def upload_document(
     # any failure. Let it propagate — the router's exception handler maps
     # it to 422.
     file_data: bytes = await validate_upload(file=file)
- 
+
     # ------------------------------------------------------------------ #
     # 3. S3 upload                                                         #
     # ------------------------------------------------------------------ #
@@ -300,7 +295,7 @@ async def upload_document(
         document_id=str(document_id),
         filename=file.filename or "upload",
     )
- 
+
     s3_client.upload_file(
         file_obj=io.BytesIO(file_data),
         s3_key=s3_key,
@@ -313,7 +308,7 @@ async def upload_document(
         s3_key=s3_key,
         size_bytes=len(file_data),
     )
- 
+
     # ------------------------------------------------------------------ #
     # 4. DB insert                                                         #
     # ------------------------------------------------------------------ #
@@ -358,6 +353,7 @@ async def upload_document(
         raise
 
     return document
+
 
 async def delete_document(
     db: AsyncSession,

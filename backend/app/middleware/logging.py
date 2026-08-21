@@ -41,7 +41,9 @@ log = structlog.get_logger(__name__)
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         request_id = str(uuid.uuid4())
         start = time.perf_counter()
 
@@ -64,11 +66,11 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                 log.error(
                     "request.error",
                     method=request.method,
-                    path=request.url.path,           # query string intentionally excluded
+                    path=request.url.path,  # query string intentionally excluded
                     client_ip=_get_client_ip(request),
                     duration_ms=duration_ms,
                     error=type(exc).__name__,
-                    exc_info=True,                   # includes traceback in JSON output
+                    exc_info=True,  # includes traceback in JSON output
                 )
             except UnicodeEncodeError:
                 # Fallback for Windows console encoding issues
@@ -104,6 +106,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _elapsed_ms(start: float) -> int:
     return int((time.perf_counter() - start) * 1000)

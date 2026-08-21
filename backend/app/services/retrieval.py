@@ -44,20 +44,22 @@ logger = structlog.get_logger(__name__)
 # Return type
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True, slots=True)
 class RetrievedChunk:
     chunk_id: uuid.UUID
     document_id: uuid.UUID
     chunk_index: int
     text: str
-    token_count: int     # needed by prompt builder for budget accounting
-    filename: str        # joined from documents.filename — used for citations
+    token_count: int  # needed by prompt builder for budget accounting
+    filename: str  # joined from documents.filename — used for citations
     distance: float
 
 
 # ---------------------------------------------------------------------------
 # Public entry point (async — called from FastAPI route handlers)
 # ---------------------------------------------------------------------------
+
 
 async def retrieve_similar_chunks(
     *,
@@ -121,6 +123,7 @@ async def retrieve_similar_chunks(
 # ---------------------------------------------------------------------------
 # Sync wrapper (called from RQ worker — sync context)
 # ---------------------------------------------------------------------------
+
 
 def retrieve_similar_chunks_sync(
     *,
@@ -203,6 +206,7 @@ def retrieve_similar_chunks_sync(
 # ---------------------------------------------------------------------------
 # SQL execution
 # ---------------------------------------------------------------------------
+
 
 async def _run_similarity_search(
     *,

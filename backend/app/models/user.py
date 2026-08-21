@@ -18,12 +18,11 @@ if TYPE_CHECKING:
     )
     from app.models.chat import Chat
 
+
 class User(Base):
     __tablename__ = "users"
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     # Lowercase-normalised copy — used for all uniqueness checks and lookups.
     # Prevents duplicate accounts via Bob@example.com vs bob@example.com.
@@ -34,15 +33,9 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     # Brute-force lockout tracking
-    failed_login_attempts: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0
-    )
-    locked_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    last_login_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
@@ -67,6 +60,4 @@ class User(Base):
     password_resets: Mapped[list["PasswordReset"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    chats: Mapped[list["Chat"]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
+    chats: Mapped[list["Chat"]] = relationship(back_populates="user", cascade="all, delete-orphan")

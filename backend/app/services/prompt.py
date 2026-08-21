@@ -16,7 +16,9 @@ context_truncated_total = Counter(
 
 # Budget constants
 CONTEXT_TOKEN_BUDGET = settings.CONTEXT_TOKEN_BUDGET
-ENCODER = tiktoken.get_encoding("cl100k_base")  # matches chunking.py + gpt-4o-mini / text-embedding-3-small
+ENCODER = tiktoken.get_encoding(
+    "cl100k_base"
+)  # matches chunking.py + gpt-4o-mini / text-embedding-3-small
 
 
 SYSTEM_PROMPT = """You are a knowledgeable document assistant. Answer the user's question using ONLY the context provided below.
@@ -60,12 +62,15 @@ Rules you must never break:
 # Internal Helpers
 # ----------------------------------------------------------------------------
 
+
 def _count_tokens(text: str) -> int:
     return len(ENCODER.encode(text))
+
 
 # ----------------------------------------------------------------------------
 # Public API
 # ----------------------------------------------------------------------------
+
 
 def build_context_block(chunks: list[RetrievedChunk]) -> tuple[str, list[RetrievedChunk]]:
     """
@@ -110,7 +115,9 @@ def build_context_block(chunks: list[RetrievedChunk]) -> tuple[str, list[Retriev
     return context_block, included
 
 
-def build_history_block(messages: list["Message"], budget: int | None = None) -> list[dict[str, str]]:
+def build_history_block(
+    messages: list["Message"], budget: int | None = None
+) -> list[dict[str, str]]:
     if budget is None:
         budget = settings.HISTORY_TOKEN_BUDGET
     """
@@ -136,9 +143,10 @@ def build_history_block(messages: list["Message"], budget: int | None = None) ->
                 selected.insert(0, {"role": message.role.value, "content": truncated_content})
             break
         else:
-            break   # older messages don't fit, stop here
+            break  # older messages don't fit, stop here
 
     return selected
+
 
 def build_messages(
     chunks: list[RetrievedChunk],
@@ -172,7 +180,7 @@ def build_messages(
 Question: {question}"""
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    
+
     if history_messages:
         messages.extend(build_history_block(history_messages))
 

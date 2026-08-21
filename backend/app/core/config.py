@@ -7,6 +7,7 @@ import os
 
 env_file = os.getenv("ENV_FILE", ".env.local")
 
+
 class Settings(BaseSettings):
     DATABASE_URL: str
     REDIS_URL: str
@@ -47,12 +48,14 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
 
-    PROMETHEUS_MULTIPROC_DIR: str = "/tmp/prometheus/"  # default empty string will raise errors later
+    PROMETHEUS_MULTIPROC_DIR: str = (
+        "/tmp/prometheus/"  # default empty string will raise errors later
+    )
 
     GRAFANA_ADMIN_PASSWORD: str | None = None
     GRAFANA_SERVER_ROOT_URL: str | None = None
     GF_SERVER_SERVE_FROM_SUB_PATH: bool = True
-    
+
     ADMIN_TOKEN: str | None = None
     SLACK_WEBHOOK_URL: Optional[str] = None
     ALERT_EMAIL_TO: str | None = None
@@ -83,5 +86,6 @@ class Settings(BaseSettings):
     ANONYMOUS_COOKIE_SECURE: bool = True
 
     model_config = {"env_file": env_file, "extra": "ignore", "ignored_types": (cached_property,)}
+
 
 settings: Settings = Settings()  # type: ignore[call-arg]

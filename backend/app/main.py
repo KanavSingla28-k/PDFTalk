@@ -21,10 +21,11 @@ from app.utils.logging import configure_logging
 from app.utils.redis_client import get_pool, get_redis
 from app.routers.chats import router as chat_router
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # --- startup ---
-    configure_logging()          # structlog must be configured before any log calls
+    configure_logging()  # structlog must be configured before any log calls
 
     await check_db_connection()
 
@@ -43,8 +44,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await sentinel_redis.aclose()
 
 
-_docs_url    = None if settings.is_production else "/docs"
-_redoc_url   = None if settings.is_production else "/redoc"
+_docs_url = None if settings.is_production else "/docs"
+_redoc_url = None if settings.is_production else "/redoc"
 _openapi_url = None if settings.is_production else "/openapi.json"
 
 app = FastAPI(
@@ -64,6 +65,7 @@ app.include_router(chat_router)
 app.include_router(health_router)
 app.include_router(internal_router)
 
+
 # ── Prometheus metrics ────────────────────────────────────────────────────────
 # Exposes /metrics for Prometheus scraping (internal network only — not proxied
 # through Nginx). Instrumentator must be set up after routers are registered
@@ -73,7 +75,7 @@ def _require_internal_ip(request: Request) -> None:
     # Nginx adds X-Forwarded-For if it proxies the request from the public internet.
     if "x-forwarded-for" in request.headers:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
-    
+
     client_ip = request.client.host if request.client else ""
     try:
         ip_obj = ipaddress.ip_address(client_ip)
@@ -82,15 +84,13 @@ def _require_internal_ip(request: Request) -> None:
     except ValueError:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
 
+
 Instrumentator(
-    should_group_status_codes=True,       # 2xx/4xx/5xx, not individual codes
-    should_ignore_untemplated=True,       # drops /metrics itself from its own metrics
+    should_group_status_codes=True,  # 2xx/4xx/5xx, not individual codes
+    should_ignore_untemplated=True,  # drops /metrics itself from its own metrics
     excluded_handlers=["/health", "/metrics"],
 ).instrument(app).expose(
-    app, 
-    endpoint="/metrics", 
-    include_in_schema=False,
-    dependencies=[Depends(_require_internal_ip)]
+    app, endpoint="/metrics", include_in_schema=False, dependencies=[Depends(_require_internal_ip)]
 )
 
 # ---------------------------------------------------------------------------
@@ -109,12 +109,11 @@ app.add_middleware(RequestLoggingMiddleware)
 allowed_origins = [settings.APP_URL]
 
 
-app.add_middleware(                          # added last = outermost
+app.add_middleware(  # added last = outermost
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE", "PATCH", "PUT"],
-
     allow_headers=["Authorization", "Content-Type"],
     max_age=600,
 )

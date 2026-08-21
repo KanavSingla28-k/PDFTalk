@@ -20,8 +20,8 @@ from passlib.context import CryptContext
 # transparent — old hashes verify fine while new ones use the updated scheme.
 _pwd_context = CryptContext(
     schemes=["bcrypt"],
-    deprecated="auto",          # marks old-cost hashes as needing rehash
-    bcrypt__rounds=12,          # cost factor — never lower this in production
+    deprecated="auto",  # marks old-cost hashes as needing rehash
+    bcrypt__rounds=12,  # cost factor — never lower this in production
 )
 
 

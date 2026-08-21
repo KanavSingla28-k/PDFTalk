@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from app.models.chunk import Chunk
     from app.models.job_log import JobLog
 
+
 class DocumentStatus(str, enum.Enum):
     """
     Valid state transitions (presigned URL flow):
@@ -28,21 +29,26 @@ class DocumentStatus(str, enum.Enum):
         FAILED         → PROCESSING (retry)
     Never go backwards. Never skip PROCESSING.
     """
+
     PENDING_UPLOAD = "PENDING_UPLOAD"  # Waiting for browser to PUT file to S3
-    PENDING    = "PENDING"             # File confirmed in S3; queued for ingest
+    PENDING = "PENDING"  # File confirmed in S3; queued for ingest
     PROCESSING = "PROCESSING"
-    READY      = "READY"
-    FAILED     = "FAILED"
+    READY = "READY"
+    FAILED = "FAILED"
+
 
 # Valid forward-only transitions. Any move not in this map is illegal.
 _ALLOWED_TRANSITIONS: dict[DocumentStatus, set[DocumentStatus]] = {
     DocumentStatus.PENDING_UPLOAD: {DocumentStatus.PENDING, DocumentStatus.FAILED},
-    DocumentStatus.PENDING:        {DocumentStatus.PROCESSING},
-    DocumentStatus.PROCESSING:     {DocumentStatus.READY, DocumentStatus.FAILED},
-    DocumentStatus.READY:          set(),   # terminal
-    DocumentStatus.FAILED:         {DocumentStatus.PROCESSING},  # allowed for retry
+    DocumentStatus.PENDING: {DocumentStatus.PROCESSING},
+    DocumentStatus.PROCESSING: {DocumentStatus.READY, DocumentStatus.FAILED},
+    DocumentStatus.READY: set(),  # terminal
+    DocumentStatus.FAILED: {DocumentStatus.PROCESSING},  # allowed for retry
 }
-assert set(DocumentStatus) == set(_ALLOWED_TRANSITIONS.keys()), "All DocumentStatus values must be mapped in _ALLOWED_TRANSITIONS"
+assert set(DocumentStatus) == set(_ALLOWED_TRANSITIONS.keys()), (
+    "All DocumentStatus values must be mapped in _ALLOWED_TRANSITIONS"
+)
+
 
 class Document(Base):
     __tablename__ = "documents"
@@ -51,13 +57,11 @@ class Document(Base):
         Index("idx_documents_status", "status"),
         CheckConstraint(
             f"status IN ({', '.join(repr(v.value) for v in DocumentStatus)})",
-            name="check_valid_document_status"
+            name="check_valid_document_status",
         ),
     )
 
-    id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
-    )
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
@@ -105,11 +109,12 @@ class Document(Base):
 
 class DocumentUploadResponse(BaseModel):
     """Response for POST /documents/upload — 202 Accepted."""
- 
+
     document_id: uuid.UUID
     status: DocumentStatus
- 
+
     model_config = {"from_attributes": True}
+
 
 class DocumentStatusResponse(BaseModel):
     document_id: uuid.UUID = Field(validation_alias="id")
@@ -128,17 +133,19 @@ class DocumentStatusResponse(BaseModel):
 class DocumentDownloadUrlResponse(BaseModel):
     url: str
 
+
 class DocumentListResponse(BaseModel):
     items: list[DocumentStatusResponse]
-    total: int          # total matching rows (for the frontend pagination UI)
+    total: int  # total matching rows (for the frontend pagination UI)
     limit: int
     offset: int
-    pages: int          # math.ceil(total / limit)
+    pages: int  # math.ceil(total / limit)
 
 
 # ---------------------------------------------------------------------------
 # Presigned URL upload flow — Step 2
 # ---------------------------------------------------------------------------
+
 
 class InitiateUploadRequest(BaseModel):
     """
@@ -147,9 +154,10 @@ class InitiateUploadRequest(BaseModel):
     The client reports metadata only — no file bytes are sent to the API.
     The server validates size and MIME type, then issues a presigned S3 PUT URL.
     """
+
     filename: str
-    file_size_bytes: int   # Validated server-side against the 50 MB limit
-    mime_type: str         # Validated server-side against ALLOWED_MIME_TYPES
+    file_size_bytes: int  # Validated server-side against the 50 MB limit
+    mime_type: str  # Validated server-side against ALLOWED_MIME_TYPES
 
 
 class InitiateUploadResponse(BaseModel):
@@ -161,9 +169,10 @@ class InitiateUploadResponse(BaseModel):
       2. On S3 200 OK, call POST /documents/confirm-upload with `document_id`.
     The presigned URL expires after `expires_in_seconds` (default 900 = 15 min).
     """
+
     document_id: uuid.UUID
-    upload_url: str          # Presigned S3 PUT URL — send file bytes here
-    s3_key: str              # Informational; needed if the client wants to verify
+    upload_url: str  # Presigned S3 PUT URL — send file bytes here
+    s3_key: str  # Informational; needed if the client wants to verify
     expires_in_seconds: int  # Frontend can show a timeout warning to the user
 
 
@@ -175,6 +184,7 @@ class ConfirmUploadRequest(BaseModel):
     object exists in S3 (HeadObject), transitions PENDING_UPLOAD → PENDING,
     and enqueues the RQ ingest job.
     """
+
     document_id: uuid.UUID
 
 
@@ -185,5 +195,6 @@ class ConfirmUploadResponse(BaseModel):
     Mirrors DocumentUploadResponse so the frontend can use the same
     post-upload polling logic regardless of which upload path was used.
     """
+
     document_id: uuid.UUID
-    status: DocumentStatus   # Always PENDING at this point
+    status: DocumentStatus  # Always PENDING at this point

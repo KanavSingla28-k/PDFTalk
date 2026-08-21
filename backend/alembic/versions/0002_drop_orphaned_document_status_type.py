@@ -34,6 +34,4 @@ def downgrade() -> None:
     # Recreate the type so 0001 is a consistent base if someone downgrades.
     # The type is not used by any column — recreating it is purely for
     # migration chain consistency.
-    op.execute(
-        "CREATE TYPE document_status AS ENUM ('PENDING', 'PROCESSING', 'READY', 'FAILED')"
-    )
+    op.execute("CREATE TYPE document_status AS ENUM ('PENDING', 'PROCESSING', 'READY', 'FAILED')")

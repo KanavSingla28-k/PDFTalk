@@ -27,7 +27,7 @@ _POLL_INTERVAL = 15  # seconds
 
 
 def _poll(redis_conn: Redis, interval: int) -> None:
-    ingest_q        = Queue("ingest", connection=redis_conn)
+    ingest_q = Queue("ingest", connection=redis_conn)
     failed_registry = FailedJobRegistry("ingest", connection=redis_conn)
 
     while True:

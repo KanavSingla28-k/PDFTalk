@@ -6,31 +6,22 @@ from io import BytesIO
 BUCKET = "test-bucket"
 REGION = "ap-south-1"
 
+
 @pytest.fixture
 def s3(monkeypatch):
     from app.utils import s3_client
 
-    monkeypatch.setattr(
-        s3_client.settings,
-        "S3_BUCKET_NAME",
-        BUCKET
-    )
+    monkeypatch.setattr(s3_client.settings, "S3_BUCKET_NAME", BUCKET)
 
-    monkeypatch.setattr(
-        s3_client.settings,
-        "AWS_REGION",
-        REGION
-    )
+    monkeypatch.setattr(s3_client.settings, "AWS_REGION", REGION)
 
     with mock_aws():
         boto3.client("s3", region_name=REGION).create_bucket(
-            Bucket=BUCKET,
-            CreateBucketConfiguration={
-                "LocationConstraint": REGION
-            }
+            Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": REGION}
         )
 
         yield s3_client.S3Client()
+
 
 def test_upload_and_download(s3):
     content = b"hello world"

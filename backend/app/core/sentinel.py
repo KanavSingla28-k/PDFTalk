@@ -7,11 +7,10 @@ that adapt Sentinel's HTTPException errors to PDFTalk's exception hierarchy.
 
 from __future__ import annotations
 
-import math
 from urllib.parse import quote
 from typing import Callable, Awaitable
 
-from fastapi import Depends, HTTPException, Request, Response, status
+from fastapi import HTTPException, Request, Response, status
 from pydantic import SecretStr
 
 from sentinel.config import AppConfig, SentinelConfig
@@ -139,6 +138,7 @@ async def _adapt_sentinel_error(request: Request, exc: HTTPException) -> None:
     if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
         # Import locally to avoid circular dependency
         from app.exceptions import RateLimiterUnavailableError
+
         raise RateLimiterUnavailableError() from None
     raise exc
 

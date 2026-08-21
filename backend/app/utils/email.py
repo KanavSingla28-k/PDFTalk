@@ -145,7 +145,7 @@ async def send_password_reset_email(to_email: str, reset_url: str) -> None:
 
 
 def send_password_reset_email_sync(to_email: str, raw_token: str) -> None:
-    frontend_url = settings.APP_URL.rstrip('/')
+    frontend_url = settings.APP_URL.rstrip("/")
     reset_url = f"{frontend_url}/auth/reset-password#token={raw_token}"
     asyncio.run(send_password_reset_email(to_email=to_email, reset_url=reset_url))
 

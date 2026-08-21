@@ -37,10 +37,9 @@ _DUMMY_HASH = "$2b$12$8r3VnEHcdWKJCN5K3jCCPudYoOvlWLIaya98ZBX7NLXtlEeTPfIcu"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 async def get_by_email_lower(db: AsyncSession, email_lower: str) -> User | None:
-    result = await db.execute(
-        select(User).where(User.email_lower == email_lower)
-    )
+    result = await db.execute(select(User).where(User.email_lower == email_lower))
     return result.scalar_one_or_none()
 
 
@@ -48,14 +47,13 @@ async def _delete_pending_verification(db: AsyncSession, user_id: uuid.UUID | st
     from app.models.auth import EmailVerification
     from sqlalchemy import delete
 
-    await db.execute(
-        delete(EmailVerification).where(EmailVerification.user_id == user_id)
-    )
+    await db.execute(delete(EmailVerification).where(EmailVerification.user_id == user_id))
 
 
 # ---------------------------------------------------------------------------
 # Register
 # ---------------------------------------------------------------------------
+
 
 async def register(db: AsyncSession, email: str, password: str) -> None:
     """
@@ -102,6 +100,7 @@ async def register(db: AsyncSession, email: str, password: str) -> None:
 # Login
 # ---------------------------------------------------------------------------
 
+
 def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -126,9 +125,7 @@ async def login(
     email_lower = email.lower().strip()
 
     # Step 1: Look up user
-    result = await db.execute(
-        select(User).where(User.email_lower == email_lower)
-    )
+    result = await db.execute(select(User).where(User.email_lower == email_lower))
     user: User | None = result.scalar_one_or_none()
 
     # Step 2: Timing-safe path when user doesn't exist

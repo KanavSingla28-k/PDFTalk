@@ -42,6 +42,7 @@ TWO-LAYER DEFENCE:
                    Apply via: aws s3api put-bucket-lifecycle-configuration
 ─────────────────────────────────────────────────────────────────────────────
 """
+
 from redis import Redis
 import uuid
 from datetime import datetime, timezone, timedelta
@@ -81,22 +82,23 @@ def _cleanup_stale_pending_uploads(
     from app.utils.s3_client import s3_client
     from botocore.exceptions import ClientError
 
-    reason = (
-        "Upload timed out — presigned URL expired before the file was uploaded."
-    )
+    reason = "Upload timed out — presigned URL expired before the file was uploaded."
     traceback_detail = (
         "Document remained in PENDING_UPLOAD state for more than 15 minutes. "
         "The presigned S3 PUT URL has expired. The browser did not complete "
         "the upload or /confirm-upload was never called."
     )
 
-    stale_docs = db.execute(
-        select(Document)
-        .where(
-            Document.status == DocumentStatus.PENDING_UPLOAD.value,
-            Document.updated_at < cutoff,
+    stale_docs = (
+        db.execute(
+            select(Document).where(
+                Document.status == DocumentStatus.PENDING_UPLOAD.value,
+                Document.updated_at < cutoff,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     for doc in stale_docs:
         logger.warning(
@@ -173,13 +175,16 @@ def _mark_stale_batch(
 
     Caller is responsible for commit/rollback.
     """
-    stale_docs = db.execute(
-        select(Document)
-        .where(
-            Document.status.in_(statuses),
-            Document.updated_at < cutoff,
+    stale_docs = (
+        db.execute(
+            select(Document).where(
+                Document.status.in_(statuses),
+                Document.updated_at < cutoff,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     for doc in stale_docs:
         logger.warning(
@@ -232,8 +237,8 @@ def cleanup_stale_documents_job() -> None:
     logger.info("cleanup_stale_documents.started")
 
     now = datetime.now(timezone.utc)
-    cutoff_pending_upload = now - timedelta(minutes=15)   # presigned URL expiry
-    cutoff_ingest         = now - timedelta(minutes=30)   # ingest pipeline timeout
+    cutoff_pending_upload = now - timedelta(minutes=15)  # presigned URL expiry
+    cutoff_ingest = now - timedelta(minutes=30)  # ingest pipeline timeout
 
     with SessionLocal() as db:
         try:
@@ -287,7 +292,6 @@ def cleanup_stale_documents_job() -> None:
         cleanup_stale_documents_job,
         job_id="stale_document_cleanup",
     )
-
 
 
 def setup_stale_document_cleanup(conn: Redis) -> None:

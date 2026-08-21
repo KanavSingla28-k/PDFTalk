@@ -63,6 +63,7 @@ def main() -> None:
     logger.info("RQ worker starting — listening on 'ingest' and 'default' queues")
     # Schedule the stale document cleanup job
     from app.workers.tasks import setup_stale_document_cleanup
+
     setup_stale_document_cleanup(conn)
 
     redis_conn = get_sync_redis()

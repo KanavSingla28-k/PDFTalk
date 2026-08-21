@@ -106,9 +106,7 @@ async def run_cleanup() -> None:
         logger.error("Failed to list objects from S3: %s", exc)
         return
 
-    logger.info(
-        "S3 orphan cleanup complete. Deleted: %d, Errors: %d", orphans_deleted, errors
-    )
+    logger.info("S3 orphan cleanup complete. Deleted: %d, Errors: %d", orphans_deleted, errors)
 
 
 if __name__ == "__main__":

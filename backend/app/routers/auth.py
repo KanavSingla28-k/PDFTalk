@@ -20,12 +20,19 @@ from app.auth.tokens import (
 from app.core.config import settings
 from app.db.session import get_db
 from app.models.auth import (
-    RegisterRequest, RegisterResponse, LoginRequest, LoginResponse,
-    UserInfo, MeResponse, RefreshResponse, ResendVerificationRequest,
-    ForgotPasswordRequest, ResetPasswordRequest,
+    RegisterRequest,
+    RegisterResponse,
+    LoginRequest,
+    LoginResponse,
+    UserInfo,
+    MeResponse,
+    RefreshResponse,
+    ResendVerificationRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
 )
 from app.auth.dependencies import get_verified_user
-from app.core.sentinel import register_guard, resend_guard, login_guard, reset_guard
+from app.core.sentinel import resend_guard, login_guard, reset_guard
 from app.services import user_service
 from app.services.email_verification import verify_token, send_verification_email_for_user
 from app.services.password_reset import initiate_password_reset, consume_reset_token
@@ -45,7 +52,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 # ---------------------------------------------------------------------------
 
 _COOKIE_KEY = "refresh_token"
-_COOKIE_MAX_AGE = 60 * 60 * 24 * 7   # 7 days — matches REFRESH_TOKEN_EXPIRE_DAYS
+_COOKIE_MAX_AGE = 60 * 60 * 24 * 7  # 7 days — matches REFRESH_TOKEN_EXPIRE_DAYS
 _COOKIE_SECURE = settings.is_production
 _COOKIE_SAMESITE: Literal["lax", "strict", "none"] = "lax"
 _COOKIE_PATH = "/"
@@ -77,9 +84,11 @@ def _clear_refresh_cookie(response: Response) -> None:
         secure=_COOKIE_SECURE,
     )
 
+
 # ---------------------------------------------------------------------------
 # T-18 — Registration
 # ---------------------------------------------------------------------------
+
 
 @router.post(
     "/register",
@@ -158,6 +167,7 @@ async def resend_verification(
 # T-19 — Email verification
 # ---------------------------------------------------------------------------
 
+
 @router.get(
     "/verify-email",
     summary="Verify a user's email address",
@@ -205,6 +215,7 @@ async def verify_email(
 # ---------------------------------------------------------------------------
 # T-20 — Login
 # ---------------------------------------------------------------------------
+
 
 @router.post(
     "/login",
@@ -258,9 +269,11 @@ async def login(
         user=UserInfo(id=str(user.id), email=user.email),
     )
 
+
 # ---------------------------------------------------------------------------
 # T-21 — Token refresh
 # ---------------------------------------------------------------------------
+
 
 @router.post(
     "/refresh",
@@ -301,11 +314,9 @@ async def refresh(
         )
 
     try:
-        new_access_token, new_raw_refresh_token = (
-            await validate_and_rotate_refresh_token(
-                raw_token=refresh_token,
-                db=db,
-            )
+        new_access_token, new_raw_refresh_token = await validate_and_rotate_refresh_token(
+            raw_token=refresh_token,
+            db=db,
         )
     except TokenInvalidError as exc:
         # Token not found, already used, or expired.
@@ -333,6 +344,7 @@ async def refresh(
 # ---------------------------------------------------------------------------
 # T-21 — Logout
 # ---------------------------------------------------------------------------
+
 
 @router.post(
     "/logout",
@@ -368,9 +380,11 @@ async def logout(
     # Always clear the cookie, even if it was absent or already revoked.
     _clear_refresh_cookie(response)
 
+
 # ---------------------------------------------------------------------------
 # T-47 — GET /auth/me (with silent refresh fallback)
 # ---------------------------------------------------------------------------
+
 
 @router.get(
     "/me",
@@ -463,9 +477,7 @@ async def get_me(
 
     # Decode the new access token to get user_id, then fetch user
     user_id_str = decode_access_token(new_access_token)
-    result = await db.execute(
-        sa_select(UserModel).where(UserModel.id == uuid.UUID(user_id_str))
-    )
+    result = await db.execute(sa_select(UserModel).where(UserModel.id == uuid.UUID(user_id_str)))
     user = result.scalar_one_or_none()
 
     if not user or not user.is_active or not user.is_verified:
@@ -483,9 +495,11 @@ async def get_me(
         expires_in=expires_in,
     )
 
+
 # ---------------------------------------------------------------------------
 # T-66 — Password Reset
 # ---------------------------------------------------------------------------
+
 
 @router.post(
     "/forgot-password",
@@ -500,16 +514,19 @@ async def forgot_password(
     _rate: None = Depends(reset_guard),
 ) -> RegisterResponse:
     import structlog
+
     _log = structlog.get_logger(__name__)
-    
+
     try:
         await initiate_password_reset(email=payload.email, db=db)
     except RuntimeError as exc:
         # B-3 fix: only swallow email delivery failures (RuntimeError from send_*_email).
         # DB errors and other unexpected failures propagate normally as 500.
         _log.error("forgot_password_email_delivery_failed", email=payload.email, error=str(exc))
-        
-    return RegisterResponse(message="If an account with that email exists, you'll receive an email shortly.")
+
+    return RegisterResponse(
+        message="If an account with that email exists, you'll receive an email shortly."
+    )
 
 
 @router.post(
@@ -535,6 +552,7 @@ async def reset_password(
 # F-02 — DELETE /auth/sessions (revoke all sessions)
 # ---------------------------------------------------------------------------
 
+
 @router.delete(
     "/sessions",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -550,7 +568,7 @@ async def reset_password(
 async def revoke_all_sessions(
     response: Response,
     db: AsyncSession = Depends(get_db),
-    current_user: User =Depends(get_verified_user),
+    current_user: User = Depends(get_verified_user),
 ) -> None:
     """
     DELETE /auth/sessions

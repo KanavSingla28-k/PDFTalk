@@ -26,9 +26,7 @@ def _hash_token(raw_token: str) -> str:
 async def initiate_password_reset(email: str, db: AsyncSession) -> None:
     email_lower = email.strip().lower()
 
-    result = await db.execute(
-        select(User).where(User.email_lower == email_lower)
-    )
+    result = await db.execute(select(User).where(User.email_lower == email_lower))
     user: User | None = result.scalar_one_or_none()
 
     if user is None:
@@ -41,9 +39,7 @@ async def initiate_password_reset(email: str, db: AsyncSession) -> None:
         return
 
     # User is verified — generate reset token
-    await db.execute(
-        delete(PasswordReset).where(PasswordReset.user_id == user.id)
-    )
+    await db.execute(delete(PasswordReset).where(PasswordReset.user_id == user.id))
 
     raw_token = secrets.token_urlsafe(TOKEN_BYTES)
     token_hash = _hash_token(raw_token)
@@ -58,6 +54,7 @@ async def initiate_password_reset(email: str, db: AsyncSession) -> None:
     await db.flush()
 
     from app.utils.email import send_password_reset_email_sync
+
     default_queue.enqueue(
         send_password_reset_email_sync,
         kwargs={"to_email": user.email, "raw_token": raw_token},
@@ -75,9 +72,7 @@ async def consume_reset_token(raw_token: str, new_password: str, db: AsyncSessio
     now = datetime.now(timezone.utc)
 
     result = await db.execute(
-        select(PasswordReset)
-        .where(PasswordReset.token_hash == token_hash)
-        .with_for_update()
+        select(PasswordReset).where(PasswordReset.token_hash == token_hash).with_for_update()
     )
     record: PasswordReset | None = result.scalar_one_or_none()
 

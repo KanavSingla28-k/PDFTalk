@@ -52,6 +52,7 @@ _READ_CHUNK: int = 64 * 1024
 # Public API
 # ---------------------------------------------------------------------------
 
+
 async def validate_upload(file: UploadFile) -> bytes:
     """
     Validate *file* and return its raw bytes.
@@ -131,6 +132,7 @@ def validate_upload_metadata(
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 async def _read_and_check_size(file: UploadFile) -> bytes:
     """
