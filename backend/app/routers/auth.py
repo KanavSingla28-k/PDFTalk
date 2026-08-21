@@ -96,7 +96,7 @@ async def register(
     payload: RegisterRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    _rate: None = Depends(register_guard),
+    # _rate: None = Depends(register_guard),  # Temporarily disabled for debugging
 ) -> RegisterResponse:
     try:
         await user_service.register(
