@@ -20,13 +20,13 @@ Design (from T-16 spec):
 """
 
 import hashlib
-import structlog
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
+import structlog
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,6 +41,7 @@ logger = structlog.get_logger(__name__)
 # Typed exceptions — callers import these to avoid bare except clauses
 # ---------------------------------------------------------------------------
 
+
 class TokenExpiredError(ValueError):
     """The JWT access token has passed its exp claim."""
 
@@ -53,8 +54,9 @@ class TokenInvalidError(ValueError):
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _hash_token(raw: str) -> str:
@@ -70,10 +72,10 @@ def _hash_token(raw: str) -> str:
 def _decode_token_unverified(token: str) -> str | None:
     """
     Decode a JWT without verifying the signature or expiry.
- 
+
     Returns the 'sub' claim (user_id) if present, otherwise None.
     Never raises — any failure returns None.
- 
+
     IMPORTANT: This is for LOGGING ONLY. Never use for auth decisions.
     """
     try:
@@ -89,9 +91,12 @@ def _decode_token_unverified(token: str) -> str | None:
         return str(sub) if sub else None
     except Exception:
         return None
+
+
 # ---------------------------------------------------------------------------
 # Response schema
 # ---------------------------------------------------------------------------
+
 
 class TokenPair(BaseModel):
     """
@@ -101,6 +106,7 @@ class TokenPair(BaseModel):
     The refresh token is NOT included here — it travels as an httpOnly
     cookie set directly on the Response object by the route handler (T-20).
     """
+
     access_token: str
     token_type: str = "bearer"
     expires_in: int  # seconds until access token expiry — set by caller
@@ -109,6 +115,7 @@ class TokenPair(BaseModel):
 # ---------------------------------------------------------------------------
 # Access token
 # ---------------------------------------------------------------------------
+
 
 def create_access_token(user_id: str) -> str:
     """
@@ -161,9 +168,7 @@ def decode_access_token(token: str) -> str:
     if payload.get("type") != "access":
         # Hard rejection: a refresh token (or any other type) must never be
         # accepted where an access token is expected.
-        raise TokenInvalidError(
-            f"Wrong token type: expected 'access', got '{payload.get('type')}'"
-        )
+        raise TokenInvalidError(f"Wrong token type: expected 'access', got '{payload.get('type')}'")
 
     user_id: str | None = payload.get("sub")
     if not user_id:
@@ -175,6 +180,7 @@ def decode_access_token(token: str) -> str:
 # ---------------------------------------------------------------------------
 # Refresh token — DB-backed, hashed at rest
 # ---------------------------------------------------------------------------
+
 
 async def store_refresh_token(user_id: str, db: AsyncSession) -> str:
     """
@@ -226,9 +232,7 @@ async def validate_and_rotate_refresh_token(
     """
     token_hash = _hash_token(raw_token)
 
-    result = await db.execute(
-        select(RefreshToken).where(RefreshToken.token_hash == token_hash)
-    )
+    result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
     stored: RefreshToken | None = result.scalar_one_or_none()
 
     if stored is None:
@@ -239,8 +243,8 @@ async def validate_and_rotate_refresh_token(
 
     expires_at = stored.expires_at
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
-    
+        expires_at = expires_at.replace(tzinfo=UTC)
+
     now = _now_utc()
     if expires_at < now:
         # Clean up the stale row while we're here
@@ -254,7 +258,7 @@ async def validate_and_rotate_refresh_token(
         revoked_at = stored.revoked_at
 
         if revoked_at.tzinfo is None:
-            revoked_at = revoked_at.replace(tzinfo=timezone.utc)
+            revoked_at = revoked_at.replace(tzinfo=UTC)
 
         grace_period_end = revoked_at + timedelta(seconds=60)
 
@@ -288,9 +292,7 @@ async def revoke_refresh_token(raw_token: str, db: AsyncSession) -> None:
     Silently succeeds if the token is not found (already expired/revoked).
     """
     token_hash = _hash_token(raw_token)
-    await db.execute(
-        delete(RefreshToken).where(RefreshToken.token_hash == token_hash)
-    )
+    await db.execute(delete(RefreshToken).where(RefreshToken.token_hash == token_hash))
     await db.commit()
 
 
@@ -306,9 +308,7 @@ async def revoke_all_refresh_tokens(user_id: uuid.UUID, db: AsyncSession) -> int
         The number of tokens deleted (useful for logging).
     """
     result = await db.execute(
-        delete(RefreshToken)
-        .where(RefreshToken.user_id == user_id)
-        .returning(RefreshToken.id)
+        delete(RefreshToken).where(RefreshToken.user_id == user_id).returning(RefreshToken.id)
     )
     count = len(result.fetchall())
     await db.commit()
@@ -319,6 +319,7 @@ async def revoke_all_refresh_tokens(user_id: uuid.UUID, db: AsyncSession) -> int
 # ---------------------------------------------------------------------------
 # Convenience factory used by the login route (T-20)
 # ---------------------------------------------------------------------------
+
 
 async def issue_token_pair(user_id: str, db: AsyncSession) -> tuple[str, str, int]:
     """

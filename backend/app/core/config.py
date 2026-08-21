@@ -1,11 +1,12 @@
-from functools import cached_property
-from typing import Literal, Optional
-from pydantic import field_validator
-from pydantic_settings import BaseSettings
 import os
+from functools import cached_property
+from typing import Any, Literal
 
+from pydantic import field_validator, model_validator
+from pydantic_settings import BaseSettings
 
 env_file = os.getenv("ENV_FILE", ".env.local")
+
 
 class Settings(BaseSettings):
     DATABASE_URL: str
@@ -23,10 +24,10 @@ class Settings(BaseSettings):
             raise ValueError("JWT_SECRET_KEY must be at least 32 characters long")
         return v
 
-    RESEND_API_KEY: Optional[str] = None
+    RESEND_API_KEY: str | None = None
     FROM_EMAIL: str
 
-    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: str | None = None
 
     AWS_ACCESS_KEY_ID: str
     AWS_SECRET_ACCESS_KEY: str
@@ -47,14 +48,16 @@ class Settings(BaseSettings):
     def is_production(self) -> bool:
         return self.ENVIRONMENT == "production"
 
-    PROMETHEUS_MULTIPROC_DIR: str = "/tmp/prometheus/"  # default empty string will raise errors later
+    PROMETHEUS_MULTIPROC_DIR: str = (
+        "/tmp/prometheus/"  # default empty string will raise errors later
+    )
 
     GRAFANA_ADMIN_PASSWORD: str | None = None
     GRAFANA_SERVER_ROOT_URL: str | None = None
     GF_SERVER_SERVE_FROM_SUB_PATH: bool = True
-    
+
     ADMIN_TOKEN: str | None = None
-    SLACK_WEBHOOK_URL: Optional[str] = None
+    SLACK_WEBHOOK_URL: str | None = None
     ALERT_EMAIL_TO: str | None = None
     EMAIL_FROM_DOMAIN: str | None = None
 
@@ -71,7 +74,7 @@ class Settings(BaseSettings):
     # (e.g. 0.85) to be more permissive, lower it to be stricter.
     RETRIEVAL_MAX_DISTANCE: float = 0.70
     STREAM_CHUNK_TIMEOUT: int = 30
-    LOG_FORMAT: Optional[Literal["json", "pretty"]] = None
+    LOG_FORMAT: Literal["json", "pretty"] | None = None
     MAX_DAILY_QUERIES_PER_USER: int = 500
 
     # Sentinel rate limiter
@@ -84,4 +87,26 @@ class Settings(BaseSettings):
 
     model_config = {"env_file": env_file, "extra": "ignore", "ignored_types": (cached_property,)}
 
-settings: Settings = Settings()  # type: ignore[call-arg]
+    @model_validator(mode="before")
+    @classmethod
+    def set_dev_defaults(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            env_val = data.get("ENVIRONMENT", os.getenv("ENVIRONMENT", "production"))
+            if env_val == "development":
+                data.setdefault("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5433/pdftalk")     # pragma: allowlist secret
+                data.setdefault("REDIS_URL", "redis://:pdftalk_redis@localhost:6379/0")
+                data.setdefault("JWT_SECRET_KEY", "dev-secret-key-123456789012345678901234567890")
+                data.setdefault("FROM_EMAIL", "dev@example.com")
+                data.setdefault("AWS_ACCESS_KEY_ID", "dummy")
+                data.setdefault("AWS_SECRET_ACCESS_KEY", "dummy")
+                data.setdefault("S3_BUCKET_NAME", "dummy")
+                data.setdefault("APP_URL", "http://localhost:3000")
+        return data
+
+
+try:
+    settings: Settings = Settings()  # type: ignore[call-arg]
+except Exception as e:
+    import sys
+    print(f"CRITICAL: Failed to load configuration: {e}")
+    sys.exit(1)

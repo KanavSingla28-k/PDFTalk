@@ -8,8 +8,8 @@ from rq.registry import FailedJobRegistry
 
 from app.core.config import settings
 from app.utils.metrics import dead_letter_queue_length, queue_length
-from app.workers.queue_poller import start_queue_poller
 from app.utils.redis_client import get_sync_redis
+from app.workers.queue_poller import start_queue_poller
 
 logger = structlog.get_logger(__name__)
 
@@ -63,6 +63,7 @@ def main() -> None:
     logger.info("RQ worker starting — listening on 'ingest' and 'default' queues")
     # Schedule the stale document cleanup job
     from app.workers.tasks import setup_stale_document_cleanup
+
     setup_stale_document_cleanup(conn)
 
     redis_conn = get_sync_redis()

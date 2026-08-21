@@ -1,42 +1,41 @@
 import uuid
-from datetime import datetime, timezone
-from typing import TypeVar, Coroutine, Any
+from collections.abc import Coroutine
+from datetime import UTC, datetime
+from typing import Any
 
 import structlog
-from sqlalchemy.orm import Session
 from sqlalchemy import delete
+from sqlalchemy.orm import Session
 
 from app.db.sync_session import SessionLocal
-from app.models.document import Document, DocumentStatus
+from app.exceptions import ChunkingError, ExtractionError
 from app.models.chunk import Chunk
-from app.services.extraction import extract_text
+from app.models.document import Document, DocumentStatus
 from app.services.chunking import chunk_text
 from app.services.embedding import embed_texts
-from app.exceptions import ExtractionError, ChunkingError
+from app.services.extraction import extract_text
+from app.utils.metrics import (
+    document_end_to_end_latency_seconds,
+    documents_failed_total,
+    documents_processed_total,
+    openai_tokens_used_total,
+    processing_duration_seconds,
+)
 from app.utils.openai_client import (
-    check_and_increment_token_usage,
     CircuitBreakerOpenError,
     DailyQuotaExceededError,
     OpenAIRetryExhaustedError,
-)
-from app.utils.metrics import (
-    documents_processed_total,
-    documents_failed_total,
-    processing_duration_seconds,
-    openai_tokens_used_total,
-    document_end_to_end_latency_seconds,
+    check_and_increment_token_usage,
 )
 
 logger = structlog.get_logger(__name__)
 
-T = TypeVar("T")
-
-
-def _run_async(coro: Coroutine[Any, Any, T]) -> T:
+def _run_async[T](coro: Coroutine[Any, Any, T]) -> T:
     """
     Run an async coroutine from a synchronous RQ worker context.
     """
     import asyncio
+
     loop = asyncio.new_event_loop()
     try:
         return loop.run_until_complete(coro)
@@ -104,7 +103,7 @@ def _run(db: Session, document_id: uuid.UUID) -> None:
         db.execute(delete(Chunk).where(Chunk.document_id == document_id))
 
     doc.status = DocumentStatus.PROCESSING
-    doc.updated_at = datetime.now(timezone.utc)
+    doc.updated_at = datetime.now(UTC)
     db.commit()
 
     logger.info("ingest.started", extra={"document_id": str(document_id)})
@@ -132,9 +131,7 @@ def _run(db: Session, document_id: uuid.UUID) -> None:
     # 4b. Per-user daily token quota — charged BEFORE calling OpenAI      #
     #     so we never bill the account if the user is already over quota. #
     # ------------------------------------------------------------------ #
-    _run_async(
-        check_and_increment_token_usage(str(doc.user_id), total_tokens)
-    )
+    _run_async(check_and_increment_token_usage(str(doc.user_id), total_tokens))
 
     # ------------------------------------------------------------------ #
     # 5. Embed                                                            #
@@ -170,15 +167,19 @@ def _run(db: Session, document_id: uuid.UUID) -> None:
     # ------------------------------------------------------------------ #
     doc.status = DocumentStatus.READY
     doc.chunk_count = len(chunk_rows)
-    doc.updated_at = datetime.now(timezone.utc)
+    doc.updated_at = datetime.now(UTC)
 
     db.commit()  # Single commit — chunks + status update are atomic
 
     # Metrics — after commit so we only count genuinely successful ingestions
     documents_processed_total.labels(user_id=str(doc.user_id)).inc()
     openai_tokens_used_total.labels(kind="embedding").inc(total_tokens)
-    
-    created_at = doc.created_at.replace(tzinfo=timezone.utc) if doc.created_at.tzinfo is None else doc.created_at
+
+    created_at = (
+        doc.created_at.replace(tzinfo=UTC)
+        if doc.created_at.tzinfo is None
+        else doc.created_at
+    )
     end_to_end_latency = (doc.updated_at - created_at).total_seconds()
     document_end_to_end_latency_seconds.observe(end_to_end_latency)
 
@@ -198,6 +199,7 @@ def _fail(db: Session, document_id: uuid.UUID, exc: Exception) -> None:
     Best-effort — if the DB itself is down, this will also fail (acceptable).
     """
     import traceback
+
     from app.models.job_log import JobLog
 
     try:
@@ -205,7 +207,7 @@ def _fail(db: Session, document_id: uuid.UUID, exc: Exception) -> None:
         if doc is not None:
             doc.status = DocumentStatus.FAILED
             doc.error_message = str(exc)[:500]
-            doc.updated_at = datetime.now(timezone.utc)
+            doc.updated_at = datetime.now(UTC)
 
         log = JobLog(
             id=uuid.uuid4(),
@@ -221,7 +223,7 @@ def _fail(db: Session, document_id: uuid.UUID, exc: Exception) -> None:
         logger.error(
             "ingest.failed",
             extra={"document_id": str(document_id), "error": str(exc)},
-            exc_info=True,
+            exc_info=exc,
         )
     except Exception as db_exc:
         logger.critical(

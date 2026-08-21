@@ -1,5 +1,6 @@
 import redis
 from rq import Queue
+
 from app.core.config import settings
 
 # Synchronous Redis connection — RQ does not support redis.asyncio

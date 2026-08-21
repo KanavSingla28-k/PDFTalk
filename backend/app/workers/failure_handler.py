@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import traceback
 import uuid
-
-from rq.job import Job
-from redis import Redis
-from sqlalchemy import create_engine, Engine
-from sqlalchemy.orm import Session
 from types import TracebackType
+
+from redis import Redis
+from rq.job import Job
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.document import Document
@@ -27,7 +27,6 @@ def _get_engine() -> Engine:
             max_overflow=0,
         )
     return _sync_engine
-
 
 
 def handle_ingest_failure(

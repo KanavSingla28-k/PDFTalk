@@ -1,42 +1,42 @@
 import math
 import uuid
 from typing import Any
-from rq import Retry, Callback
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status, Request
-from fastapi.responses import Response
-from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi.responses import Response
+from rq import Callback, Retry
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_verified_user
 from app.core.sentinel import upload_guard
 from app.db.session import get_db
+from app.exceptions import DocumentNotFoundError
 from app.models.document import (
     ConfirmUploadRequest,
     ConfirmUploadResponse,
+    DocumentDownloadUrlResponse,
     DocumentListResponse,
     DocumentStatus,
     DocumentStatusResponse,
     DocumentUploadResponse,
     InitiateUploadRequest,
     InitiateUploadResponse,
-    DocumentDownloadUrlResponse,
 )
 from app.models.user import User
-from app.exceptions import DocumentNotFoundError
 from app.services.document_service import (
     confirm_upload,
     count_user_documents,
     delete_document,
+    get_document_download_url,
     get_document_for_user,
     get_user_documents,
     initiate_upload,
-    upload_document,
     transition_status,
-    get_document_download_url,
+    upload_document,
 )
-from app.workers.queues import ingest_queue
 from app.workers.failure_handler import handle_ingest_failure
+from app.workers.queues import ingest_queue
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -45,6 +45,7 @@ _MAX_UPLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 RETRY_DELAYS = [60, 300, 900]
 
 logger = structlog.get_logger()
+
 
 @router.post(
     "/upload",
@@ -65,6 +66,7 @@ async def upload_document_endpoint(
 
     try:
         from app.workers.ingest import run_ingest
+
         ingest_queue.enqueue(
             run_ingest,
             kwargs={"document_id": str(document.id)},
@@ -117,6 +119,7 @@ async def get_document_status(
         )
     except DocumentNotFoundError:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404, detail="Document not found.")
 
     return DocumentStatusResponse.model_validate(doc)
@@ -142,6 +145,7 @@ async def get_document_download_url_endpoint(
         )
     except DocumentNotFoundError:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=404, detail="Document not found.")
 
     return DocumentDownloadUrlResponse(url=url)
@@ -255,6 +259,7 @@ async def retry_document_endpoint(
 
     try:
         from app.workers.ingest import run_ingest
+
         ingest_queue.enqueue(
             run_ingest,
             kwargs={"document_id": str(document.id)},
@@ -287,10 +292,10 @@ async def retry_document_endpoint(
     )
 
 
-
 # --------------------------------------------------------------------------- #
 # Presigned URL upload endpoints — Step 4                                      #
 # --------------------------------------------------------------------------- #
+
 
 @router.post(
     "/initiate-upload",
@@ -380,6 +385,7 @@ async def confirm_upload_endpoint(
       503  Unavailable — RQ queue is down; document rolled back to PENDING_UPLOAD
     """
     from botocore.exceptions import ClientError
+
     from app.exceptions import DocumentNotFoundError
 
     try:
@@ -447,6 +453,7 @@ def _enqueue_ingest(document_id: uuid.UUID) -> None:
     enqueue configuration (timeout, retries, failure callback).
     """
     from app.workers.ingest import run_ingest
+
     ingest_queue.enqueue(
         run_ingest,
         kwargs={"document_id": str(document_id)},
@@ -459,6 +466,7 @@ def _enqueue_ingest(document_id: uuid.UUID) -> None:
 # --------------------------------------------------------------------------- #
 # Internal helpers                                                             #
 # --------------------------------------------------------------------------- #
+
 
 async def _list_with_count(
     db: AsyncSession,

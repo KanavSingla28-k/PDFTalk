@@ -1,5 +1,7 @@
-from app.services.chunking import chunk_text, CHUNK_SIZE, CHUNK_OVERLAP, CHUNK_STEP
 import tiktoken
+
+from app.services.chunking import CHUNK_OVERLAP, CHUNK_SIZE, CHUNK_STEP, chunk_text
+
 
 def _make_text(approx_tokens: int) -> str:
     enc = tiktoken.get_encoding("cl100k_base")
@@ -34,6 +36,7 @@ class TestChunkText:
 
     def test_token_count_matches_text(self):
         import tiktoken
+
         enc = tiktoken.get_encoding("cl100k_base")
         text = _make_text(600)
         for chunk in chunk_text(text):
@@ -42,6 +45,7 @@ class TestChunkText:
     def test_overlap_is_present(self):
         """Adjacent chunks share CHUNK_OVERLAP tokens of content."""
         import tiktoken
+
         enc = tiktoken.get_encoding("cl100k_base")
         text = _make_text(1000)
         chunks = chunk_text(text)

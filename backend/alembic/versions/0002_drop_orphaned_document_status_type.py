@@ -17,7 +17,6 @@ No table or column changes. Safe to run on a live DB.
 
 from alembic import op
 
-
 revision = "0002"
 down_revision = "0001"
 branch_labels = None
@@ -34,6 +33,4 @@ def downgrade() -> None:
     # Recreate the type so 0001 is a consistent base if someone downgrades.
     # The type is not used by any column — recreating it is purely for
     # migration chain consistency.
-    op.execute(
-        "CREATE TYPE document_status AS ENUM ('PENDING', 'PROCESSING', 'READY', 'FAILED')"
-    )
+    op.execute("CREATE TYPE document_status AS ENUM ('PENDING', 'PROCESSING', 'READY', 'FAILED')")

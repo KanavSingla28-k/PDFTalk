@@ -17,7 +17,6 @@ import pytest
 
 from app.services.retrieval import RetrievedChunk, retrieve_similar_chunks
 
-
 FAKE_USER_ID = uuid.uuid4()
 FAKE_DOC_ID = uuid.uuid4()
 FAKE_CHUNK_ID = uuid.uuid4()

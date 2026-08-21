@@ -41,7 +41,6 @@ This migration is intentionally a no-op. It exists solely as an audit record.
 
 from alembic import op  # noqa: F401 — imported for Alembic chain consistency
 
-
 # revision identifiers
 revision = "0006"
 down_revision = "0005_add_last_login_at"
@@ -56,7 +55,7 @@ def upgrade() -> None:
     The documents.status column is TEXT — it accepts 'PENDING_UPLOAD' without
     any ALTER TABLE statement. See module docstring for full rationale.
     """
-    pass  # intentional no-op — see docstring above
+    # intentional no-op — see docstring above
 
 
 def downgrade() -> None:
@@ -71,4 +70,4 @@ def downgrade() -> None:
         UPDATE documents SET status='FAILED', error_message='Rolled back to pre-PENDING_UPLOAD schema'
         WHERE status = 'PENDING_UPLOAD';
     """
-    pass  # intentional no-op
+    # intentional no-op

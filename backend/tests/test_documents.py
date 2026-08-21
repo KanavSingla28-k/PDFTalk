@@ -18,9 +18,11 @@ us inject specific ClientError codes (NoSuchKey, AccessDenied) cleanly.
 All UUID filters pass uuid.UUID objects to SQLAlchemy (not raw strings) —
 PostgreSQL handles both, SQLite doesn't.
 """
+
 from __future__ import annotations
 
 import uuid
+from datetime import UTC
 from unittest.mock import patch
 
 from botocore.exceptions import ClientError
@@ -30,10 +32,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document, DocumentStatus
 
-
 # --------------------------------------------------------------------------- #
 # Helpers                                                                      #
 # --------------------------------------------------------------------------- #
+
 
 def _make_document(
     user_id: uuid.UUID,
@@ -73,8 +75,8 @@ async def _seed_document(
 # GET /documents/{document_id}/status                                          #
 # --------------------------------------------------------------------------- #
 
-class TestGetDocumentStatus:
 
+class TestGetDocumentStatus:
     async def test_returns_200_for_own_document(
         self,
         async_client: AsyncClient,
@@ -170,8 +172,8 @@ class TestGetDocumentStatus:
 # GET /documents                                                               #
 # --------------------------------------------------------------------------- #
 
-class TestListDocuments:
 
+class TestListDocuments:
     async def test_returns_empty_list_for_new_user(
         self,
         async_client: AsyncClient,
@@ -253,9 +255,7 @@ class TestListDocuments:
         verified_user,
     ) -> None:
         for i in range(5):
-            await _seed_document(
-                db, verified_user.id, filename=f"doc_{i}.pdf"
-            )
+            await _seed_document(db, verified_user.id, filename=f"doc_{i}.pdf")
 
         resp = await async_client.get(
             "/documents",
@@ -289,8 +289,9 @@ class TestListDocuments:
         doc_b = await _seed_document(db, verified_user.id, filename="newer.pdf")
 
         # Explicitly backdate doc_a to prevent identical timestamp sorting issues on fast SQLite in-memory tests
-        from datetime import datetime, timedelta, timezone
-        doc_a.created_at = datetime.now(timezone.utc) - timedelta(seconds=10)
+        from datetime import datetime, timedelta
+
+        doc_a.created_at = datetime.now(UTC) - timedelta(seconds=10)
         db.add(doc_a)
         await db.commit()
 
@@ -328,8 +329,8 @@ class TestListDocuments:
 # DELETE /documents/{document_id}                                              #
 # --------------------------------------------------------------------------- #
 
-class TestDeleteDocument:
 
+class TestDeleteDocument:
     async def test_returns_204_and_removes_db_row(
         self,
         async_client: AsyncClient,
@@ -351,9 +352,7 @@ class TestDeleteDocument:
         assert resp.content == b""
 
         # DB row must be gone
-        result = await db.execute(
-            select(Document).where(Document.id == uuid.UUID(str(doc.id)))
-        )
+        result = await db.execute(select(Document).where(Document.id == uuid.UUID(str(doc.id))))
         assert result.scalar_one_or_none() is None
 
     async def test_s3_delete_called_with_correct_key(
@@ -399,9 +398,7 @@ class TestDeleteDocument:
         assert resp.status_code == 204
 
         # DB row must still be cleaned up
-        result = await db.execute(
-            select(Document).where(Document.id == uuid.UUID(str(doc.id)))
-        )
+        result = await db.execute(select(Document).where(Document.id == uuid.UUID(str(doc.id))))
         assert result.scalar_one_or_none() is None
 
     async def test_treats_s3_404_code_as_success(
@@ -458,9 +455,7 @@ class TestDeleteDocument:
         assert resp.status_code == 502
 
         # DB row must still exist
-        result = await db.execute(
-            select(Document).where(Document.id == uuid.UUID(str(doc.id)))
-        )
+        result = await db.execute(select(Document).where(Document.id == uuid.UUID(str(doc.id))))
         assert result.scalar_one_or_none() is not None
 
     async def test_returns_404_for_nonexistent_document(
@@ -497,9 +492,7 @@ class TestDeleteDocument:
         assert resp.status_code == 404
 
         # Other user's row must be untouched
-        result = await db.execute(
-            select(Document).where(Document.id == uuid.UUID(str(doc.id)))
-        )
+        result = await db.execute(select(Document).where(Document.id == uuid.UUID(str(doc.id))))
         assert result.scalar_one_or_none() is not None
 
     async def test_returns_401_without_auth(
@@ -519,8 +512,8 @@ class TestDeleteDocument:
 # POST /documents/{document_id}/retry                                         #
 # --------------------------------------------------------------------------- #
 
-class TestRetryDocument:
 
+class TestRetryDocument:
     async def test_retry_success(
         self,
         async_client: AsyncClient,
@@ -589,7 +582,9 @@ class TestRetryDocument:
         assert "Only FAILED documents can be retried" in resp.json()["detail"]
 
         # PROCESSING state
-        doc_processing = await _seed_document(db, verified_user.id, status=DocumentStatus.PROCESSING)
+        doc_processing = await _seed_document(
+            db, verified_user.id, status=DocumentStatus.PROCESSING
+        )
         resp2 = await async_client.post(
             f"/documents/{doc_processing.id}/retry",
             headers=auth_headers,
@@ -616,7 +611,9 @@ class TestRetryDocument:
     ) -> None:
         doc = await _seed_document(db, verified_user.id, status=DocumentStatus.FAILED)
 
-        with patch("app.routers.documents.ingest_queue.enqueue", side_effect=Exception("Queue down")):
+        with patch(
+            "app.routers.documents.ingest_queue.enqueue", side_effect=Exception("Queue down")
+        ):
             resp = await async_client.post(
                 f"/documents/{doc.id}/retry",
                 headers=auth_headers,

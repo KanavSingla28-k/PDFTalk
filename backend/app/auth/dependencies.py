@@ -50,6 +50,7 @@ _bearer = HTTPBearer(auto_error=False)
 # get_current_user — token validation only, no DB hit
 # ---------------------------------------------------------------------------
 
+
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(_bearer),
 ) -> uuid.UUID:
@@ -76,14 +77,15 @@ async def get_current_user(
         raise InvalidTokenError(str(exc)) from exc
 
     try:
-        return uuid.UUID(user_id_str)
-    except ValueError as exc:
+        return uuid.UUID(str(user_id_str))
+    except (ValueError, TypeError, AttributeError) as exc:
         raise InvalidTokenError("Invalid access token: malformed subject") from exc
 
 
 # ---------------------------------------------------------------------------
 # get_verified_user — token + DB check (is_active + is_verified)
 # ---------------------------------------------------------------------------
+
 
 async def get_verified_user(
     user_id: uuid.UUID = Depends(get_current_user),

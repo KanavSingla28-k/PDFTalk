@@ -29,6 +29,7 @@ class ChunkData:
     structure immediately after the embedding call, with a length
     check, before calling store_chunks().
     """
+
     chunk_index: int
     text: str
     token_count: int

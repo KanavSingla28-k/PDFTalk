@@ -5,18 +5,16 @@ script loader, and SentinelGuard, and exports typed FastAPI dependencies
 that adapt Sentinel's HTTPException errors to PDFTalk's exception hierarchy.
 """
 
-from __future__ import annotations
+# from __future__ import annotations
 
-import math
+from collections.abc import Awaitable, Callable
 from urllib.parse import quote
-from typing import Callable, Awaitable
 
-from fastapi import Depends, HTTPException, Request, Response, status
+from fastapi import HTTPException, Request, Response, status
 from pydantic import SecretStr
-
 from sentinel.config import AppConfig, SentinelConfig
 from sentinel.http import SentinelGuard
-from sentinel.models import AlgorithmType, FailMode, Policy, IdentityMode
+from sentinel.models import AlgorithmType, FailMode, IdentityMode, Policy
 from sentinel.redis import ScriptLoader, SentinelRedis
 
 from app.core.config import settings
@@ -28,8 +26,13 @@ def _build_sentinel_config() -> SentinelConfig:
     if not settings.SENTINEL_REDIS_PASSWORD:
         raise ValueError("SENTINEL_REDIS_PASSWORD must be configured")
 
-    redis_password = quote(settings.SENTINEL_REDIS_PASSWORD, safe="")
-    redis_url = f"redis://:{redis_password}@sentinel-redis:6379/0"
+    # Use SENTINEL_REDIS_URL if explicitly provided (e.g. in tests or local dev),
+    # otherwise construct the default Docker-internal service URL.
+    if settings.SENTINEL_REDIS_URL:
+        redis_url = settings.SENTINEL_REDIS_URL
+    else:
+        redis_password = quote(settings.SENTINEL_REDIS_PASSWORD, safe="")
+        redis_url = f"redis://:{redis_password}@sentinel-redis:6379/0"
 
     if not settings.ANONYMOUS_COOKIE_SECRET:
         raise ValueError("ANONYMOUS_COOKIE_SECRET must be configured for anonymous policies")
@@ -139,6 +142,7 @@ async def _adapt_sentinel_error(request: Request, exc: HTTPException) -> None:
     if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
         # Import locally to avoid circular dependency
         from app.exceptions import RateLimiterUnavailableError
+
         raise RateLimiterUnavailableError() from None
     raise exc
 
@@ -156,7 +160,9 @@ def _make_tenant_guard(endpoint_id: str) -> Callable[[Request], Awaitable[None]]
     return _dep
 
 
-def _make_anonymous_guard(endpoint_id: str) -> Callable[[Request, Response], Awaitable[None]]:
+def _make_anonymous_guard(
+    endpoint_id: str,
+) -> Callable[[Request, Response], Awaitable[None]]:
     """Create a FastAPI dependency for anonymous endpoints."""
     sentinel_dep = guard.anonymous_guard_for(endpoint_id)
 

@@ -42,15 +42,17 @@ TWO-LAYER DEFENCE:
                    Apply via: aws s3api put-bucket-lifecycle-configuration
 ─────────────────────────────────────────────────────────────────────────────
 """
-from redis import Redis
-import uuid
-from datetime import datetime, timezone, timedelta
-import structlog
-from rq import Queue
-from sqlalchemy.orm import Session
-from sqlalchemy import select
-# from typing import cast
 
+import uuid
+from datetime import UTC, datetime, timedelta
+
+import structlog
+from redis import Redis
+from rq import Queue
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+# from typing import cast
 from app.db.sync_session import SessionLocal
 from app.models.document import Document, DocumentStatus
 from app.models.job_log import JobLog
@@ -78,25 +80,27 @@ def _cleanup_stale_pending_uploads(
 
     Returns the list of affected Document objects.
     """
-    from app.utils.s3_client import s3_client
     from botocore.exceptions import ClientError
 
-    reason = (
-        "Upload timed out — presigned URL expired before the file was uploaded."
-    )
+    from app.utils.s3_client import s3_client
+
+    reason = "Upload timed out — presigned URL expired before the file was uploaded."
     traceback_detail = (
         "Document remained in PENDING_UPLOAD state for more than 15 minutes. "
         "The presigned S3 PUT URL has expired. The browser did not complete "
         "the upload or /confirm-upload was never called."
     )
 
-    stale_docs = db.execute(
-        select(Document)
-        .where(
-            Document.status == DocumentStatus.PENDING_UPLOAD.value,
-            Document.updated_at < cutoff,
+    stale_docs = (
+        db.execute(
+            select(Document).where(
+                Document.status == DocumentStatus.PENDING_UPLOAD.value,
+                Document.updated_at < cutoff,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     for doc in stale_docs:
         logger.warning(
@@ -142,7 +146,7 @@ def _cleanup_stale_pending_uploads(
         # ── Step 2: Transition DB row to FAILED ─────────────────────────── #
         doc.status = DocumentStatus.FAILED.value
         doc.error_message = reason
-        doc.updated_at = datetime.now(timezone.utc)
+        doc.updated_at = datetime.now(UTC)
 
         log = JobLog(
             id=uuid.uuid4(),
@@ -173,13 +177,16 @@ def _mark_stale_batch(
 
     Caller is responsible for commit/rollback.
     """
-    stale_docs = db.execute(
-        select(Document)
-        .where(
-            Document.status.in_(statuses),
-            Document.updated_at < cutoff,
+    stale_docs = (
+        db.execute(
+            select(Document).where(
+                Document.status.in_(statuses),
+                Document.updated_at < cutoff,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     for doc in stale_docs:
         logger.warning(
@@ -193,7 +200,7 @@ def _mark_stale_batch(
 
         doc.status = DocumentStatus.FAILED.value
         doc.error_message = reason
-        doc.updated_at = datetime.now(timezone.utc)
+        doc.updated_at = datetime.now(UTC)
 
         log = JobLog(
             id=uuid.uuid4(),
@@ -231,9 +238,9 @@ def cleanup_stale_documents_job() -> None:
     """
     logger.info("cleanup_stale_documents.started")
 
-    now = datetime.now(timezone.utc)
-    cutoff_pending_upload = now - timedelta(minutes=15)   # presigned URL expiry
-    cutoff_ingest         = now - timedelta(minutes=30)   # ingest pipeline timeout
+    now = datetime.now(UTC)
+    cutoff_pending_upload = now - timedelta(minutes=15)  # presigned URL expiry
+    cutoff_ingest = now - timedelta(minutes=30)  # ingest pipeline timeout
 
     with SessionLocal() as db:
         try:
@@ -289,10 +296,9 @@ def cleanup_stale_documents_job() -> None:
     )
 
 
-
 def setup_stale_document_cleanup(conn: Redis) -> None:
-    from rq.job import Job
     from rq.exceptions import NoSuchJobError
+    from rq.job import Job
 
     q = Queue("default", connection=conn)
     try:

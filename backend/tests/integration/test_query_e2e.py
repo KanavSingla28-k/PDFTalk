@@ -1,22 +1,20 @@
 import uuid
+from unittest.mock import patch
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from unittest.mock import patch
 
-from app.models.document import Document, DocumentStatus
-from app.models.chunk import Chunk
 from app.models.chat import Chat
+from app.models.chunk import Chunk
+from app.models.document import Document, DocumentStatus
 
 pytestmark = pytest.mark.integration
 
+
 @pytest.mark.asyncio
 async def test_full_query_pipeline(
-    async_client: AsyncClient,
-    db: AsyncSession,
-    auth_headers: dict,
-    verified_user,
-    mock_retrieval
+    async_client: AsyncClient, db: AsyncSession, auth_headers: dict, verified_user, mock_retrieval
 ):
     """
     Test the full query pipeline:
@@ -32,10 +30,10 @@ async def test_full_query_pipeline(
         file_size_bytes=1000,
         mime_type="application/pdf",
         status=DocumentStatus.READY,
-        chunk_count=1
+        chunk_count=1,
     )
     db.add(doc)
-    
+
     chunk = Chunk(
         id=uuid.uuid4(),
         document_id=doc_id,
@@ -43,16 +41,17 @@ async def test_full_query_pipeline(
         chunk_index=0,
         text="The main feature of PDFTalk is answering questions based on context.",
         token_count=12,
-        embedding=[0.1] * 1536  # fake embedding matching text-embedding-3-small dimension
+        embedding=[0.1] * 1536,  # fake embedding matching text-embedding-3-small dimension
     )
     db.add(chunk)
-    
+
     chat = Chat(user_id=verified_user.id, document_ids=[str(doc_id)], title="Test Chat")
     db.add(chat)
-    
+
     await db.commit()
 
     from app.services.retrieval import RetrievedChunk
+
     mock_retrieval.return_value = [
         RetrievedChunk(
             chunk_id=uuid.uuid4(),
@@ -61,7 +60,7 @@ async def test_full_query_pipeline(
             text="The main feature of PDFTalk is answering questions based on context.",
             token_count=12,
             filename="test_guide.pdf",
-            distance=0.1
+            distance=0.1,
         )
     ]
 
@@ -72,26 +71,27 @@ async def test_full_query_pipeline(
         yield " feature."
 
     with patch("app.routers.query.stream_llm_response", side_effect=fake_stream_llm):
-        
         resp = await async_client.post(
             "/query/ask",
             json={"chat_id": str(chat.id), "question": "What is the main feature?"},
-            headers=auth_headers
+            headers=auth_headers,
         )
-        
+
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "text/event-stream; charset=utf-8"
-        
+
         # Parse SSE
         events = [line for line in resp.text.split("\n\n") if line.strip()]
-        
+
         import json
+
         assert json.loads(events[0].replace("data: ", "", 1))["content"] == "The"
         assert json.loads(events[1].replace("data: ", "", 1))["content"] == " main"
         assert json.loads(events[2].replace("data: ", "", 1))["content"] == " feature."
-        
+
         # Verify custom sources event
         import json
+
         sources_line = events[3].replace("data: ", "", 1)
         sources_data = json.loads(sources_line)
         assert sources_data["type"] == "sources"
@@ -102,12 +102,10 @@ async def test_full_query_pipeline(
 
         assert "data: [DONE]" in events[4]
 
+
 @pytest.mark.asyncio
 async def test_query_document_not_ready(
-    async_client: AsyncClient,
-    db: AsyncSession,
-    auth_headers: dict,
-    verified_user
+    async_client: AsyncClient, db: AsyncSession, auth_headers: dict, verified_user
 ):
     doc_id = uuid.uuid4()
     doc = Document(
@@ -118,49 +116,51 @@ async def test_query_document_not_ready(
         file_size_bytes=1000,
         mime_type="application/pdf",
         status=DocumentStatus.PROCESSING,
-        chunk_count=0
+        chunk_count=0,
     )
     db.add(doc)
-    
+
     chat = Chat(user_id=verified_user.id, document_ids=[str(doc_id)], title="Test Chat")
     db.add(chat)
-    
+
     await db.commit()
 
     resp = await async_client.post(
         "/query/ask",
         json={"chat_id": str(chat.id), "question": "Is it ready?"},
-        headers=auth_headers
+        headers=auth_headers,
     )
     # T-39: Should raise DocumentNotReadyError -> 409
     assert resp.status_code == 409
 
+
 @pytest.mark.asyncio
-async def test_query_document_not_found(
-    async_client: AsyncClient,
-    auth_headers: dict
-):
+async def test_query_document_not_found(async_client: AsyncClient, auth_headers: dict):
     resp = await async_client.post(
         "/query/ask",
         json={"chat_id": str(uuid.uuid4()), "question": "Are you there?"},
-        headers=auth_headers
+        headers=auth_headers,
     )
     # T-39: Should raise DocumentNotFoundError -> 404
     assert resp.status_code == 404
 
+
 @pytest.mark.asyncio
-async def test_query_quota_exceeded(
-    async_client: AsyncClient,
-    auth_headers: dict
-):
+async def test_query_quota_exceeded(async_client: AsyncClient, auth_headers: dict):
     # If the user exceeds 20 queries/min (T-42), rate limiter kicks in.
     # We can either make 21 requests or mock `check_and_increment_query_usage` to raise `DailyQueryQuotaExceededError`.
     from app.utils.openai_client import DailyQueryQuotaExceededError
-    with patch("app.routers.query.check_and_increment_query_usage", side_effect=DailyQueryQuotaExceededError), \
-         patch("app.routers.query.validate_chat_for_query", return_value=(None, [], [])):
+
+    with (
+        patch(
+            "app.routers.query.check_and_increment_query_usage",
+            side_effect=DailyQueryQuotaExceededError,
+        ),
+        patch("app.routers.query.validate_chat_for_query", return_value=(None, [], [])),
+    ):
         resp = await async_client.post(
             "/query/ask",
             json={"chat_id": str(uuid.uuid4()), "question": "Quota test"},
-            headers=auth_headers
+            headers=auth_headers,
         )
         assert resp.status_code == 429

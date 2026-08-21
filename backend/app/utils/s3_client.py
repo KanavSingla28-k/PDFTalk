@@ -1,9 +1,11 @@
-import boto3
-from botocore.exceptions import ClientError
-from typing import BinaryIO, cast, Any
-from app.core.config import settings
-import structlog
 from pathlib import Path
+from typing import Any, BinaryIO, cast
+
+import boto3
+import structlog
+from botocore.exceptions import ClientError
+
+from app.core.config import settings
 
 logger = structlog.get_logger()
 
@@ -11,11 +13,12 @@ logger = structlog.get_logger()
 class S3Client:
     def __init__(self) -> None:
         from botocore.client import Config
+
         self._client = boto3.client(
             "s3",
             region_name=settings.AWS_REGION,
             endpoint_url=f"https://s3.{settings.AWS_REGION}.amazonaws.com",
-            config=Config(s3={'addressing_style': 'virtual'}),
+            config=Config(s3={"addressing_style": "virtual"}),
             aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
             aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
         )
@@ -65,20 +68,24 @@ class S3Client:
     def check_connectivity(self) -> None:
         """Ping S3 by calling HeadBucket. Raises on any error."""
         self._client.head_bucket(Bucket=self.bucket)
-        
 
-    def generate_presigned_download_url(self, s3_key: str, expires_in: int = 3600, filename: str | None = None) -> str:
+    def generate_presigned_download_url(
+        self, s3_key: str, expires_in: int = 3600, filename: str | None = None
+    ) -> str:
         """Generate a time-limited URL for direct client download."""
         params: dict[str, Any] = {"Bucket": self.bucket, "Key": s3_key}
         if filename:
             # Force the browser to download the file instead of displaying it inline
             params["ResponseContentDisposition"] = f'attachment; filename="{filename}"'
-            
-        return cast(str, self._client.generate_presigned_url(
-            "get_object",
-            Params=params,
-            ExpiresIn=expires_in,
-        ))
+
+        return cast(
+            str,
+            self._client.generate_presigned_url(
+                "get_object",
+                Params=params,
+                ExpiresIn=expires_in,
+            ),
+        )
 
     def generate_presigned_upload_url(
         self,
@@ -112,15 +119,18 @@ class S3Client:
         Returns:
             A presigned HTTPS URL. Valid for a single PUT operation.
         """
-        return cast(str, self._client.generate_presigned_url(
-            "put_object",
-            Params={
-                "Bucket": self.bucket,
-                "Key": s3_key,
-                "ContentType": content_type,
-            },
-            ExpiresIn=expires_in,
-        ))
+        return cast(
+            str,
+            self._client.generate_presigned_url(
+                "put_object",
+                Params={
+                    "Bucket": self.bucket,
+                    "Key": s3_key,
+                    "ContentType": content_type,
+                },
+                ExpiresIn=expires_in,
+            ),
+        )
 
     def head_object(self, s3_key: str) -> dict[str, Any]:
         """
