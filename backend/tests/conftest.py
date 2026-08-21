@@ -46,6 +46,7 @@ atexit.register(lambda: shutil.rmtree(_temp_dir, ignore_errors=True))
 
 # Sentinel rate limiter settings (required before app.core.sentinel import)
 os.environ.setdefault("SENTINEL_REDIS_URL", "redis://:test@localhost:6379/1")
+os.environ.setdefault("SENTINEL_REDIS_PASSWORD", "test-sentinel-password")
 os.environ.setdefault(
     "ANONYMOUS_COOKIE_SECRET", "pdftalk-anon-test-secret-00000000000000000000000000000000"
 )
