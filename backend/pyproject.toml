@@ -53,6 +53,7 @@ ignore = ["B008", "BLE001", "G201", "SIM102", "S110", "DTZ011", "UP047", "ASYNC2
 python_version = "3.12"
 exclude = ["^tests/"]
 strict = true
+warn_unused_ignores = false
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
