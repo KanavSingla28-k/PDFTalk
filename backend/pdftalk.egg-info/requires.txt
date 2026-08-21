@@ -1,0 +1,33 @@
+fastapi>=0.111
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+alembic
+pydantic-settings
+passlib[bcrypt]>=1.7.4
+bcrypt==4.0.1
+redis>=5.0.0
+rq
+boto3
+openai
+pymupdf
+tiktoken
+structlog
+python-multipart
+httpx
+email-validator
+resend>=2.30.1
+pgvector>=0.4.2
+aiosqlite>=0.22.1
+psycopg[binary]
+pytesseract
+pillow
+prometheus-client>=0.20.0
+prometheus-fastapi-instrumentator>=7.0.0
+pyjwt[crypto]>=2.13.0
+
+[:sys_platform != "win32"]
+python-magic>=0.4.27
+
+[:sys_platform == "win32"]
+python-magic-bin>=0.4.14

@@ -80,6 +80,28 @@ def _scrub_pii(
     return event_dict
 
 
+def _copy_stdlib_extras(
+    logger: WrappedLogger,
+    method: str,
+    event_dict: EventDict,
+) -> EventDict:
+    """
+    Copy stdlib LogRecord extra attributes into the structlog event dict.
+
+    This ensures that fields logged via stdlib's `extra=` (like Sentinel's
+    `identity_mode`, `identity_hash`, `endpoint_id`, `decision_reason`,
+    `latency_micro`, `breaker_state`) are preserved in the JSON output.
+    """
+    # structlog passes the stdlib LogRecord as `record` in the event dict
+    # when using ProcessorFormatter with foreign_pre_chain.
+    record = event_dict.get("record")
+    if record is not None:
+        for key, value in record.__dict__.items():
+            if key not in event_dict and not key.startswith("_"):
+                event_dict[key] = value
+    return event_dict
+
+
 # ---------------------------------------------------------------------------
 # Public configuration entry point
 # ---------------------------------------------------------------------------
@@ -90,6 +112,8 @@ def configure_logging() -> None:
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,   # safe once stdlib is wired
         structlog.processors.TimeStamper(fmt="iso"),
+        _copy_stdlib_extras,
+        _scrub_pii,
     ]
 
     structlog.configure(

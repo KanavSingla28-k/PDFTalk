@@ -37,6 +37,19 @@ jobs:
         ports:
           - 6379:6379
 
+      sentinel-redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6380:6379
+        env:
+          REDIS_PASSWORD: sentinel-ci-test-password             # pragma: allowlist secret
+        command: redis-server --requirepass sentinel-ci-test-password --maxmemory 128mb --maxmemory-policy noeviction
+
     steps:
       - uses: actions/checkout@v4
 
@@ -74,6 +87,8 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://pdftalk:test@localhost:5432/pdftalk_test   # pragma: allowlist secret
           REDIS_URL: redis://localhost:6379
+          SENTINEL_REDIS_URL: redis://:sentinel-ci-test-password@localhost:6380/0
+          ANONYMOUS_COOKIE_SECRET: ci-anon-secret-000000000000000000000000000000000000         # pragma: allowlist secret
           JWT_SECRET_KEY: ci-test-secret-not-used-in-production-minimum-32-chars  # pragma: allowlist secret
           FROM_EMAIL: ci@pdftalk.test
           AWS_ACCESS_KEY_ID: test
@@ -88,6 +103,8 @@ jobs:
         env:
           DATABASE_URL: postgresql+asyncpg://pdftalk:test@localhost:5432/pdftalk_test  # pragma: allowlist secret
           REDIS_URL: redis://localhost:6379
+          SENTINEL_REDIS_URL: redis://:sentinel-ci-test-password@localhost:6380/0
+          ANONYMOUS_COOKIE_SECRET: ci-anon-secret-000000000000000000000000000000000000         # pragma: allowlist secret
           JWT_SECRET_KEY: ci-test-secret-not-used-in-production-minimum-32-chars  # pragma: allowlist secret
           FROM_EMAIL: ci@pdftalk.test
           AWS_ACCESS_KEY_ID: test

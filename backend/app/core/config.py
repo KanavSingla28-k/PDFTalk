@@ -74,6 +74,14 @@ class Settings(BaseSettings):
     LOG_FORMAT: Optional[Literal["json", "pretty"]] = None
     MAX_DAILY_QUERIES_PER_USER: int = 500
 
+    # Sentinel rate limiter
+    SENTINEL_REDIS_URL: str | None = None
+    SENTINEL_REDIS_PASSWORD: str | None = None
+    ANONYMOUS_COOKIE_SECRET: str | None = None
+    ANONYMOUS_COOKIE_NAME: str = "pdftalk_anon_id"
+    ANONYMOUS_COOKIE_TTL_SECONDS: int = 2592000
+    ANONYMOUS_COOKIE_SECURE: bool = True
+
     model_config = {"env_file": env_file, "extra": "ignore", "ignored_types": (cached_property,)}
 
 settings: Settings = Settings()  # type: ignore[call-arg]

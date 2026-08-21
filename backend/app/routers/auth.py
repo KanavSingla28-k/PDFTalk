@@ -9,7 +9,6 @@ from typing import Literal
 
 from starlette.responses import Response as StarletteResponse
 
-from app.utils.rate_limit import RateLimiter
 from app.auth.tokens import (
     TokenExpiredError,
     TokenInvalidError,
@@ -26,6 +25,7 @@ from app.models.auth import (
     ForgotPasswordRequest, ResetPasswordRequest,
 )
 from app.auth.dependencies import get_verified_user
+from app.core.sentinel import register_guard, resend_guard, login_guard, reset_guard
 from app.services import user_service
 from app.services.email_verification import verify_token, send_verification_email_for_user
 from app.services.password_reset import initiate_password_reset, consume_reset_token
@@ -36,35 +36,6 @@ from app.models.user import User
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-
-# ---------------------------------------------------------------------------
-# Rate limiter instances — defined once at module level, reused per request.
-# Each uses a distinct key_prefix so their Redis keys never collide.
-# ---------------------------------------------------------------------------
-
-_register_limiter = RateLimiter(
-    limit=5,
-    window_seconds=3600,  # 5 registrations per IP per hour (T-18 spec)
-    key_prefix="register",
-)
-
-_resend_limiter = RateLimiter(
-    limit=5,
-    window_seconds=3600,  # 5 resends per IP per hour
-    key_prefix="resend",
-)
-
-_login_limiter = RateLimiter(
-    limit=10,
-    window_seconds=60,  # 10 login attempts per IP per minute (T-20 spec)
-    key_prefix="login",
-)
-
-_reset_limiter = RateLimiter(
-    limit=3,
-    window_seconds=3600,  # 3 password resets per IP per hour
-    key_prefix="reset",
-)
 
 # ---------------------------------------------------------------------------
 # Cookie helpers — single source of truth for refresh-token cookie settings
@@ -125,7 +96,7 @@ async def register(
     payload: RegisterRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    _rate: None = Depends(_register_limiter),
+    _rate: None = Depends(register_guard),
 ) -> RegisterResponse:
     try:
         await user_service.register(
@@ -160,7 +131,7 @@ async def resend_verification(
     payload: ResendVerificationRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    _rate: None = Depends(_resend_limiter),
+    _rate: None = Depends(resend_guard),
 ) -> RegisterResponse:
     email_lower = payload.email.strip().lower()
 
@@ -253,7 +224,7 @@ async def login(
     request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
-    _rate: None = Depends(_login_limiter),
+    _rate: None = Depends(login_guard),
 ) -> LoginResponse:
     """
     POST /auth/login
@@ -526,7 +497,7 @@ async def forgot_password(
     payload: ForgotPasswordRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    _rate: None = Depends(_reset_limiter),
+    _rate: None = Depends(reset_guard),
 ) -> RegisterResponse:
     import structlog
     _log = structlog.get_logger(__name__)

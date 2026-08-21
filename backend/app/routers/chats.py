@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_db
 from app.auth.dependencies import get_verified_user
+from app.core.sentinel import chat_create_guard
 from app.models.user import User
 from app.models.chat import (
     ChatCreateRequest,
@@ -17,18 +18,14 @@ from app.models.chat import (
 )
 from app.models.message import MessageResponse  # required for ChatDetailResponse typing
 from app.services import chats
-from app.utils.rate_limit import RateLimiter
 
 router = APIRouter(prefix="/chats", tags=["chats"])
-
-# 10/min/user rate limit for chat creation
-chat_create_limiter = RateLimiter(limit=10, window_seconds=60, key_prefix="chat_create", fail_open=True)
 
 @router.post(
     "",
     response_model=ChatResponse,
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(chat_create_limiter)]
+    dependencies=[Depends(chat_create_guard)]
 )
 async def create_chat(
     request: ChatCreateRequest,

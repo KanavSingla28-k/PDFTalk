@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
 
 from app.auth.dependencies import get_verified_user
+from app.core.sentinel import upload_guard
 from app.db.session import get_db
 from app.models.document import (
     ConfirmUploadRequest,
@@ -34,7 +35,6 @@ from app.services.document_service import (
     transition_status,
     get_document_download_url,
 )
-from app.utils.rate_limit import RateLimiter, user_id_from_request
 from app.workers.queues import ingest_queue
 from app.workers.failure_handler import handle_ingest_failure
 
@@ -46,21 +46,6 @@ RETRY_DELAYS = [60, 300, 900]
 
 logger = structlog.get_logger()
 
-# ---------------------------------------------------------------------------
-# Rate limiter — defined once at module level, reused per request.
-# 5 uploads per user per minute (T-42 spec).
-# Uses user_id_from_request so each user has an independent counter;
-# a shared office IP won't cause colleagues to hit each other's limits.
-# ---------------------------------------------------------------------------
-
-_upload_limiter = RateLimiter(
-    limit=5,
-    window_seconds=60,
-    key_prefix="upload",
-    identifier_fn=user_id_from_request,
-    fail_open=True,
-)
-
 @router.post(
     "/upload",
     status_code=status.HTTP_202_ACCEPTED,
@@ -71,7 +56,7 @@ async def upload_document_endpoint(
     file: UploadFile = File(...),
     current_user: User = Depends(get_verified_user),
     db: AsyncSession = Depends(get_db),
-    _rate: None = Depends(_upload_limiter), 
+    _rate: None = Depends(upload_guard),
 ) -> DocumentUploadResponse:
     """
     Upload a document for RAG ingestion.
@@ -317,7 +302,7 @@ async def initiate_upload_endpoint(
     request: Request,
     current_user: User = Depends(get_verified_user),
     db: AsyncSession = Depends(get_db),
-    _rate: None = Depends(_upload_limiter),
+    _rate: None = Depends(upload_guard),
 ) -> InitiateUploadResponse:
     """
     Phase 1 of the presigned URL upload flow.
