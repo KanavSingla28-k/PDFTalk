@@ -42,6 +42,8 @@ include = ["app*"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+[tool.ruff.lint]
+ignore = ["B008", "BLE001", "G201", "SIM102", "S110", "DTZ011", "UP047", "ASYNC230"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/conftest.py" = ["E402"]
@@ -49,8 +51,14 @@ target-version = "py312"
 
 [tool.mypy]
 python_version = "3.12"
+exclude = ["^tests/"]
 strict = true
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

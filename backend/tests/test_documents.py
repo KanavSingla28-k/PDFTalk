@@ -22,6 +22,7 @@ PostgreSQL handles both, SQLite doesn't.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC
 from unittest.mock import patch
 
 from botocore.exceptions import ClientError
@@ -30,7 +31,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.document import Document, DocumentStatus
-
 
 # --------------------------------------------------------------------------- #
 # Helpers                                                                      #
@@ -289,9 +289,9 @@ class TestListDocuments:
         doc_b = await _seed_document(db, verified_user.id, filename="newer.pdf")
 
         # Explicitly backdate doc_a to prevent identical timestamp sorting issues on fast SQLite in-memory tests
-        from datetime import datetime, timedelta, timezone
+        from datetime import datetime, timedelta
 
-        doc_a.created_at = datetime.now(timezone.utc) - timedelta(seconds=10)
+        doc_a.created_at = datetime.now(UTC) - timedelta(seconds=10)
         db.add(doc_a)
         await db.commit()
 

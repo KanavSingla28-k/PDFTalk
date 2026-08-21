@@ -26,12 +26,13 @@ Fields never logged (scrubbed at the processor level):
     token_hash, email, email_lower, authorization, content (document text)
 """
 
-from typing import List
 import logging
 from typing import cast
+
 import structlog
 from structlog.types import Processor
 from structlog.typing import EventDict, WrappedLogger
+
 from app.core.config import settings
 
 # ---------------------------------------------------------------------------
@@ -108,7 +109,7 @@ def _copy_stdlib_extras(
 
 
 def configure_logging() -> None:
-    shared_processors: List[Processor] = [
+    shared_processors: list[Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,  # safe once stdlib is wired

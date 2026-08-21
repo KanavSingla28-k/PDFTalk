@@ -60,23 +60,22 @@ intentional and critical for correctness:
 """
 
 from __future__ import annotations
-from fastapi import UploadFile
-
 
 import io
 import uuid
+
 import structlog
+from fastapi import UploadFile
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.exceptions import QuotaExceededError, DocumentNotFoundError, InvalidStatusTransitionError
-from app.models.user import User
-from app.models.document import Document, DocumentStatus, _ALLOWED_TRANSITIONS
-from app.services.file_validation import validate_upload, validate_upload_metadata
 from app.core.config import settings
+from app.exceptions import DocumentNotFoundError, InvalidStatusTransitionError, QuotaExceededError
+from app.models.document import _ALLOWED_TRANSITIONS, Document, DocumentStatus
+from app.models.user import User
+from app.services.file_validation import validate_upload, validate_upload_metadata
 from app.utils.s3_client import build_document_s3_key, s3_client
-
 
 logger = structlog.get_logger()
 

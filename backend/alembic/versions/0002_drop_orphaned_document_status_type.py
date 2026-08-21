@@ -17,7 +17,6 @@ No table or column changes. Safe to run on a live DB.
 
 from alembic import op
 
-
 revision = "0002"
 down_revision = "0001"
 branch_labels = None

@@ -7,17 +7,18 @@ Single entry point for all OpenAI API calls.
 from __future__ import annotations
 
 import asyncio
-import structlog
 import time
-from typing import AsyncIterator, Callable, Any, overload, Literal
+from collections.abc import AsyncIterator, Callable
+from typing import Any, Literal, overload
 
-from openai import AsyncOpenAI, APIStatusError, RateLimitError
+import structlog
+from openai import APIStatusError, AsyncOpenAI, RateLimitError
 from openai.types.chat import ChatCompletionMessageParam
 from openai.types.completion_usage import CompletionUsage
 
 from app.core.config import settings
 from app.utils import redis_client as rc
-from app.utils.metrics import openai_errors_total, daily_quota_breaches_total
+from app.utils.metrics import daily_quota_breaches_total, openai_errors_total
 
 logger = structlog.get_logger(__name__)
 

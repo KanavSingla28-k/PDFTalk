@@ -10,16 +10,17 @@ These tests verify that the PDFTalk/Sentinel integration correctly:
 - Routes anonymous and tenant guards to correct Sentinel factories
 """
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 from fastapi import HTTPException, Request, Response
 
 from app.core.sentinel import (
-    _make_tenant_guard,
-    _make_anonymous_guard,
     _adapt_sentinel_error,
+    _make_anonymous_guard,
+    _make_tenant_guard,
 )
-from app.exceptions import RateLimitExceededError, RateLimiterUnavailableError
+from app.exceptions import RateLimiterUnavailableError, RateLimitExceededError
 
 
 class TestSentinelAdapter:
@@ -199,13 +200,13 @@ class TestExportedGuards:
 
     def test_all_guards_exported(self):
         from app.core.sentinel import (
+            chat_create_guard,
+            login_guard,
+            query_guard,
             register_guard,
             resend_guard,
-            login_guard,
             reset_guard,
             upload_guard,
-            query_guard,
-            chat_create_guard,
         )
 
         guards = [
@@ -243,8 +244,9 @@ class TestPolicyConfiguration:
         assert set(config.policies.keys()) == expected_ids
 
     def test_anonymous_policies_use_token_bucket(self):
-        from app.core.sentinel import config
         from sentinel.models import AlgorithmType
+
+        from app.core.sentinel import config
 
         for policy_id in [
             "pdftalk.auth.register",
@@ -258,8 +260,9 @@ class TestPolicyConfiguration:
             assert policy.fail_mode.value == "fail_open"
 
     def test_tenant_policies_use_sliding_window(self):
-        from app.core.sentinel import config
         from sentinel.models import AlgorithmType
+
+        from app.core.sentinel import config
 
         for policy_id in [
             "pdftalk.documents.upload",

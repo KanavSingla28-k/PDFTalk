@@ -18,16 +18,18 @@ Response shape (all errors):
     }
 """
 
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError
 import logging
 import uuid
+
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+
 from app.utils.openai_client import (
     CircuitBreakerOpenError,
+    DailyQueryQuotaExceededError,
     DailyQuotaExceededError,
     OpenAIRetryExhaustedError,
-    DailyQueryQuotaExceededError,
 )
 
 logger = logging.getLogger(__name__)

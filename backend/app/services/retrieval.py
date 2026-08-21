@@ -26,16 +26,16 @@ Design notes:
 
 from __future__ import annotations
 
-import structlog
 import uuid
 from dataclasses import dataclass
 
+import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
 
-from app.utils.openai_client import create_embeddings
 from app.core.config import settings
+from app.utils.openai_client import create_embeddings
 
 logger = structlog.get_logger(__name__)
 

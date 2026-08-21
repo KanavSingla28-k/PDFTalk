@@ -1,13 +1,14 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+
+import re
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 from sqlalchemy import DateTime, ForeignKey, Index, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from pydantic import BaseModel, EmailStr, field_validator, ConfigDict
-import re
 
 from app.db.base import Base
 
@@ -39,7 +40,7 @@ class RefreshToken(Base):
     )
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    user: Mapped["User"] = relationship(back_populates="refresh_tokens")
+    user: Mapped[User] = relationship(back_populates="refresh_tokens")
 
 
 class EmailVerification(Base):
@@ -58,7 +59,7 @@ class EmailVerification(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    user: Mapped["User"] = relationship(back_populates="email_verifications")
+    user: Mapped[User] = relationship(back_populates="email_verifications")
 
 
 class PasswordReset(Base):
@@ -80,7 +81,7 @@ class PasswordReset(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    user: Mapped["User"] = relationship(back_populates="password_resets")
+    user: Mapped[User] = relationship(back_populates="password_resets")
 
 
 class RegisterRequest(BaseModel):
@@ -177,7 +178,7 @@ class LoginResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int  # seconds until access token expiry
-    user: "UserInfo"
+    user: UserInfo
 
 
 class UserInfo(BaseModel):

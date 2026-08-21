@@ -1,9 +1,11 @@
-import boto3
-from botocore.exceptions import ClientError
-from typing import BinaryIO, cast, Any
-from app.core.config import settings
-import structlog
 from pathlib import Path
+from typing import Any, BinaryIO, cast
+
+import boto3
+import structlog
+from botocore.exceptions import ClientError
+
+from app.core.config import settings
 
 logger = structlog.get_logger()
 

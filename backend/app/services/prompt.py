@@ -1,5 +1,6 @@
+from typing import TYPE_CHECKING, cast
+
 import tiktoken
-from typing import cast, TYPE_CHECKING
 from openai.types.chat import ChatCompletionMessageParam
 from prometheus_client import Counter
 

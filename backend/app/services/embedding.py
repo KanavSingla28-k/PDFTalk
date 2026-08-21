@@ -17,9 +17,10 @@ The caller (workers/ingest.py) is responsible for:
 from __future__ import annotations
 
 import asyncio
-import structlog
 import math
 from typing import TypeVar
+
+import structlog
 
 from app.utils.openai_client import create_embeddings
 

@@ -1,11 +1,13 @@
 from __future__ import annotations
+
 import enum
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
-from pydantic import BaseModel, ConfigDict
 
-from sqlalchemy import DateTime, ForeignKey, Index, Text, func, Integer, Enum as SQLEnum
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, Text, func
+from sqlalchemy import Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -54,7 +56,7 @@ class Message(Base):
     )
 
     # Relationships
-    chat: Mapped["Chat"] = relationship(back_populates="messages")
+    chat: Mapped[Chat] = relationship(back_populates="messages")
 
 
 class MessageResponse(BaseModel):

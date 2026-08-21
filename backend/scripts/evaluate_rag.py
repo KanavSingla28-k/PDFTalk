@@ -2,21 +2,23 @@ import argparse
 import asyncio
 import csv
 import json
+from typing import Any
+
 import structlog
 from sqlalchemy import select
 
 from app.db.session import AsyncSessionLocal
-from app.models.user import User
-from app.models.document import Document
 from app.models.chunk import Chunk
-from app.utils.openai_client import chat_complete
-from app.services.retrieval import retrieve_similar_chunks
+from app.models.document import Document
+from app.models.user import User
 from app.services.prompt import build_messages
+from app.services.retrieval import retrieve_similar_chunks
+from app.utils.openai_client import chat_complete
 
 logger = structlog.get_logger(__name__)
 
 
-async def generate_qa_pairs(text_chunks: list[str], num_pairs: int = 20) -> list[dict]:
+async def generate_qa_pairs(text_chunks: list[str], num_pairs: int = 20) -> list[dict[str, Any]]:
     """Uses LLM to generate Q&A pairs from text chunks."""
     logger.info("Generating Q&A pairs via LLM...")
     prompt = f"""
@@ -43,7 +45,7 @@ Context:
             response_text = response_text[3:-3].strip()
 
         qa_pairs = json.loads(response_text)
-        return qa_pairs
+        return list(qa_pairs)
     except Exception as e:
         logger.error(f"Failed to generate Q&A pairs: {e}")
         return []
@@ -75,13 +77,13 @@ Respond strictly with a JSON object with two keys:
             response_text = response_text[3:-3].strip()
 
         result = json.loads(response_text)
-        return result.get("is_correct", False)
+        return bool(result.get("is_correct", False))
     except Exception as e:
         logger.error(f"Failed to grade answer: {e}")
         return False
 
 
-async def run_evaluation(user_email: str):
+async def run_evaluation(user_email: str) -> None:
     async with AsyncSessionLocal() as db:
         # 1. Fetch User
         result = await db.execute(select(User).where(User.email_lower == user_email.lower()))
@@ -98,7 +100,7 @@ async def run_evaluation(user_email: str):
             return
 
         doc = documents[0]
-        logger.info(f"Selected Document: {doc.filename} (ID: {doc.id})")
+        logger.info(f"Selected Document: {doc.filename} (ID: {doc.id})")  # type: ignore[attr-defined]
 
         # 3. Fetch chunks for generation
         result = await db.execute(select(Chunk).where(Chunk.document_id == doc.id).limit(20))
@@ -107,7 +109,7 @@ async def run_evaluation(user_email: str):
             logger.error(f"No chunks found for document {doc.id}.")
             return
 
-        text_chunks = [c.text for c in chunks]
+        text_chunks = [c.text for c in chunks]  # type: ignore[attr-defined]
 
         # 4. Generate Dataset
         qa_pairs = await generate_qa_pairs(text_chunks, num_pairs=20)

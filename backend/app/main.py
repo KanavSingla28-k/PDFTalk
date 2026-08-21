@@ -1,25 +1,26 @@
-from contextlib import asynccontextmanager
-from prometheus_fastapi_instrumentator import Instrumentator
-from typing import AsyncGenerator
 import ipaddress
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request, HTTPException, status, Depends
+from fastapi import Depends, FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 
 from app.core.config import settings
-from app.core.sentinel import guard as sentinel_guard, redis as sentinel_redis
+from app.core.sentinel import guard as sentinel_guard
+from app.core.sentinel import redis as sentinel_redis
 from app.db.session import check_db_connection, engine
 from app.exceptions import register_exception_handlers
 from app.middleware.logging import RequestLoggingMiddleware
 from app.middleware.security import SecurityHeadersMiddleware
 from app.routers.auth import router as auth_router
+from app.routers.chats import router as chat_router
 from app.routers.documents import router as document_router
-from app.routers.query import router as query_router
 from app.routers.health import router as health_router
 from app.routers.internal import router as internal_router
+from app.routers.query import router as query_router
 from app.utils.logging import configure_logging
 from app.utils.redis_client import get_pool, get_redis
-from app.routers.chats import router as chat_router
 
 
 @asynccontextmanager
@@ -30,7 +31,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await check_db_connection()
 
     r = get_redis()
-    await r.ping()
+    await r.ping()  # type: ignore[misc]
 
     # Sentinel rate limiter initialization
     await sentinel_redis.assert_noeviction()

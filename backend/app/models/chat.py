@@ -1,18 +1,19 @@
 from __future__ import annotations
+
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
-from pydantic import BaseModel, ConfigDict, Field
 
-from sqlalchemy import DateTime, ForeignKey, Index, Text, func, JSON
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, Text, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 if TYPE_CHECKING:
-    from app.models.user import User
     from app.models.message import Message
+    from app.models.user import User
 
 from app.models.message import MessageResponse
 
@@ -51,8 +52,8 @@ class Chat(Base):
     )
 
     # Relationships
-    user: Mapped["User"] = relationship(back_populates="chats")
-    messages: Mapped[list["Message"]] = relationship(
+    user: Mapped[User] = relationship(back_populates="chats")
+    messages: Mapped[list[Message]] = relationship(
         back_populates="chat", cascade="all, delete-orphan"
     )
 
@@ -76,7 +77,7 @@ class ChatResponse(BaseModel):
 
 
 class ChatDetailResponse(ChatResponse):
-    messages: list["MessageResponse"] = Field(default_factory=list)
+    messages: list[MessageResponse] = Field(default_factory=list)
     missing_document_ids: list[str] = Field(default_factory=list)
 
 

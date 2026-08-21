@@ -1,8 +1,10 @@
 # tests/services/test_extraction.py
 
-import pytest
 from unittest.mock import patch
-from app.services.extraction import extract_text, ExtractionError
+
+import pytest
+
+from app.services.extraction import ExtractionError, extract_text
 
 
 def _make_pdf(text: str = "Hello world") -> bytes:
@@ -57,16 +59,19 @@ def test_extract_unsupported_mime_raises():
 
 
 def test_extract_corrupt_pdf_raises():
-    with patch("app.services.extraction.s3_client.download_file", return_value=b"not a pdf"):
-        with pytest.raises(ExtractionError) as exc_info:
-            list(extract_text("user/doc/file.pdf", "application/pdf"))
+    with (
+        patch("app.services.extraction.s3_client.download_file", return_value=b"not a pdf"),
+        pytest.raises(ExtractionError) as exc_info,
+    ):
+        list(extract_text("user/doc/file.pdf", "application/pdf"))
     assert "Corrupt" in exc_info.value.reason
 
 
 def test_extract_image_only_pdf_triggers_ocr():
     """A PDF page with no text layer should fall through to OCR."""
-    import fitz
     from unittest.mock import patch
+
+    import fitz
 
     # Build a PDF whose single page has no text (just a blank page)
     doc = fitz.open()

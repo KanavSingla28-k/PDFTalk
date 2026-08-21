@@ -9,17 +9,18 @@ because Settings() is instantiated at module-level in config.py the moment
 any app module is imported.
 """
 
+import atexit
 import os
+import shutil
+import tempfile
 import uuid
+
 import pytest
 import pytest_asyncio
-import tempfile
-import shutil
-import atexit
+from fastapi import Request, Response
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
-from fastapi import Request, Response
 
 # ---------------------------------------------------------------------------
 # Environment setup — MUST be first, before any app.* import
@@ -62,7 +63,6 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 
-
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 
@@ -73,16 +73,15 @@ def mock_sentinel_guards():
     Unit tests don't run FastAPI lifespan, so Sentinel scripts aren't loaded.
     Overriding the guards prevents RuntimeError about unloaded scripts.
     """
-    from fastapi import Request, Response
 
     from app.core.sentinel import (
+        chat_create_guard,
+        login_guard,
+        query_guard,
         register_guard,
         resend_guard,
-        login_guard,
         reset_guard,
         upload_guard,
-        query_guard,
-        chat_create_guard,
     )
     from app.main import app
 

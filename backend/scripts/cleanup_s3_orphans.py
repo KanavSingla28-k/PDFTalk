@@ -19,8 +19,10 @@ import asyncio
 import logging
 import os
 import sys
-from datetime import datetime, timezone, timedelta
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy import select
+
 from app.core.config import settings
 from app.db.session import AsyncSessionLocal
 from app.models.document import Document
@@ -69,7 +71,7 @@ async def run_cleanup() -> None:
     paginator = s3_client._client.get_paginator("list_objects_v2")
     pages = paginator.paginate(Bucket=settings.S3_BUCKET_NAME)
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     orphans_deleted = 0
     errors = 0
 

@@ -1,12 +1,13 @@
 import uuid
+from unittest.mock import patch
+
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
-from unittest.mock import patch
 
-from app.models.document import Document, DocumentStatus
-from app.models.chunk import Chunk
 from app.models.chat import Chat
+from app.models.chunk import Chunk
+from app.models.document import Document, DocumentStatus
 
 pytestmark = pytest.mark.integration
 

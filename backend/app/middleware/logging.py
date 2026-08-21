@@ -28,7 +28,7 @@ Execution order in the middleware stack (last added = outermost):
 
 import time
 import uuid
-from typing import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
 import structlog
 from fastapi import Request

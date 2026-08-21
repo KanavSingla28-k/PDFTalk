@@ -1,42 +1,42 @@
 import math
 import uuid
 from typing import Any
-from rq import Retry, Callback
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status, Request
-from fastapi.responses import Response
-from sqlalchemy.ext.asyncio import AsyncSession
 import structlog
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile, status
+from fastapi.responses import Response
+from rq import Callback, Retry
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_verified_user
 from app.core.sentinel import upload_guard
 from app.db.session import get_db
+from app.exceptions import DocumentNotFoundError
 from app.models.document import (
     ConfirmUploadRequest,
     ConfirmUploadResponse,
+    DocumentDownloadUrlResponse,
     DocumentListResponse,
     DocumentStatus,
     DocumentStatusResponse,
     DocumentUploadResponse,
     InitiateUploadRequest,
     InitiateUploadResponse,
-    DocumentDownloadUrlResponse,
 )
 from app.models.user import User
-from app.exceptions import DocumentNotFoundError
 from app.services.document_service import (
     confirm_upload,
     count_user_documents,
     delete_document,
+    get_document_download_url,
     get_document_for_user,
     get_user_documents,
     initiate_upload,
-    upload_document,
     transition_status,
-    get_document_download_url,
+    upload_document,
 )
-from app.workers.queues import ingest_queue
 from app.workers.failure_handler import handle_ingest_failure
+from app.workers.queues import ingest_queue
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -385,6 +385,7 @@ async def confirm_upload_endpoint(
       503  Unavailable — RQ queue is down; document rolled back to PENDING_UPLOAD
     """
     from botocore.exceptions import ClientError
+
     from app.exceptions import DocumentNotFoundError
 
     try:

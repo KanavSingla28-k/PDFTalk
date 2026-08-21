@@ -1,14 +1,13 @@
-import structlog
 import uuid
-
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
-from fastapi.responses import JSONResponse, RedirectResponse
 from typing import Literal
 
+import structlog
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import JSONResponse, RedirectResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import Response as StarletteResponse
 
+from app.auth.dependencies import get_verified_user
 from app.auth.tokens import (
     TokenExpiredError,
     TokenInvalidError,
@@ -18,27 +17,25 @@ from app.auth.tokens import (
     validate_and_rotate_refresh_token,
 )
 from app.core.config import settings
+from app.core.sentinel import login_guard, register_guard, resend_guard, reset_guard
 from app.db.session import get_db
 from app.models.auth import (
-    RegisterRequest,
-    RegisterResponse,
+    ForgotPasswordRequest,
     LoginRequest,
     LoginResponse,
-    UserInfo,
     MeResponse,
     RefreshResponse,
+    RegisterRequest,
+    RegisterResponse,
     ResendVerificationRequest,
-    ForgotPasswordRequest,
     ResetPasswordRequest,
+    UserInfo,
 )
-from app.auth.dependencies import get_verified_user
-from app.core.sentinel import register_guard, resend_guard, login_guard, reset_guard
-from app.services import user_service
-from app.services.email_verification import verify_token, send_verification_email_for_user
-from app.services.password_reset import initiate_password_reset, consume_reset_token
-from app.services.user_service import login as login_user
 from app.models.user import User
-
+from app.services import user_service
+from app.services.email_verification import send_verification_email_for_user, verify_token
+from app.services.password_reset import consume_reset_token, initiate_password_reset
+from app.services.user_service import login as login_user
 
 logger = structlog.get_logger(__name__)
 
@@ -422,6 +419,7 @@ async def get_me(
     401 if both are absent or invalid.
     """
     from sqlalchemy import select as sa_select
+
     from app.models.user import User as UserModel
 
     # ── Path 1: try the Bearer token first ──────────────────────────────

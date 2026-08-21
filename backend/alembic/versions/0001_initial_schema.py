@@ -11,9 +11,10 @@ IVFFlat requires data to build its clusters. Add it in migration 002
 once you have real document data loaded. See ADR-001 in the task list.
 """
 
-from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 # revision identifiers
 revision = "0001"

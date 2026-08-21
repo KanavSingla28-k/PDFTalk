@@ -7,9 +7,10 @@ They are marked with `integration` and will be skipped if Redis is not available
 Run with: pytest -m integration
 """
 
+from uuid import uuid4
+
 import pytest
 import pytest_asyncio
-from uuid import uuid4
 from httpx import ASGITransport, AsyncClient
 
 from app.core.config import settings
@@ -55,14 +56,20 @@ class TestSentinelIntegration:
     async def setup_integration(self, db):
         """Clear the dependency overrides set by conftest.py's `mock_sentinel_guards`
         so that the real Sentinel guards run for integration tests."""
-        from app.core.sentinel import (
-            register_guard, resend_guard, login_guard, reset_guard,
-            upload_guard, query_guard, chat_create_guard,
-            redis as global_redis, guard as sentinel_guard
-        )
-        from app.db.session import get_db
         import redis.asyncio as aioredis
+
         from app.core.config import settings
+        from app.core.sentinel import (
+            chat_create_guard,
+            login_guard,
+            query_guard,
+            register_guard,
+            resend_guard,
+            reset_guard,
+            upload_guard,
+        )
+        from app.core.sentinel import redis as global_redis
+        from app.db.session import get_db
 
         # Re-initialize the global Redis client so it binds to the new test's event loop
         global_redis._pool = aioredis.ConnectionPool.from_url(
@@ -88,7 +95,6 @@ class TestSentinelIntegration:
     async def cleanup_redis(self, setup_integration):
         """Flush all Sentinel rate-limit keys before and after each test."""
         import redis.asyncio as redis
-        from app.core.sentinel import guard as sentinel_guard
 
         r = redis.from_url(
             settings.SENTINEL_REDIS_URL or "redis://:sentinel-local-dev-password@localhost:6380/0"
@@ -170,8 +176,9 @@ class TestSentinelIntegration:
 
     async def test_authenticated_endpoint_rate_limit(self, client):
         """Authenticated endpoints use tenant JWT identity."""
-        import jwt
         import time
+
+        import jwt
 
         token = jwt.encode(
             {"sub": str(uuid4()), "exp": int(time.time()) + 3600},
@@ -192,8 +199,9 @@ class TestSentinelIntegration:
 
     async def test_shared_upload_counter(self, client):
         """Upload and initiate-upload share the same rate limit counter."""
-        import jwt
         import time
+
+        import jwt
 
         token = jwt.encode(
             {"sub": str(uuid4()), "exp": int(time.time()) + 3600},
@@ -236,8 +244,9 @@ class TestSentinelIntegration:
 
     async def test_tenant_isolation(self, client):
         """Different tenants have independent rate limit buckets."""
-        import jwt
         import time
+
+        import jwt
 
         token_a = jwt.encode(
             {"sub": str(uuid4()), "exp": int(time.time()) + 3600},
@@ -372,9 +381,10 @@ class TestSentinelRedisRequirements:
         """Sentinel Lua scripts should be loaded."""
         # load_scripts() is normally called during FastAPI lifespan startup.
         # We call it directly here since this test does not use the client fixture.
-        from app.core.sentinel import redis as global_redis, guard as sentinel_guard
         import redis.asyncio as aioredis
+
         from app.core.config import settings
+        from app.core.sentinel import redis as global_redis
         
         global_redis._pool = aioredis.ConnectionPool.from_url(
             settings.SENTINEL_REDIS_URL or "redis://:sentinel-local-dev-password@localhost:6380/0"

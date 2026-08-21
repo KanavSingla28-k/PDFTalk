@@ -1,6 +1,7 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
+
 import tiktoken
-from typing import Iterable
 
 CHUNK_SIZE = 512
 CHUNK_OVERLAP = 64

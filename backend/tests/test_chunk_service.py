@@ -1,10 +1,10 @@
 import uuid
-import pytest
 from unittest.mock import MagicMock
 
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.services.chunk_service import ChunkData, ChunkCountMismatchError, store_chunks
+from app.services.chunk_service import ChunkCountMismatchError, ChunkData, store_chunks
 
 
 def make_chunks(n: int) -> list[ChunkData]:

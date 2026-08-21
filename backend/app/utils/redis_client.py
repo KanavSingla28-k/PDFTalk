@@ -1,10 +1,11 @@
-from datetime import date, datetime, timezone, timedelta
-from typing import cast
-import redis.asyncio as aioredis
-from app.core.config import settings
-import redis as sync_redis_lib
-
 import asyncio
+from datetime import UTC, datetime, timedelta
+from typing import cast
+
+import redis as sync_redis_lib
+import redis.asyncio as aioredis
+
+from app.core.config import settings
 
 # Dictionary mapping event loops to their connection pools
 _pools: dict[asyncio.AbstractEventLoop, aioredis.ConnectionPool] = {}
@@ -27,9 +28,9 @@ def get_redis() -> aioredis.Redis:
 
 def seconds_until_utc_midnight() -> int:
     """Returns seconds until the next UTC midnight, plus a 1-hour buffer."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     tomorrow = now + timedelta(days=1)
-    midnight = datetime(tomorrow.year, tomorrow.month, tomorrow.day, tzinfo=timezone.utc)
+    midnight = datetime(tomorrow.year, tomorrow.month, tomorrow.day, tzinfo=UTC)
     return int((midnight - now).total_seconds()) + 3600
 
 
@@ -54,7 +55,7 @@ async def increment_counter(key: str, ttl_seconds: int | None = None) -> int:
     if count == 1 and ttl_seconds:
         # Only set TTL on the first write — avoids resetting the window on every hit
         await r.expire(key, ttl_seconds)
-    return count
+    return int(count)
 
 
 # Key builders — central place for all Redis key patterns
@@ -67,17 +68,17 @@ def key_account_lockout(user_id: str) -> str:
 
 
 def key_daily_token_quota(user_id: str) -> str:
-    today = date.today().strftime("%Y%m%d")
+    today = datetime.now(UTC).strftime("%Y%m%d")
     return f"quota:tokens:{user_id}:{today}"
 
 
 def key_daily_token_stats() -> str:
-    today = date.today().strftime("%Y%m%d")
+    today = datetime.now(UTC).strftime("%Y%m%d")
     return f"admin:stats:tokens:{today}"
 
 
 def key_daily_query_quota(user_id: str) -> str:
-    today = date.today().strftime("%Y%m%d")
+    today = datetime.now(UTC).strftime("%Y%m%d")
     return f"quota:queries:{user_id}:{today}"
 
 

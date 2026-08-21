@@ -8,11 +8,11 @@ Called from POST /internal/alerts/webhook via asyncio.create_task()
 so the webhook response is immediate and dispatch is fire-and-forget.
 """
 
-import structlog
 from typing import Any
 
 import httpx
 import resend
+import structlog
 
 from app.core.config import settings
 

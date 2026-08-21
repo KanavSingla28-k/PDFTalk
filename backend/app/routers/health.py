@@ -1,7 +1,7 @@
 import asyncio
-import time
 import importlib.metadata
-from datetime import datetime, timezone
+import time
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter
@@ -33,7 +33,7 @@ async def _check_redis() -> dict[str, Any]:
     start = time.monotonic()
     try:
         r = get_redis()
-        await asyncio.wait_for(r.ping(), timeout=TIMEOUT)
+        await asyncio.wait_for(r.ping(), timeout=TIMEOUT)  # type: ignore[arg-type]
         latency_ms = round((time.monotonic() - start) * 1000)
         return {"status": "ok", "latency_ms": latency_ms}
     except Exception as e:
@@ -80,7 +80,7 @@ async def readiness_check() -> JSONResponse:
     body = {
         "status": "ok" if all_ok else "degraded",
         "version": version,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "checks": {
             "db": db_result,
             "redis": redis_result,

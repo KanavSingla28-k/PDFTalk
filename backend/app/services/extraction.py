@@ -1,10 +1,13 @@
 from __future__ import annotations
 
-from enum import Enum
-import structlog
 import unicodedata
+from collections.abc import Iterator
+from enum import Enum
+from typing import Any
+
 import fitz  # PyMuPDF
-from typing import Iterator, Any
+import structlog
+
 from app.exceptions import ExtractionError
 from app.utils.s3_client import s3_client
 

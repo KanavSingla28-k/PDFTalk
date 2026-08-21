@@ -9,14 +9,15 @@ Covers:
 - Logout & session invalidation
 """
 
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from datetime import datetime, timedelta, timezone
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.auth import EmailVerification, RefreshToken
 from app.models.user import User
-from app.models.auth import RefreshToken, EmailVerification
 
 pytestmark = pytest.mark.asyncio
 
@@ -256,8 +257,8 @@ async def test_login_lockout_after_10_attempts(async_client: AsyncClient, db: As
     user = result.scalar_one()
     locked_until = user.locked_until
     if locked_until.tzinfo is None:
-        locked_until = locked_until.replace(tzinfo=timezone.utc)
-    assert locked_until > datetime.now(timezone.utc)
+        locked_until = locked_until.replace(tzinfo=UTC)
+    assert locked_until > datetime.now(UTC)
 
     # 11th attempt even with correct password should fail
     resp = await async_client.post(
@@ -306,7 +307,7 @@ async def test_refresh_token_rotation_and_grace_period(async_client: AsyncClient
     token_hash = _hash_token(old_refresh_token)
     result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == token_hash))
     stored = result.scalar_one()
-    stored.revoked_at = datetime.now(timezone.utc) - timedelta(seconds=65)
+    stored.revoked_at = datetime.now(UTC) - timedelta(seconds=65)
     await db.commit()
 
     # 5. Replay after grace period (should fail)

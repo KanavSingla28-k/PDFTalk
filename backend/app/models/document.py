@@ -1,21 +1,21 @@
 from __future__ import annotations
+
 import enum
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, Index, Text, func, CheckConstraint
 from pydantic import BaseModel, ConfigDict, Field
-
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, ForeignKey, Index, Integer, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from app.models.user import User
     from app.models.chunk import Chunk
     from app.models.job_log import JobLog
+    from app.models.user import User
 
 
 class DocumentStatus(str, enum.Enum):
@@ -93,11 +93,11 @@ class Document(Base):
     )
 
     # Relationships
-    user: Mapped["User"] = relationship(back_populates="documents")
-    chunks: Mapped[list["Chunk"]] = relationship(
+    user: Mapped[User] = relationship(back_populates="documents")
+    chunks: Mapped[list[Chunk]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
     )
-    job_logs: Mapped[list["JobLog"]] = relationship(
+    job_logs: Mapped[list[JobLog]] = relationship(
         back_populates="document", cascade="all, delete-orphan"
     )
 

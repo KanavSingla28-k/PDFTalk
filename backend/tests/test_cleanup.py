@@ -1,8 +1,8 @@
 import uuid
-from datetime import datetime, timezone, timedelta
-from unittest.mock import patch, MagicMock
-from rq.exceptions import NoSuchJobError
+from datetime import UTC, datetime, timedelta
+from unittest.mock import MagicMock, patch
 
+from rq.exceptions import NoSuchJobError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
@@ -20,7 +20,7 @@ SyncSession = sessionmaker(bind=sync_engine)
 def test_cleanup_stale_documents_job() -> None:
     # Seed various documents
     user_id = uuid.uuid4()
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # 1. Stale PENDING document (updated 31 minutes ago)
     doc_stale_pending = Document(

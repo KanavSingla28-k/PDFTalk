@@ -1,15 +1,16 @@
 import os
 import uuid
+
 import pytest
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.document import Document, DocumentStatus
-from app.models.chunk import Chunk
-from app.workers.ingest import _run, _fail
-from app.services.chunking import ChunkData
 from app.exceptions import ChunkingError
+from app.models.chunk import Chunk
+from app.models.document import Document, DocumentStatus
+from app.services.chunking import ChunkData
+from app.workers.ingest import _fail, _run
 
 pytestmark = pytest.mark.integration
 
@@ -58,7 +59,7 @@ async def test_full_ingestion_pipeline(
 
     # Actually, we should just mock extract_text and embed_texts to make this a fast and reliable test
     # instead of hitting PyMuPDF and OpenAI, since we're testing the integration flow of the worker & db.
-    from unittest.mock import patch, AsyncMock
+    from unittest.mock import AsyncMock, patch
 
     with (
         patch(
@@ -111,14 +112,13 @@ async def test_ingestion_quota_exceeded(
         patch("app.workers.ingest.extract_text", return_value="Text."),
         patch(
             "app.workers.ingest._check_token_budget", side_effect=ChunkingError("Quota exceeded")
-        ),
+        ),pytest.raises(ChunkingError, match="Quota exceeded")
     ):
-        with pytest.raises(ChunkingError, match="Quota exceeded"):
-            try:
-                await db.run_sync(_run, uuid.UUID(doc_id))
-            except Exception as exc:
-                await db.run_sync(_fail, uuid.UUID(doc_id), exc)
-                raise
+        try:
+            await db.run_sync(_run, uuid.UUID(doc_id))
+        except Exception as exc:
+            await db.run_sync(_fail, uuid.UUID(doc_id), exc)
+            raise
 
     # Verify Document is FAILED
     result = await db.execute(select(Document).where(Document.id == uuid.UUID(doc_id)))

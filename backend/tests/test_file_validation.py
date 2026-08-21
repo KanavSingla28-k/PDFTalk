@@ -23,18 +23,16 @@ if sys.platform == "win32":
 else:
     import magic
 import pytest
-
 from fastapi import UploadFile
 
 from app.exceptions import FileValidationError
 from app.services.file_validation import (
     MAX_FILE_SIZE_BYTES,
-    validate_upload,
     _check_magic_bytes,
     _check_mime,
     _read_and_check_size,
+    validate_upload,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -143,16 +141,15 @@ class TestCheckMagicBytes:
         # Construct bytes that libmagic calls application/pdf but lack %PDF.
         # In practice this is hard to trigger with real libmagic, so we test
         # the branch indirectly: patch just the magic.from_buffer call.
-        import unittest.mock as mock
+        from unittest import mock
 
         fake_pdf_body = b"NOTPDF fake content body"
 
         with mock.patch(
             "app.services.file_validation.magic.from_buffer",
             return_value="application/pdf",
-        ):
-            with pytest.raises(FileValidationError) as exc_info:
-                _check_magic_bytes(fake_pdf_body)
+        ), pytest.raises(FileValidationError) as exc_info:
+            _check_magic_bytes(fake_pdf_body)
 
         assert exc_info.value.reason == "invalid_magic_bytes"
 
@@ -199,7 +196,7 @@ class TestValidateUpload:
 
     @pytest.mark.asyncio
     async def test_invalid_pdf_magic_raises(self):
-        import unittest.mock as mock
+        from unittest import mock
 
         fake_pdf = b"NOTPDF fake pdf body"
         upload = _make_upload(fake_pdf)
@@ -207,9 +204,8 @@ class TestValidateUpload:
         with mock.patch(
             "app.services.file_validation.magic.from_buffer",
             return_value="application/pdf",
-        ):
-            with pytest.raises(FileValidationError) as exc_info:
-                await validate_upload(upload)
+        ), pytest.raises(FileValidationError) as exc_info:
+            await validate_upload(upload)
 
         assert exc_info.value.reason == "invalid_magic_bytes"
 

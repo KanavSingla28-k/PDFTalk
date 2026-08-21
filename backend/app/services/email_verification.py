@@ -5,7 +5,7 @@ Email verification token lifecycle.
 import hashlib
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import delete, select, update
@@ -13,8 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.models.auth import EmailVerification
-from app.workers.queues import default_queue
 from app.utils.metrics import emails_sent_total
+from app.workers.queues import default_queue
 
 log = structlog.get_logger(__name__)
 
@@ -44,7 +44,7 @@ async def generate_and_store_verification_token(
 
     raw_token = secrets.token_urlsafe(TOKEN_BYTES)
     token_hash = _hash_token(raw_token)
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=TOKEN_TTL_HOURS)
+    expires_at = datetime.now(UTC) + timedelta(hours=TOKEN_TTL_HOURS)
 
     verification = EmailVerification(
         user_id=user_uuid,
@@ -82,7 +82,7 @@ async def verify_token(raw_token: str, db: AsyncSession) -> str:
     from app.models.user import User
 
     token_hash = _hash_token(raw_token)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     result = await db.execute(
         select(EmailVerification)
@@ -97,7 +97,7 @@ async def verify_token(raw_token: str, db: AsyncSession) -> str:
 
     expires_at = record.expires_at
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        expires_at = expires_at.replace(tzinfo=UTC)
 
     if expires_at < now:
         await db.execute(delete(EmailVerification).where(EmailVerification.id == record.id))
@@ -118,7 +118,7 @@ async def verify_token(raw_token: str, db: AsyncSession) -> str:
 
 
 async def purge_expired_tokens(db: AsyncSession) -> int:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     result = await db.execute(
         delete(EmailVerification)
         .where(EmailVerification.expires_at < now)

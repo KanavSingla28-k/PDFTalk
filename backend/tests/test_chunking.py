@@ -1,5 +1,6 @@
-from app.services.chunking import chunk_text, CHUNK_SIZE, CHUNK_OVERLAP, CHUNK_STEP
 import tiktoken
+
+from app.services.chunking import CHUNK_OVERLAP, CHUNK_SIZE, CHUNK_STEP, chunk_text
 
 
 def _make_text(approx_tokens: int) -> str:

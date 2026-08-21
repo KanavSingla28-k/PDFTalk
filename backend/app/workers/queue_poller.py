@@ -10,16 +10,15 @@ Usage in workers/worker.py:
     Worker(["ingest"], connection=redis_conn).work()
 """
 
-import structlog
 import threading
 import time
 
+import structlog
 from redis import Redis
-
 from rq import Queue
 from rq.registry import FailedJobRegistry
 
-from app.utils.metrics import queue_length, dead_letter_queue_length
+from app.utils.metrics import dead_letter_queue_length, queue_length
 
 log = structlog.get_logger(__name__)
 

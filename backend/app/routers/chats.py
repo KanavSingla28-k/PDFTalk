@@ -2,21 +2,21 @@ import math
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Path, status
+from fastapi import APIRouter, Depends, Path, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
 from app.auth.dependencies import get_verified_user
 from app.core.sentinel import chat_create_guard
-from app.models.user import User
+from app.db.session import get_db
 from app.models.chat import (
     ChatCreateRequest,
-    ChatRenameRequest,
-    ChatResponse,
     ChatDetailResponse,
     ChatListResponse,
+    ChatRenameRequest,
+    ChatResponse,
 )
 from app.models.message import MessageResponse  # required for ChatDetailResponse typing
+from app.models.user import User
 from app.services import chats
 
 router = APIRouter(prefix="/chats", tags=["chats"])

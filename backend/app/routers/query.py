@@ -8,15 +8,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-import structlog
 import uuid
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
+import structlog
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from openai import APITimeoutError
 from openai.types.chat import ChatCompletionMessageParam
-from sqlalchemy import update, func
+from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_verified_user
@@ -25,21 +25,21 @@ from app.core.config import settings
 from app.core.sentinel import query_guard
 from app.db.session import get_db
 from app.models.chat import Chat
+from app.models.message import Message, MessageRole, MessageStatus
 from app.models.query import QueryRequest
 from app.models.user import User
-from app.models.message import Message, MessageRole, MessageStatus
-from app.services.query_validation import validate_chat_for_query
-from app.services.retrieval import retrieve_similar_chunks, RetrievedChunk
-from app.services.prompt import build_messages, _count_tokens
 from app.services.llm import stream_llm_response
+from app.services.prompt import _count_tokens, build_messages
+from app.services.query_validation import validate_chat_for_query
+from app.services.retrieval import RetrievedChunk, retrieve_similar_chunks
+from app.utils.metrics import messages_total, queries_total, stream_errors_total
 from app.utils.openai_client import (
     CircuitBreakerOpenError,
-    DailyQuotaExceededError,
     DailyQueryQuotaExceededError,
+    DailyQuotaExceededError,
     OpenAIRetryExhaustedError,
     check_and_increment_query_usage,
 )
-from app.utils.metrics import queries_total, stream_errors_total, messages_total
 
 logger = structlog.get_logger(__name__)
 
@@ -182,7 +182,7 @@ async def _sse_generator(
 
         yield "data: [DONE]\n\n"
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         if generation_completed:
             logger.warning(
                 "sse.post_completion_cleanup_timeout",

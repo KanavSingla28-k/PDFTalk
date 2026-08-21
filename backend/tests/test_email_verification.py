@@ -26,7 +26,7 @@ NOTE ON PATCHING:
 
 import hashlib
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -106,8 +106,9 @@ async def test_old_token_replaced_on_regenerate(db):
     await generate_and_store_verification_token(USER_ID, db)
     await db.commit()
 
-    from sqlalchemy import func, select
     import uuid as _uuid
+
+    from sqlalchemy import func, select
 
     result = await db.execute(
         select(func.count())
@@ -154,13 +155,14 @@ async def test_verify_expired_token_raises(db):
     await db.commit()
 
     # Manually back-date the token so it's expired.
-    from sqlalchemy import update
     import uuid as _uuid
+
+    from sqlalchemy import update
 
     await db.execute(
         update(EmailVerification)
         .where(EmailVerification.user_id == _uuid.UUID(USER_ID))
-        .values(expires_at=datetime.now(timezone.utc) - timedelta(hours=1))
+        .values(expires_at=datetime.now(UTC) - timedelta(hours=1))
     )
     await db.commit()
 
@@ -212,8 +214,9 @@ async def test_send_stores_token_hash_in_db(db):
         await send_verification_email_for_user(USER_ID, EMAIL, db)
         await db.commit()
 
-    from sqlalchemy import select
     import uuid as _uuid
+
+    from sqlalchemy import select
 
     result = await db.execute(
         select(EmailVerification).where(EmailVerification.user_id == _uuid.UUID(USER_ID))
@@ -232,9 +235,11 @@ async def test_send_queue_failure_propagates(db):
     fake_queue = MagicMock()
     fake_queue.enqueue.side_effect = ConnectionError("Redis is down")
 
-    with patch("app.services.email_verification.default_queue", fake_queue):
-        with pytest.raises(ConnectionError, match="Redis is down"):
-            await send_verification_email_for_user(USER_ID, EMAIL, db)
+    with (
+        patch("app.services.email_verification.default_queue", fake_queue),
+        pytest.raises(ConnectionError, match="Redis is down"),
+    ):
+        await send_verification_email_for_user(USER_ID, EMAIL, db)
 
 
 @pytest.mark.asyncio
@@ -252,8 +257,9 @@ async def test_send_does_not_commit(db):
         await db.rollback()
 
     # After rollback, no token row should exist.
-    from sqlalchemy import select
     import uuid as _uuid
+
+    from sqlalchemy import select
 
     result = await db.execute(
         select(EmailVerification).where(EmailVerification.user_id == _uuid.UUID(USER_ID))
@@ -266,7 +272,7 @@ async def test_send_does_not_commit(db):
 
 @pytest.mark.asyncio
 async def test_purge_removes_only_expired(db):
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     # Insert one valid and one expired token.
     db.add(
@@ -343,7 +349,7 @@ async def test_endpoint_expired_token_redirects_with_error_slug(async_client, db
     await db.execute(
         update(EmailVerification)
         .where(EmailVerification.user_id == _uuid.UUID(USER_ID))
-        .values(expires_at=datetime.now(timezone.utc) - timedelta(hours=1))
+        .values(expires_at=datetime.now(UTC) - timedelta(hours=1))
     )
     await db.commit()
 

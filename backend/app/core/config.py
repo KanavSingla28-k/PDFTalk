@@ -1,9 +1,9 @@
+import os
 from functools import cached_property
-from typing import Literal, Optional, Any
+from typing import Any, Literal
+
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
-import os
-
 
 env_file = os.getenv("ENV_FILE", ".env.local")
 
@@ -24,10 +24,10 @@ class Settings(BaseSettings):
             raise ValueError("JWT_SECRET_KEY must be at least 32 characters long")
         return v
 
-    RESEND_API_KEY: Optional[str] = None
+    RESEND_API_KEY: str | None = None
     FROM_EMAIL: str
 
-    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_API_KEY: str | None = None
 
     AWS_ACCESS_KEY_ID: str
     AWS_SECRET_ACCESS_KEY: str
@@ -57,7 +57,7 @@ class Settings(BaseSettings):
     GF_SERVER_SERVE_FROM_SUB_PATH: bool = True
 
     ADMIN_TOKEN: str | None = None
-    SLACK_WEBHOOK_URL: Optional[str] = None
+    SLACK_WEBHOOK_URL: str | None = None
     ALERT_EMAIL_TO: str | None = None
     EMAIL_FROM_DOMAIN: str | None = None
 
@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     # (e.g. 0.85) to be more permissive, lower it to be stricter.
     RETRIEVAL_MAX_DISTANCE: float = 0.70
     STREAM_CHUNK_TIMEOUT: int = 30
-    LOG_FORMAT: Optional[Literal["json", "pretty"]] = None
+    LOG_FORMAT: Literal["json", "pretty"] | None = None
     MAX_DAILY_QUERIES_PER_USER: int = 500
 
     # Sentinel rate limiter

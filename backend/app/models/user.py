@@ -1,22 +1,23 @@
 from __future__ import annotations
+
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Integer, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
-from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from app.models.document import Document
     from app.models.auth import (
-        RefreshToken,
         EmailVerification,
         PasswordReset,
+        RefreshToken,
     )
     from app.models.chat import Chat
+    from app.models.document import Document
 
 
 class User(Base):
@@ -48,16 +49,16 @@ class User(Base):
     )
 
     # Relationships (used by SQLAlchemy for ORM joins — not stored in DB)
-    documents: Mapped[list["Document"]] = relationship(
+    documents: Mapped[list[Document]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
+    refresh_tokens: Mapped[list[RefreshToken]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    email_verifications: Mapped[list["EmailVerification"]] = relationship(
+    email_verifications: Mapped[list[EmailVerification]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    password_resets: Mapped[list["PasswordReset"]] = relationship(
+    password_resets: Mapped[list[PasswordReset]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
-    chats: Mapped[list["Chat"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    chats: Mapped[list[Chat]] = relationship(back_populates="user", cascade="all, delete-orphan")

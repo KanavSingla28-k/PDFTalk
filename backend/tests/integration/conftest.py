@@ -1,7 +1,8 @@
+from unittest.mock import AsyncMock, patch
+
 import boto3
 import pytest
 from moto import mock_aws
-from unittest.mock import patch, AsyncMock
 
 # Single source of truth for the test bucket name.
 # Must match what s3_client._bucket will be set to.

@@ -20,13 +20,13 @@ Design (from T-16 spec):
 """
 
 import hashlib
-import structlog
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import jwt
+import structlog
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -56,7 +56,7 @@ class TokenInvalidError(ValueError):
 
 
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _hash_token(raw: str) -> str:
@@ -243,7 +243,7 @@ async def validate_and_rotate_refresh_token(
 
     expires_at = stored.expires_at
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        expires_at = expires_at.replace(tzinfo=UTC)
 
     now = _now_utc()
     if expires_at < now:
@@ -258,7 +258,7 @@ async def validate_and_rotate_refresh_token(
         revoked_at = stored.revoked_at
 
         if revoked_at.tzinfo is None:
-            revoked_at = revoked_at.replace(tzinfo=timezone.utc)
+            revoked_at = revoked_at.replace(tzinfo=UTC)
 
         grace_period_end = revoked_at + timedelta(seconds=60)
 

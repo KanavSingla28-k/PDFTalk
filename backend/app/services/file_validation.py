@@ -170,7 +170,7 @@ def _check_mime(data: bytes) -> None:
     Raises FileValidationError(reason="unsupported_mime") if the detected
     type is not in ALLOWED_MIME_TYPES.
     """
-    detected: str = magic.from_buffer(data, mime=True)
+    detected: str = magic.from_buffer(data, mime=True)  # type: ignore[no-untyped-call]
 
     if detected not in ALLOWED_MIME_TYPES:
         raise FileValidationError(
@@ -196,7 +196,7 @@ def _check_magic_bytes(data: bytes) -> None:
 
     Raises FileValidationError(reason="invalid_magic_bytes") on mismatch.
     """
-    mime: str = magic.from_buffer(data, mime=True)
+    mime: str = magic.from_buffer(data, mime=True)  # type: ignore[no-untyped-call]
 
     if mime == "application/pdf":
         if not data[:4] == b"%PDF":

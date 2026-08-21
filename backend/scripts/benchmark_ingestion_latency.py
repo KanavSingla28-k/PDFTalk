@@ -1,9 +1,9 @@
-import asyncio
-import time
 import argparse
+import asyncio
+import os
 import statistics
 import sys
-import os
+import time
 import uuid
 
 # Ensure backend directory is in sys.path
@@ -19,10 +19,10 @@ os.environ["DATABASE_URL"] = (
     "postgresql+asyncpg://pdftalk:pdftalk@localhost:5433/pdftalk"  # pragma: allowlist secret
 )
 
-from app.db.sync_session import SessionLocal
-from app.models.user import User
 from app.auth.password import hash_password
 from app.auth.tokens import create_access_token
+from app.db.sync_session import SessionLocal
+from app.models.user import User
 
 BASE_URL = os.getenv("API_URL", "http://localhost:8000")
 
@@ -61,7 +61,7 @@ def generate_pdf(size_kb: int) -> bytes:
         if i > 0 and i % 35 == 0:
             page = doc.new_page()
 
-    return doc.write()
+    return bytes(doc.write())
 
 
 async def upload_document(
@@ -108,7 +108,7 @@ async def poll_document(
         await asyncio.sleep(1.0)
 
 
-async def run_benchmark(num_docs: int, size_kb: int):
+async def run_benchmark(num_docs: int, size_kb: int) -> None:
     print(f"[*] Generating dummy PDF (approx size factor {size_kb})...")
     pdf_bytes = generate_pdf(size_kb)
 

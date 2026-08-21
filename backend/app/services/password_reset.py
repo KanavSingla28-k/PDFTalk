@@ -1,17 +1,17 @@
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.user import User
-from app.models.auth import PasswordReset, RefreshToken
 from app.auth.password import hash_password
+from app.models.auth import PasswordReset, RefreshToken
+from app.models.user import User
 from app.services.email_verification import send_verification_email_for_user
-from app.workers.queues import default_queue
 from app.utils.metrics import emails_sent_total
+from app.workers.queues import default_queue
 
 log = structlog.get_logger(__name__)
 
@@ -43,7 +43,7 @@ async def initiate_password_reset(email: str, db: AsyncSession) -> None:
 
     raw_token = secrets.token_urlsafe(TOKEN_BYTES)
     token_hash = _hash_token(raw_token)
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=TOKEN_TTL_HOURS)
+    expires_at = datetime.now(UTC) + timedelta(hours=TOKEN_TTL_HOURS)
 
     reset_record = PasswordReset(
         user_id=user.id,
@@ -69,7 +69,7 @@ async def consume_reset_token(raw_token: str, new_password: str, db: AsyncSessio
     from app.exceptions import InvalidResetTokenError
 
     token_hash = _hash_token(raw_token)
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     result = await db.execute(
         select(PasswordReset).where(PasswordReset.token_hash == token_hash).with_for_update()
@@ -82,7 +82,7 @@ async def consume_reset_token(raw_token: str, new_password: str, db: AsyncSessio
 
     expires_at = record.expires_at
     if expires_at.tzinfo is None:
-        expires_at = expires_at.replace(tzinfo=timezone.utc)
+        expires_at = expires_at.replace(tzinfo=UTC)
 
     if expires_at < now:
         await db.execute(delete(PasswordReset).where(PasswordReset.id == record.id))

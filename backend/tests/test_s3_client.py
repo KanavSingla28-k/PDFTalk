@@ -1,7 +1,8 @@
-import pytest
-import boto3
-from moto import mock_aws
 from io import BytesIO
+
+import boto3
+import pytest
+from moto import mock_aws
 
 BUCKET = "test-bucket"
 REGION = "ap-south-1"
@@ -34,7 +35,7 @@ def test_delete_object(s3):
     s3.upload_file(BytesIO(b"data"), "user1/doc2/file.txt", "text/plain")
     s3.delete_object("user1/doc2/file.txt")
     # Downloading after delete should raise
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017
         s3.download_file("user1/doc2/file.txt")
 
 

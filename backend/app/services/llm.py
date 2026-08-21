@@ -6,16 +6,17 @@ Streaming LLM service for RAG query responses.
 
 from __future__ import annotations
 
-import structlog
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
+import structlog
 from openai.types.chat import ChatCompletionMessageParam
+
+from app.utils.metrics import openai_tokens_used_total
 from app.utils.openai_client import (
+    DailyQuotaExceededError,
     _stream_chat_with_usage,
     check_and_increment_token_usage,
-    DailyQuotaExceededError,
 )
-from app.utils.metrics import openai_tokens_used_total
 
 logger = structlog.get_logger(__name__)
 

@@ -1,18 +1,19 @@
 import uuid
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.exceptions import (
+    ChatNotFoundError,
+    EmptyDocumentListError,
+    MessageNotFoundError,
+)
 from app.models.chat import Chat
 
 # from app.models.message import Message
 from app.models.document import Document
 from app.services.query_validation import validate_documents_for_query
-from app.exceptions import (
-    ChatNotFoundError,
-    MessageNotFoundError,
-    EmptyDocumentListError,
-)
 
 
 async def create_chat(user_id: uuid.UUID, document_ids: list[str], db: AsyncSession) -> Chat:
@@ -119,7 +120,8 @@ async def delete_chat(chat_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession) 
 async def truncate_chat_from_message(
     chat_id: uuid.UUID, user_id: uuid.UUID, message_id: uuid.UUID, db: AsyncSession
 ) -> None:
-    from sqlalchemy import delete, update, func
+    from sqlalchemy import delete, func, update
+
     from app.models.message import Message
 
     # 1. Verify chat ownership

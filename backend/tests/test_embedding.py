@@ -1,8 +1,9 @@
-import pytest
 import math
 from unittest.mock import AsyncMock, patch
 
-from app.services.embedding import embed_texts, _make_batches, _l2_normalize
+import pytest
+
+from app.services.embedding import _l2_normalize, _make_batches, embed_texts
 
 
 class TestEmbedding:

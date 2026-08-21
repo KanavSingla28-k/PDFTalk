@@ -1,7 +1,7 @@
 import uuid
 
+from app.services.prompt import ENCODER, build_context_block, build_messages
 from app.services.retrieval import RetrievedChunk
-from app.services.prompt import build_context_block, build_messages, ENCODER
 
 
 def make_chunk(text: str, filename: str = "doc.pdf") -> RetrievedChunk:
@@ -49,7 +49,7 @@ class TestPromptBuilder:
         # A small chunk that fits
         chunk2 = make_chunk("word " * 10, "doc.pdf")
 
-        context, included = build_context_block([chunk1, chunk2])
+        _context, included = build_context_block([chunk1, chunk2])
         assert len(included) == 1
         assert included == [chunk2]
         assert context_truncated_total._value.get() == initial_val + 1

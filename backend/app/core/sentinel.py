@@ -7,15 +7,14 @@ that adapt Sentinel's HTTPException errors to PDFTalk's exception hierarchy.
 
 # from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from urllib.parse import quote
-from typing import Callable, Awaitable
 
 from fastapi import HTTPException, Request, Response, status
 from pydantic import SecretStr
-
 from sentinel.config import AppConfig, SentinelConfig
 from sentinel.http import SentinelGuard
-from sentinel.models import AlgorithmType, FailMode, Policy, IdentityMode
+from sentinel.models import AlgorithmType, FailMode, IdentityMode, Policy
 from sentinel.redis import ScriptLoader, SentinelRedis
 
 from app.core.config import settings

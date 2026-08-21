@@ -1,7 +1,7 @@
-import pytest
 import fakeredis.aioredis
+import pytest
 
-from app.utils.redis_client import set_with_ttl, get, increment_counter
+from app.utils.redis_client import get, increment_counter, set_with_ttl
 
 
 @pytest.fixture

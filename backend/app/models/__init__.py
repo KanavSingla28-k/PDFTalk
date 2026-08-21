@@ -3,29 +3,28 @@
 # the string-based relationship references (e.g. "Document" in User.documents).
 
 from app.db.base import Base
-from app.models.user import User
-from app.models.document import Document, DocumentStatus
-from app.models.chunk import Chunk, EMBEDDING_DIMENSIONS
-from app.models.auth import RefreshToken, EmailVerification
-from app.models.job_log import JobLog
-from app.models.query import QueryRequest
-
+from app.models.auth import EmailVerification, RefreshToken
 from app.models.chat import Chat
+from app.models.chunk import EMBEDDING_DIMENSIONS, Chunk
+from app.models.document import Document, DocumentStatus
+from app.models.job_log import JobLog
 from app.models.message import Message, MessageRole, MessageStatus
+from app.models.query import QueryRequest
+from app.models.user import User
 
 __all__ = [
+    "EMBEDDING_DIMENSIONS",
     "Base",
-    "User",
+    "Chat",
+    "Chunk",
     "Document",
     "DocumentStatus",
-    "Chunk",
-    "EMBEDDING_DIMENSIONS",
-    "RefreshToken",
     "EmailVerification",
     "JobLog",
-    "QueryRequest",
-    "Chat",
     "Message",
     "MessageRole",
     "MessageStatus",
+    "QueryRequest",
+    "RefreshToken",
+    "User",
 ]

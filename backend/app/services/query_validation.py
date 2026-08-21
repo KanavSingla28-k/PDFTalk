@@ -1,14 +1,16 @@
 from __future__ import annotations
+
 import uuid
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.document import Document, DocumentStatus
 from app.exceptions import (
     DocumentNotFoundError,
     DocumentNotReadyError,
 )
 from app.models.chat import Chat
+from app.models.document import Document, DocumentStatus
 
 
 async def validate_documents_for_query(
@@ -58,16 +60,16 @@ async def validate_chat_for_query(
     chat_id: uuid.UUID,
     user_id: uuid.UUID,
     db: AsyncSession,
-) -> tuple["Chat", list[uuid.UUID], list[str]]:
+) -> tuple[Chat, list[uuid.UUID], list[str]]:
     """
     Fetches the chat, filters its document_ids to only those that still exist
     and are owned by the user. If none remain, raises AllDocumentsDeletedError.
     Returns (chat, valid_document_uuids, missing_document_ids).
     """
-    from app.models.chat import Chat
-    from app.exceptions import ChatNotFoundError, AllDocumentsDeletedError
-
     from sqlalchemy.orm import selectinload
+
+    from app.exceptions import AllDocumentsDeletedError, ChatNotFoundError
+    from app.models.chat import Chat
 
     result = await db.execute(
         select(Chat)

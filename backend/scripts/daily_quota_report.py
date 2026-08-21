@@ -24,10 +24,13 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import Any
 
 import httpx
 import redis.asyncio as aioredis
+
+from app.core.config import settings
 
 # ---------------------------------------------------------------------------
 # Bootstrap — resolve project root so imports work when run as a module
@@ -38,7 +41,6 @@ _BACKEND_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _BACKEND_ROOT not in sys.path:
     sys.path.insert(0, _BACKEND_ROOT)
 
-from app.core.config import settings  # noqa: E402 — must come after sys.path fix
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -66,7 +68,7 @@ ALERT_THRESHOLD = 1.00  # 100% → alert (quota hit)
 
 async def _get_redis() -> aioredis.Redis:
     """Create a fresh Redis connection for the script."""
-    return await aioredis.from_url(
+    return await aioredis.from_url(  # type: ignore[no-any-return]
         settings.REDIS_URL,
         decode_responses=True,
         socket_connect_timeout=5,
@@ -98,7 +100,7 @@ async def _scan_query_quota_keys(r: aioredis.Redis, date_str: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-async def _post_slack(client: httpx.AsyncClient, payload: dict) -> None:
+async def _post_slack(client: httpx.AsyncClient, payload: dict[str, Any]) -> None:
     """POST a message payload to the configured Slack webhook URL."""
     if not settings.SLACK_WEBHOOK_URL:
         logger.warning("SLACK_WEBHOOK_URL is not set — skipping Slack notification.")
@@ -124,7 +126,7 @@ def _build_slack_payload(
     used: int,
     limit: int,
     pct: float,
-) -> dict:
+) -> dict[str, Any]:
     """Build a simple Slack Block Kit message."""
     emoji = ":warning:" if level == "WARNING" else ":rotating_light:"
     color = "#FFA500" if level == "WARNING" else "#FF0000"
@@ -140,7 +142,7 @@ def _build_slack_payload(
             {
                 "color": color,
                 "text": text,
-                "footer": f"PDFTalk · {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
+                "footer": f"PDFTalk · {datetime.now(UTC).strftime('%Y-%m-%d %H:%M UTC')}",
             }
         ]
     }
@@ -152,7 +154,7 @@ def _build_slack_payload(
 
 
 async def run_report() -> None:
-    today = datetime.now(timezone.utc).strftime("%Y%m%d")
+    today = datetime.now(UTC).strftime("%Y%m%d")
     logger.info("Starting daily quota report for %s", today)
 
     r = await _get_redis()
@@ -166,7 +168,7 @@ async def run_report() -> None:
         len(query_keys),
     )
 
-    alerts: list[dict] = []
+    alerts: list[dict[str, Any]] = []
 
     # ---- Token quota -------------------------------------------------------
     for key in token_keys:
