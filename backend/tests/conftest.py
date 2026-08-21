@@ -16,7 +16,6 @@ import pytest_asyncio
 import tempfile
 import shutil
 import atexit
-import fakeredis.aioredis
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -42,6 +41,13 @@ _temp_dir = tempfile.mkdtemp(prefix="pdftalk_prometheus_")
 os.environ["PROMETHEUS_MULTIPROC_DIR"] = _temp_dir
 atexit.register(lambda: shutil.rmtree(_temp_dir, ignore_errors=True))
 
+# Sentinel rate limiter settings (required before app.core.sentinel import)
+os.environ.setdefault("SENTINEL_REDIS_URL", "redis://:test@localhost:6379/1")
+os.environ.setdefault("ANONYMOUS_COOKIE_SECRET", "pdftalk-anon-test-secret-00000000000000000000000000000000")
+os.environ.setdefault("ANONYMOUS_COOKIE_NAME", "pdftalk_anon_id")
+os.environ.setdefault("ANONYMOUS_COOKIE_TTL_SECONDS", "2592000")
+os.environ.setdefault("ANONYMOUS_COOKIE_SECURE", "false")
+
 # ---------------------------------------------------------------------------
 # App imports — safe after env vars are in place
 # ---------------------------------------------------------------------------
@@ -55,16 +61,50 @@ TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
 
 
 @pytest.fixture(autouse=True)
-def mock_redis(monkeypatch):
-    fake_redis = fakeredis.aioredis.FakeRedis()
+def mock_sentinel_guards():
+    """Override all Sentinel guards with no-ops for unit tests.
 
-    def fake_get_redis():
-        return fake_redis
-
-    monkeypatch.setattr(
-        "app.utils.rate_limit.get_redis",
-        fake_get_redis,
+    Unit tests don't run FastAPI lifespan, so Sentinel scripts aren't loaded.
+    Overriding the guards prevents RuntimeError about unloaded scripts.
+    """
+    from app.core.sentinel import (
+        register_guard,
+        resend_guard,
+        login_guard,
+        reset_guard,
+        upload_guard,
+        query_guard,
+        chat_create_guard,
     )
+    from app.main import app
+
+    async def noop(request):
+        return None
+
+    for guard_dep in [
+        register_guard,
+        resend_guard,
+        login_guard,
+        reset_guard,
+        upload_guard,
+        query_guard,
+        chat_create_guard,
+    ]:
+        app.dependency_overrides[guard_dep] = noop
+
+    yield
+
+    for guard_dep in [
+        register_guard,
+        resend_guard,
+        login_guard,
+        reset_guard,
+        upload_guard,
+        query_guard,
+        chat_create_guard,
+    ]:
+        app.dependency_overrides.pop(guard_dep, None)
+
 
 @pytest.fixture(autouse=True)
 def mock_email(monkeypatch):

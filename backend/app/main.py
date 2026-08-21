@@ -7,6 +7,7 @@ from fastapi import FastAPI, Request, HTTPException, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
+from app.core.sentinel import guard as sentinel_guard, redis as sentinel_redis
 from app.db.session import check_db_connection, engine
 from app.exceptions import register_exception_handlers
 from app.middleware.logging import RequestLoggingMiddleware
@@ -30,11 +31,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     r = get_redis()
     await r.ping()
 
+    # Sentinel rate limiter initialization
+    await sentinel_redis.assert_noeviction()
+    await sentinel_guard.load_scripts()
+
     yield
 
     # --- shutdown ---
     await engine.dispose()
     await get_pool().aclose()
+    await sentinel_redis.aclose()
 
 
 _docs_url    = None if settings.is_production else "/docs"

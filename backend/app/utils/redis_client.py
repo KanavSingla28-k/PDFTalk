@@ -56,12 +56,6 @@ async def increment_counter(key: str, ttl_seconds: int | None = None) -> int:
 def key_refresh_token(token_hash: str) -> str:
     return f"token:refresh:{token_hash}"
 
-def key_rate_limit_login(ip: str) -> str:
-    return f"ratelimit:login:{ip}"
-
-def key_rate_limit_register(ip: str) -> str:
-    return f"ratelimit:register:{ip}"
-
 def key_account_lockout(user_id: str) -> str:
     return f"lockout:{user_id}"
 

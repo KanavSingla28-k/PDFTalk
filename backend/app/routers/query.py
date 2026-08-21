@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.auth.dependencies import get_verified_user
 from app.auth.tokens import TokenExpiredError, TokenInvalidError
 from app.core.config import settings
+from app.core.sentinel import query_guard
 from app.db.session import get_db
 from app.models.chat import Chat
 from app.models.query import QueryRequest
@@ -38,20 +39,11 @@ from app.utils.openai_client import (
     OpenAIRetryExhaustedError,
     check_and_increment_query_usage,
 )
-from app.utils.rate_limit import RateLimiter, user_id_from_request
 from app.utils.metrics import queries_total, stream_errors_total, messages_total
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="/query", tags=["query"])
-
-_query_limiter = RateLimiter(
-    limit=20,
-    window_seconds=60,
-    key_prefix="query",
-    identifier_fn=user_id_from_request,
-    fail_open=True,
-)
 
 
 def _error_event(code: str, message: str) -> str:
@@ -64,7 +56,7 @@ async def ask(
     body: QueryRequest,
     current_user: User = Depends(get_verified_user),
     db: AsyncSession = Depends(get_db),
-    _rate: None = Depends(_query_limiter),
+    _rate: None = Depends(query_guard),
 ) -> StreamingResponse:
     chat, valid_uuids, missing_ids = await validate_chat_for_query(
         chat_id=body.chat_id,

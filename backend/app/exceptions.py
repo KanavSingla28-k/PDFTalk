@@ -50,6 +50,13 @@ class RateLimitExceededError(PDFTalkError):
         self.retry_after = retry_after
         super().__init__(retry_after)
 
+
+class RateLimiterUnavailableError(PDFTalkError):
+    """Rate limiter backend (Sentinel Redis) is unavailable.
+
+    Maps to 503 with RATE_LIMITER_UNAVAILABLE error code.
+    """
+
 # ---------------------------------------------------------------------------
 # Auth exceptions
 # ---------------------------------------------------------------------------
@@ -377,6 +384,19 @@ def register_exception_handlers(app: FastAPI) -> None:
                 "message": str(exc),
             },
             headers={"Retry-After": str(exc.retry_after)},
+        )
+
+    @app.exception_handler(RateLimiterUnavailableError)
+    async def rate_limiter_unavailable_handler(
+        request: Request,
+        exc: RateLimiterUnavailableError,
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=503,
+            content={
+                "error": "RATE_LIMITER_UNAVAILABLE",
+                "message": "Rate limiter temporarily unavailable",
+            },
         )
 
     @app.exception_handler(FileValidationError)

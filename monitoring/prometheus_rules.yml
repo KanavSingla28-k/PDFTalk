@@ -1,4 +1,46 @@
 groups:
+  - name: pdftalk_sentinel
+    rules:
+      - alert: SentinelRedisFailures
+        expr: rate(sentinel_decisions_total{decision_reason=~"fail_closed|redis_timeout|redis_connection_error"}[5m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Sentinel Redis failures detected"
+          description: "Sentinel rate limiter is failing decisions due to Redis issues on {{ $labels.endpoint_id }}. Decision reason: {{ $labels.decision_reason }}."
+
+      - alert: SentinelCircuitOpen
+        expr: rate(sentinel_decisions_total{decision_reason="circuit_open"}[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sentinel circuit breaker open"
+          description: "Circuit breaker tripped for {{ $labels.endpoint_id }}. Redis may be experiencing sustained failures."
+
+      - alert: SentinelEmergencyLimiterActive
+        expr: rate(sentinel_decisions_total{decision_reason="emergency_local_limit"}[5m]) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Sentinel emergency limiter active"
+          description: "Fail-open endpoint {{ $labels.endpoint_id }} is using emergency limiter due to Redis unavailability."
+
+      - alert: SentinelHighRateLimitRate
+        expr: |
+          sum(rate(sentinel_decisions_total{decision_reason="rate_limited"}[5m])) by (endpoint_id)
+          /
+          sum(rate(sentinel_decisions_total[5m])) by (endpoint_id)
+          > 0.2
+        for: 5m
+        labels:
+          severity: info
+        annotations:
+          summary: "High rate-limit rejection rate on {{ $labels.endpoint_id }}"
+          description: "{{ $value | humanizePercentage }} of requests are being rate limited on {{ $labels.endpoint_id }}."
+
   - name: pdftalk_ingestion
     rules:
       - alert: HighIngestionFailureRate

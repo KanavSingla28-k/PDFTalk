@@ -31,13 +31,11 @@ volumes:
 #   worker          512M   (OCR kept sequential — see worker section)
 #   frontend        128M
 #   nginx            64M
-#   prometheus      128M   (only if RUN_OBSERVABILITY=1, see below)
-#   grafana         128M   (only if RUN_OBSERVABILITY=1)
-#   alertmanager     48M   (only if RUN_OBSERVABILITY=1)
+#   sentinel-redis   96M
 #   ──────────────────────
-#   core total     1600M   (postgres+redis+api+worker+frontend+nginx)
+#   core total     1696M   (postgres+redis+sentinel-redis+api+worker+frontend+nginx)
 #   + observability 304M   (only when explicitly started)
-#   OS + Docker daemon overhead: remaining ~400M headroom on core-only boot
+#   OS + Docker daemon overhead: remaining ~300M headroom on core-only boot
 #
 # Observability stack is NOT in `restart: unless-stopped` 24/7 on this box.
 # Bring it up on demand: `docker compose --profile observability up -d`
@@ -103,6 +101,25 @@ services:
       timeout: 5s
       retries: 5
 
+  sentinel-redis:
+    image: redis:7-alpine
+    container_name: pdftalk-sentinel-redis-prod
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${SENTINEL_REDIS_PASSWORD}
+      --maxmemory 64mb
+      --maxmemory-policy noeviction
+    networks:
+      - internal
+    mem_limit: 96m
+    mem_reservation: 64m
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${SENTINEL_REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   api:
     image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-api:${GIT_SHA:-latest}
     # pull_policy: always — forces `docker compose run` / `up` to always pull the
@@ -128,6 +145,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      sentinel-redis:
         condition: service_healthy
     mem_limit: 384m
     mem_reservation: 256m
@@ -165,6 +184,8 @@ services:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      sentinel-redis:
         condition: service_healthy
     mem_limit: 512m
     mem_reservation: 320m

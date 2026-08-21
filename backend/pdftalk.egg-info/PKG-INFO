@@ -1,0 +1,33 @@
+Metadata-Version: 2.4
+Name: pdftalk
+Version: 1.0.0
+Requires-Python: >=3.12
+Requires-Dist: fastapi>=0.111
+Requires-Dist: uvicorn[standard]
+Requires-Dist: sqlalchemy[asyncio]
+Requires-Dist: asyncpg
+Requires-Dist: alembic
+Requires-Dist: pydantic-settings
+Requires-Dist: passlib[bcrypt]>=1.7.4
+Requires-Dist: bcrypt==4.0.1
+Requires-Dist: redis>=5.0.0
+Requires-Dist: rq
+Requires-Dist: boto3
+Requires-Dist: openai
+Requires-Dist: pymupdf
+Requires-Dist: tiktoken
+Requires-Dist: structlog
+Requires-Dist: python-multipart
+Requires-Dist: httpx
+Requires-Dist: email-validator
+Requires-Dist: resend>=2.30.1
+Requires-Dist: pgvector>=0.4.2
+Requires-Dist: aiosqlite>=0.22.1
+Requires-Dist: psycopg[binary]
+Requires-Dist: pytesseract
+Requires-Dist: pillow
+Requires-Dist: python-magic-bin>=0.4.14; sys_platform == "win32"
+Requires-Dist: python-magic>=0.4.27; sys_platform != "win32"
+Requires-Dist: prometheus-client>=0.20.0
+Requires-Dist: prometheus-fastapi-instrumentator>=7.0.0
+Requires-Dist: pyjwt[crypto]>=2.13.0
