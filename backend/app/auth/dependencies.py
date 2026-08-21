@@ -77,8 +77,8 @@ async def get_current_user(
         raise InvalidTokenError(str(exc)) from exc
 
     try:
-        return uuid.UUID(user_id_str)
-    except ValueError as exc:
+        return uuid.UUID(str(user_id_str))
+    except (ValueError, TypeError, AttributeError) as exc:
         raise InvalidTokenError("Invalid access token: malformed subject") from exc
 
 

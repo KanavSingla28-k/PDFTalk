@@ -1,6 +1,6 @@
 from functools import cached_property
-from typing import Literal, Optional
-from pydantic import field_validator
+from typing import Literal, Optional, Any
+from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings
 import os
 
@@ -87,5 +87,26 @@ class Settings(BaseSettings):
 
     model_config = {"env_file": env_file, "extra": "ignore", "ignored_types": (cached_property,)}
 
+    @model_validator(mode="before")
+    @classmethod
+    def set_dev_defaults(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            env_val = data.get("ENVIRONMENT", os.getenv("ENVIRONMENT", "production"))
+            if env_val == "development":
+                data.setdefault("DATABASE_URL", "postgresql+asyncpg://postgres:postgres@localhost:5433/pdftalk")     # pragma: allowlist secret
+                data.setdefault("REDIS_URL", "redis://:pdftalk_redis@localhost:6379/0")
+                data.setdefault("JWT_SECRET_KEY", "dev-secret-key-123456789012345678901234567890")
+                data.setdefault("FROM_EMAIL", "dev@example.com")
+                data.setdefault("AWS_ACCESS_KEY_ID", "dummy")
+                data.setdefault("AWS_SECRET_ACCESS_KEY", "dummy")
+                data.setdefault("S3_BUCKET_NAME", "dummy")
+                data.setdefault("APP_URL", "http://localhost:3000")
+        return data
 
-settings: Settings = Settings()  # type: ignore[call-arg]
+
+try:
+    settings: Settings = Settings()  # type: ignore[call-arg]
+except Exception as e:
+    import sys
+    print(f"CRITICAL: Failed to load configuration: {e}")
+    sys.exit(1)

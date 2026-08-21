@@ -1151,6 +1151,7 @@ dependencies = [
     { name = "redis" },
     { name = "resend" },
     { name = "rq" },
+    { name = "sentinel-rate-limiter" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "structlog" },
     { name = "tiktoken" },
@@ -1195,6 +1196,7 @@ requires-dist = [
     { name = "redis", specifier = ">=5.0.0" },
     { name = "resend", specifier = ">=2.30.1" },
     { name = "rq" },
+    { name = "sentinel-rate-limiter", specifier = ">=1.2.0" },
     { name = "sqlalchemy", extras = ["asyncio"] },
     { name = "structlog" },
     { name = "tiktoken" },
@@ -1881,6 +1883,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/e0/1f/12417f7f493fc45e1f9fd5d4a9b6c125cf8d2cf3f8ddbdfab3e76406e9d6/s3transfer-0.18.0.tar.gz", hash = "sha256:3760b8b7ec1315da54048b2d626276732bee4300d054d492d4e1d43e20d4ecbd", size = 160560, upload-time = "2026-05-28T19:39:09.124Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/2b/58/a58fc997655386daa2e25784e30c288aa3e3819e401f77029ee4899fb55a/s3transfer-0.18.0-py3-none-any.whl", hash = "sha256:239c13b09e65ad0346e1be7348b8a202dcad44ac7ea7c6eb858fc881dce739b6", size = 88572, upload-time = "2026-05-28T19:39:07.999Z" },
+]
+
+[[package]]
+name = "sentinel-rate-limiter"
+version = "1.2.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "fastapi" },
+    { name = "prometheus-client" },
+    { name = "pydantic" },
+    { name = "pyjwt" },
+    { name = "redis" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/00/9b/0ea2a6d1174c35be5942eb36e93b6ab74e45ce429b51b9ce127777aa65d9/sentinel_rate_limiter-1.2.0.tar.gz", hash = "sha256:b7c42925e34a40596483aeca331c953fddbf8674ebc6f1aa33f39dee46eaffaa", size = 74454, upload-time = "2026-08-21T08:53:07.056Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3a/bc/1ca6ca193ce5f2894503139953ed07868f9cdf34e1e31aaf2fee1e4272f8/sentinel_rate_limiter-1.2.0-py3-none-any.whl", hash = "sha256:377906d94996fbbc80a8443dd733ea77feb879b6f078b48695b237543f967dec", size = 32588, upload-time = "2026-08-21T08:53:06.155Z" },
 ]
 
 [[package]]

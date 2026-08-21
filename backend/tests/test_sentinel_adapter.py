@@ -108,7 +108,7 @@ class TestGuardFactories:
     """Tests that guard factories route to correct Sentinel methods."""
 
     @pytest.mark.asyncio
-    async def test_make_tenant_guard_calls_guard_for(self):
+    async def test_make_tenant_guard_calls_guard_for(self, monkeypatch):
         """Tenant guard should call guard.guard_for."""
         from app.core import sentinel
 
@@ -118,7 +118,7 @@ class TestGuardFactories:
 
         mock_guard = MagicMock()  # Use MagicMock, not AsyncMock
         mock_guard.guard_for.return_value = mock_guard_func
-        sentinel.guard = mock_guard
+        monkeypatch.setattr(sentinel, "guard", mock_guard)
 
         dep = _make_tenant_guard("test.endpoint")
         mock_request = MagicMock(spec=Request)
@@ -128,7 +128,7 @@ class TestGuardFactories:
         mock_guard.guard_for.assert_called_once_with("test.endpoint")
 
     @pytest.mark.asyncio
-    async def test_make_anonymous_guard_calls_anonymous_guard_for(self):
+    async def test_make_anonymous_guard_calls_anonymous_guard_for(self, monkeypatch):
         """Anonymous guard should call guard.anonymous_guard_for."""
         from app.core import sentinel
 
@@ -137,7 +137,7 @@ class TestGuardFactories:
 
         mock_guard = MagicMock()  # Use MagicMock, not AsyncMock
         mock_guard.anonymous_guard_for.return_value = mock_anon_guard_func
-        sentinel.guard = mock_guard
+        monkeypatch.setattr(sentinel, "guard", mock_guard)
 
         dep = _make_anonymous_guard("test.anon")
         mock_request = MagicMock(spec=Request)
@@ -148,7 +148,7 @@ class TestGuardFactories:
         mock_guard.anonymous_guard_for.assert_called_once_with("test.anon")
 
     @pytest.mark.asyncio
-    async def test_tenant_guard_converts_429(self):
+    async def test_tenant_guard_converts_429(self, monkeypatch):
         """Tenant guard should adapt 429 to RateLimitExceededError."""
         from app.core import sentinel
 
@@ -161,7 +161,7 @@ class TestGuardFactories:
 
         mock_guard = MagicMock()  # Use MagicMock, not AsyncMock
         mock_guard.guard_for.return_value = mock_guard_func
-        sentinel.guard = mock_guard
+        monkeypatch.setattr(sentinel, "guard", mock_guard)
 
         dep = _make_tenant_guard("test.endpoint")
         mock_request = MagicMock(spec=Request)
@@ -172,7 +172,7 @@ class TestGuardFactories:
         assert exc_info.value.retry_after == 45
 
     @pytest.mark.asyncio
-    async def test_anonymous_guard_converts_503(self):
+    async def test_anonymous_guard_converts_503(self, monkeypatch):
         """Anonymous guard should adapt 503 to RateLimiterUnavailableError."""
         from app.core import sentinel
 
@@ -184,7 +184,7 @@ class TestGuardFactories:
 
         mock_guard = MagicMock()  # Use MagicMock, not AsyncMock
         mock_guard.anonymous_guard_for.return_value = mock_anon_guard_func
-        sentinel.guard = mock_guard
+        monkeypatch.setattr(sentinel, "guard", mock_guard)
 
         dep = _make_anonymous_guard("test.anon")
         mock_request = MagicMock(spec=Request)

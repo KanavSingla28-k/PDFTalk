@@ -19,12 +19,13 @@ import atexit
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from fastapi import Request, Response
 
 # ---------------------------------------------------------------------------
 # Environment setup — MUST be first, before any app.* import
 # ---------------------------------------------------------------------------
 os.environ.setdefault("ENVIRONMENT", "development")
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://pdftalk:test@localhost/pdftalk_test")
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test_user:test_password@localhost:5432/test_db")     # pragma: allowlist secret
 os.environ.setdefault("REDIS_URL", "redis://:test@localhost:6379")
 
 os.environ.setdefault(
@@ -72,6 +73,8 @@ def mock_sentinel_guards():
     Unit tests don't run FastAPI lifespan, so Sentinel scripts aren't loaded.
     Overriding the guards prevents RuntimeError about unloaded scripts.
     """
+    from fastapi import Request, Response
+
     from app.core.sentinel import (
         register_guard,
         resend_guard,
@@ -83,10 +86,10 @@ def mock_sentinel_guards():
     )
     from app.main import app
 
-    async def noop(request, response=None):
+    async def noop(request: Request, response: Response) -> None:
         return None
 
-    for guard_dep in [
+    guard_deps = [
         register_guard,
         resend_guard,
         login_guard,
@@ -94,22 +97,15 @@ def mock_sentinel_guards():
         upload_guard,
         query_guard,
         chat_create_guard,
-    ]:
+    ]
+
+    for guard_dep in guard_deps:
         app.dependency_overrides[guard_dep] = noop
 
     yield
 
-    for guard_dep in [
-        register_guard,
-        resend_guard,
-        login_guard,
-        reset_guard,
-        upload_guard,
-        query_guard,
-        chat_create_guard,
-    ]:
+    for guard_dep in guard_deps:
         app.dependency_overrides.pop(guard_dep, None)
-
 
 @pytest.fixture(autouse=True)
 def mock_email(monkeypatch):

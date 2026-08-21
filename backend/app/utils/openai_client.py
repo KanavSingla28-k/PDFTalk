@@ -47,17 +47,22 @@ class DailyQueryQuotaExceededError(Exception):
 # Client singleton
 # ---------------------------------------------------------------------------
 
-_client: AsyncOpenAI | None = None
+_clients: dict[asyncio.AbstractEventLoop, AsyncOpenAI] = {}
 
 
 def get_client() -> AsyncOpenAI:
-    global _client
-    if _client is None:
-        _client = AsyncOpenAI(
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        # Fallback if called outside a running loop, though this should rarely happen.
+        loop = asyncio.get_event_loop_policy().get_event_loop()
+        
+    if loop not in _clients:
+        _clients[loop] = AsyncOpenAI(
             api_key=settings.OPENAI_API_KEY,
             timeout=120.0,
         )
-    return _client
+    return _clients[loop]
 
 
 # ---------------------------------------------------------------------------

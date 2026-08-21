@@ -32,7 +32,7 @@ from app.models.auth import (
     ResetPasswordRequest,
 )
 from app.auth.dependencies import get_verified_user
-from app.core.sentinel import resend_guard, login_guard, reset_guard
+from app.core.sentinel import register_guard, resend_guard, login_guard, reset_guard
 from app.services import user_service
 from app.services.email_verification import verify_token, send_verification_email_for_user
 from app.services.password_reset import initiate_password_reset, consume_reset_token
@@ -105,7 +105,7 @@ async def register(
     payload: RegisterRequest,
     request: Request,
     db: AsyncSession = Depends(get_db),
-    # _rate: None = Depends(register_guard),  # Temporarily disabled for debugging
+    _rate: None = Depends(register_guard),
 ) -> RegisterResponse:
     try:
         await user_service.register(

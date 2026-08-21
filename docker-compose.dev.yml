@@ -7,7 +7,7 @@ services:
     environment:
       POSTGRES_DB: pdftalk
       POSTGRES_USER: pdftalk
-      POSTGRES_PASSWORD: 3wYd8pmybim4JXe8vmmNQf37zzpY0Oll     # pragma: allowlist secret
+      POSTGRES_PASSWORD: dev_postgres_password     # pragma: allowlist secret
 
     ports:
       - "5433:5432"
@@ -27,7 +27,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: pdftalk-redis
-    command: redis-server --requirepass FCVPvJkWzjPrVGhHBkENqxR4lzo36hCV --appendonly yes
+    command: redis-server --requirepass dev_redis_password --appendonly yes
     ports:
       - "6379:6379"
     volumes:
@@ -46,6 +46,8 @@ services:
       - 128mb
       - --maxmemory-policy
       - noeviction
+    ports:
+      - "6380:6379"
     restart: unless-stopped
     networks:
       - internal
@@ -58,9 +60,13 @@ services:
       - "8000:8000"
 
     environment:
-      ENV_FILE: .env.docker   # tells config.py which file to load
+      ENV_FILE: .env.local
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://pdftalk:dev_postgres_password@postgres:5432/pdftalk         # pragma: allowlist secret
+      REDIS_URL: redis://:dev_redis_password@redis:6379
+      SENTINEL_REDIS_URL: redis://:${SENTINEL_REDIS_PASSWORD:-sentinel-local-dev-password}@sentinel-redis:6379/0
     env_file:
-      - ./backend/.env.docker
+      - ./backend/.env.local
 
     volumes:
       - ./backend:/app
@@ -86,9 +92,13 @@ services:
       context: ./backend
 
     environment:
-      ENV_FILE: .env.docker
+      ENV_FILE: .env.local
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://pdftalk:dev_postgres_password@postgres:5432/pdftalk      # pragma: allowlist secret
+      REDIS_URL: redis://:dev_redis_password@redis:6379
+      SENTINEL_REDIS_URL: redis://:${SENTINEL_REDIS_PASSWORD:-sentinel-local-dev-password}@sentinel-redis:6379/0
     env_file:
-      - ./backend/.env.docker
+      - ./backend/.env.local
 
     volumes:
       - ./backend:/app
