@@ -101,6 +101,8 @@ class Settings(BaseSettings):
                 data.setdefault("AWS_SECRET_ACCESS_KEY", "dummy")
                 data.setdefault("S3_BUCKET_NAME", "dummy")
                 data.setdefault("APP_URL", "http://localhost:3000")
+                data.setdefault("SENTINEL_REDIS_PASSWORD", "sentinel-local-dev-password")
+                data.setdefault("ANONYMOUS_COOKIE_SECRET", "dev-cookie-secret-12345678901234567890")
         return data
 
 
