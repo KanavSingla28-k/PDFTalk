@@ -1,0 +1,347 @@
+networks:
+  internal:
+    driver: bridge
+  external:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redis_data:
+  app_logs:
+  prometheus_data:
+  grafana_data:
+  alertmanager_data:
+
+  prometheus_multiproc:
+    driver_opts:
+      type: tmpfs
+      device: tmpfs
+      o: size=64m,mode=1777
+
+# ──────────────────────────────────────────────────────────────────────────
+# INSTANCE: pdftalk-production — 2 vCPU / 2 GB RAM / 60 GB SSD (ap-south-1)
+#
+# Memory budget (hard ceiling via mem_limit, enforced by the Linux kernel
+# cgroup — NOT deploy.resources.limits, which compose-v2 only enforces
+# under Swarm and silently ignores otherwise):
+#
+#   postgres        384M
+#   redis           128M
+#   api             384M
+#   worker          512M   (OCR kept sequential — see worker section)
+#   frontend        128M
+#   nginx            64M
+#   sentinel-redis   96M
+#   ──────────────────────
+#   core total     1696M   (postgres+redis+sentinel-redis+api+worker+frontend+nginx)
+#   + observability 304M   (only when explicitly started)
+#   OS + Docker daemon overhead: remaining ~300M headroom on core-only boot
+#
+# Observability stack is NOT in `restart: unless-stopped` 24/7 on this box.
+# Bring it up on demand: `docker compose --profile observability up -d`
+# Take it down when done: `docker compose --profile observability down`
+# Running everything simultaneously 24/7 leaves no headroom for burst load
+# (e.g. an OCR job + a concurrent LLM query + a login) and risks OOM kills
+# landing on Postgres, which is the worst possible victim.
+# ──────────────────────────────────────────────────────────────────────────
+
+services:
+
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: pdftalk-postgres-prod
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-pdftalk}
+      POSTGRES_USER: ${POSTGRES_USER:-pdftalk}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      # Tuned for a 384M container ceiling, not Postgres's RAM-aware defaults
+      # (which assume a much larger host). Passed via command, not postgresql.conf,
+      # to keep this self-contained in compose.
+    command: >
+      postgres
+      -c shared_buffers=96MB
+      -c effective_cache_size=288MB
+      -c maintenance_work_mem=32MB
+      -c work_mem=4MB
+      -c max_connections=40
+    networks:
+      - internal
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    mem_limit: 384m
+    mem_reservation: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-pdftalk} -d $${POSTGRES_DB:-pdftalk}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: pdftalk-redis-prod
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --appendonly yes
+      --maxmemory 96mb
+      --maxmemory-policy noeviction
+    networks:
+      - internal
+    volumes:
+      - redis_data:/data
+    mem_limit: 128m
+    mem_reservation: 96m
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sentinel-redis:
+    image: redis:7-alpine
+    container_name: pdftalk-sentinel-redis-prod
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${SENTINEL_REDIS_PASSWORD:-sentinel-default-secret-change-me}
+      --maxmemory 64mb
+      --maxmemory-policy noeviction
+    networks:
+      - internal
+    mem_limit: 96m
+    mem_reservation: 64m
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${SENTINEL_REDIS_PASSWORD:-sentinel-default-secret-change-me}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-api:${GIT_SHA:-latest}
+    #  — forces `docker compose run` / `up` to always pull the
+    # resolved tag from GHCR rather than considering the local `build:` block as
+    # a fallback. Without this, `docker compose run api ...` could attempt a local
+    # build (and fail on registry auth for base images like ghcr.io/astral-sh/uv)
+    # whenever GIT_SHA resolves to ":latest" in a given shell context.
+    
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pdftalk-api-prod
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc
+      SENTINEL_REDIS_PASSWORD: ${SENTINEL_REDIS_PASSWORD:-sentinel-default-secret-change-me}
+      ANONYMOUS_COOKIE_SECRET: ${ANONYMOUS_COOKIE_SECRET:-anonymous-cookie-default-secret-change-me}
+    volumes:
+      - prometheus_multiproc:/tmp/prometheus_multiproc
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      sentinel-redis:
+        condition: service_healthy
+    mem_limit: 384m
+    mem_reservation: 256m
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  worker:
+    image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-worker:${GIT_SHA:-latest}
+    
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.worker
+    container_name: pdftalk-worker-prod
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc
+      SENTINEL_REDIS_PASSWORD: ${SENTINEL_REDIS_PASSWORD:-sentinel-default-secret-change-me}
+      ANONYMOUS_COOKIE_SECRET: ${ANONYMOUS_COOKIE_SECRET:-anonymous-cookie-default-secret-change-me}
+      # OCR parallelism kept at 1 (sequential) on this instance class.
+      # 2 vCPU / 2GB total cannot safely absorb 2+ concurrent Tesseract
+      # subprocesses without risking OOM kills hitting Postgres/API mid-job.
+      # If you ever move to a 4 vCPU / 8GB+ plan, raise OCR_MAX_WORKERS to 2
+      # and re-add ProcessPoolExecutor(max_workers=settings.OCR_MAX_WORKERS)
+      # in extraction.py — the code path, not just this var, needs the change.
+      OCR_MAX_WORKERS: 1
+    volumes:
+      - prometheus_multiproc:/tmp/prometheus_multiproc
+    networks:
+      - internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      sentinel-redis:
+        condition: service_healthy
+    mem_limit: 512m
+    mem_reservation: 320m
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, redis; r=redis.from_url(f\"redis://:{os.environ.get('REDIS_PASSWORD', '')}@redis:6379/0\"); r.ping()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    stop_grace_period: 60s
+
+  frontend:
+    image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-frontend:${GIT_SHA:-latest}
+    
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+          NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+          NEXT_PUBLIC_APP_NAME: PDFTalk
+          NEXT_PUBLIC_MAX_UPLOAD_MB: 50
+    container_name: pdftalk-frontend-prod
+    restart: unless-stopped
+    env_file:
+      - .env
+    networks:
+      - internal
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 128m
+    mem_reservation: 96m
+
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: pdftalk-nginx-prod
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./infra/nginx/nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - app_logs:/var/log/nginx
+      - ./certbot/www:/var/www/certbot:ro
+      - ./certbot/conf:/etc/nginx/ssl:ro
+    networks:
+      - internal
+      - external
+    depends_on:
+      api:
+        condition: service_healthy
+    mem_limit: 64m
+    mem_reservation: 32m
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Monitoring stack — NOT started by default `docker compose up -d`.
+  # These three carry the "observability" profile. Start them only while
+  # actively debugging:
+  #   docker compose --profile observability up -d
+  # Stop them when done so the box has full headroom again:
+  #   docker compose --profile observability stop
+  # ──────────────────────────────────────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.enable-lifecycle"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+      - ./monitoring/prometheus_rules.yml:/etc/prometheus/prometheus_rules.yml:ro
+    networks: [internal]
+    restart: unless-stopped
+    mem_limit: 128m
+    mem_reservation: 96m
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    profiles: ["observability"]
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GF_SECURITY_ADMIN_PASSWORD}
+      GF_SERVER_ROOT_URL: ${GF_SERVER_ROOT_URL}
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SECURITY_DISABLE_GRAVATAR: "true"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks: [internal]
+    depends_on: [prometheus]
+    restart: unless-stopped
+    mem_limit: 128m
+    mem_reservation: 96m
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    env_file:
+      - .env
+    entrypoint: ["/docker-entrypoint.sh"]
+    volumes:
+      - alertmanager_data:/alertmanager
+      - ./monitoring/alertmanager.yml.template:/etc/alertmanager/alertmanager.yml.template:ro
+      - ./monitoring/alertmanager-entrypoint.sh:/docker-entrypoint.sh:ro
+    networks:
+      - internal
+    restart: unless-stopped
+    mem_limit: 48m
+    mem_reservation: 32m
+
+  node-exporter:
+    image: prom/node-exporter:v1.7.0
+    container_name: pdftalk-node-exporter
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+      - "--collector.textfile.directory=/textfile_collector"
+    network_mode: host
+    pid: host
+    volumes:
+      - "/:/host:ro,rslave"
+      - "./textfile_collector:/textfile_collector:ro"
+    mem_limit: 48m
+    mem_reservation: 32m
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.58.0
+    container_name: pdftalk-redis-exporter
+    restart: unless-stopped
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+    networks:
+      - internal
+    depends_on:
+      redis:
+        condition: service_healthy
+    mem_limit: 48m
+    mem_reservation: 32m
+
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.24.0
+    container_name: pdftalk-blackbox-exporter
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/blackbox_exporter/blackbox.yml"
+    volumes:
+      - ./monitoring/blackbox.yml:/etc/blackbox_exporter/blackbox.yml:ro
+    networks:
+      - internal
+    mem_limit: 48m
+    mem_reservation: 32m
