@@ -122,12 +122,12 @@ services:
 
   api:
     image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-api:${GIT_SHA:-latest}
-    # pull_policy: always — forces `docker compose run` / `up` to always pull the
+    #  — forces `docker compose run` / `up` to always pull the
     # resolved tag from GHCR rather than considering the local `build:` block as
     # a fallback. Without this, `docker compose run api ...` could attempt a local
     # build (and fail on registry auth for base images like ghcr.io/astral-sh/uv)
     # whenever GIT_SHA resolves to ":latest" in a given shell context.
-    pull_policy: always
+    
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -153,7 +153,7 @@ services:
     mem_limit: 384m
     mem_reservation: 256m
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/live"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -161,7 +161,7 @@ services:
 
   worker:
     image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-worker:${GIT_SHA:-latest}
-    pull_policy: always
+    
     build:
       context: ./backend
       dockerfile: Dockerfile.worker
@@ -202,7 +202,7 @@ services:
 
   frontend:
     image: ghcr.io/${GH_REPO:-kanavsingla28-k/pdftalk}/pdftalk-frontend:${GIT_SHA:-latest}
-    pull_policy: always
+    
     build:
       context: ./frontend
       dockerfile: Dockerfile
