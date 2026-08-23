@@ -151,7 +151,7 @@ services:
     mem_limit: 384m
     mem_reservation: 256m
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/live"]
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:8000/live"]
       interval: 30s
       timeout: 10s
       retries: 3

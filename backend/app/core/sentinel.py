@@ -25,11 +25,13 @@ from app.exceptions import RateLimitExceededError
 
 def _build_sentinel_config() -> SentinelConfig:
     """Build SentinelConfig from PDFTalk settings."""
-    if not settings.SENTINEL_REDIS_PASSWORD:
-        raise ValueError("SENTINEL_REDIS_PASSWORD must be configured")
-
-    redis_password = quote(settings.SENTINEL_REDIS_PASSWORD, safe="")
-    redis_url = f"redis://:{redis_password}@sentinel-redis:6379/0"
+    if settings.SENTINEL_REDIS_URL:
+        redis_url = settings.SENTINEL_REDIS_URL
+    elif settings.SENTINEL_REDIS_PASSWORD:
+        redis_password = quote(settings.SENTINEL_REDIS_PASSWORD, safe="")
+        redis_url = f"redis://:{redis_password}@sentinel-redis:6379/0"
+    else:
+        raise ValueError("Either SENTINEL_REDIS_URL or SENTINEL_REDIS_PASSWORD must be configured")
 
     if not settings.ANONYMOUS_COOKIE_SECRET:
         raise ValueError("ANONYMOUS_COOKIE_SECRET must be configured for anonymous policies")

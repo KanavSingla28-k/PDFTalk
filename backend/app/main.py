@@ -85,7 +85,7 @@ def _require_internal_ip(request: Request) -> None:
 Instrumentator(
     should_group_status_codes=True,       # 2xx/4xx/5xx, not individual codes
     should_ignore_untemplated=True,       # drops /metrics itself from its own metrics
-    excluded_handlers=["/health", "/metrics"],
+    excluded_handlers=["/live", "/ready", "/metrics"],
 ).instrument(app).expose(
     app, 
     endpoint="/metrics", 
