@@ -285,6 +285,9 @@ PDFTalk is fully containerized and intended for deployment on a Linux host using
 # Deploy core services
 docker compose up -d --build
 
+# Reload nginx to pick up new container IPs
+docker compose exec nginx nginx -s reload
+
 # Bring up observability stack on demand
 docker compose --profile observability up -d
 ```
