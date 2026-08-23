@@ -1,24 +1,24 @@
 from __future__ import annotations
 
-import structlog
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
+import structlog
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.auth.password import hash_password, verify_password
+from app.auth.tokens import issue_token_pair
 from app.exceptions import (
     InvalidCredentialsError,
     UnverifiedEmailError,
 )
 from app.models.user import User
-from app.auth.password import hash_password, verify_password
-from app.auth.tokens import issue_token_pair
 from app.services.email_verification import send_verification_email_for_user
 from app.utils.metrics import (
-    user_registrations_total,
-    user_logins_total,
     login_failures_total,
+    user_logins_total,
+    user_registrations_total,
 )
 
 logger = structlog.get_logger(__name__)
@@ -37,25 +37,24 @@ _DUMMY_HASH = "$2b$12$8r3VnEHcdWKJCN5K3jCCPudYoOvlWLIaya98ZBX7NLXtlEeTPfIcu"
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 async def get_by_email_lower(db: AsyncSession, email_lower: str) -> User | None:
-    result = await db.execute(
-        select(User).where(User.email_lower == email_lower)
-    )
+    result = await db.execute(select(User).where(User.email_lower == email_lower))
     return result.scalar_one_or_none()
 
 
 async def _delete_pending_verification(db: AsyncSession, user_id: uuid.UUID | str) -> None:
-    from app.models.auth import EmailVerification
     from sqlalchemy import delete
 
-    await db.execute(
-        delete(EmailVerification).where(EmailVerification.user_id == user_id)
-    )
+    from app.models.auth import EmailVerification
+
+    await db.execute(delete(EmailVerification).where(EmailVerification.user_id == user_id))
 
 
 # ---------------------------------------------------------------------------
 # Register
 # ---------------------------------------------------------------------------
+
 
 async def register(db: AsyncSession, email: str, password: str) -> None:
     """
@@ -102,15 +101,16 @@ async def register(db: AsyncSession, email: str, password: str) -> None:
 # Login
 # ---------------------------------------------------------------------------
 
+
 def _now_utc() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 async def login(
     db: AsyncSession,
     email: str,
     password: str,
-) -> tuple[str, str, int, "User"]:
+) -> tuple[str, str, int, User]:
     """
     Authenticate a user and issue a token pair.
 
@@ -126,9 +126,7 @@ async def login(
     email_lower = email.lower().strip()
 
     # Step 1: Look up user
-    result = await db.execute(
-        select(User).where(User.email_lower == email_lower)
-    )
+    result = await db.execute(select(User).where(User.email_lower == email_lower))
     user: User | None = result.scalar_one_or_none()
 
     # Step 2: Timing-safe path when user doesn't exist
@@ -151,7 +149,7 @@ async def login(
     if user.locked_until is not None:
         locked_until = user.locked_until
         if locked_until.tzinfo is None:
-            locked_until = locked_until.replace(tzinfo=timezone.utc)
+            locked_until = locked_until.replace(tzinfo=UTC)
         if _now_utc() < locked_until:
             login_failures_total.labels(reason="locked").inc()
             raise InvalidCredentialsError()

@@ -1,11 +1,14 @@
+from collections.abc import Awaitable, Callable
+
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
-from typing import Callable, Awaitable
 
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         response = await call_next(request)
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-Content-Type-Options"] = "nosniff"
@@ -15,7 +18,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             # These routes only exist in development (settings.is_production=False disables
             # them in main.py). This branch is dead code in production — kept here so that
             # local dev still gets a permissive CSP that lets the Swagger UI load correctly.
-            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com"
+            response.headers["Content-Security-Policy"] = (
+                "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com"
+            )
         else:
             # CSP: API returns JSON only — no scripts, styles, or embedded resources.
             # default-src 'none' is the strictest possible policy and safe for a pure JSON API.

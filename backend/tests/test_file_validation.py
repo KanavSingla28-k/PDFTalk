@@ -23,22 +23,21 @@ if sys.platform == "win32":
 else:
     import magic
 import pytest
-
 from fastapi import UploadFile
 
 from app.exceptions import FileValidationError
 from app.services.file_validation import (
     MAX_FILE_SIZE_BYTES,
-    validate_upload,
     _check_magic_bytes,
     _check_mime,
     _read_and_check_size,
+    validate_upload,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_upload(data: bytes, filename: str = "test.bin") -> UploadFile:
     """Return a FastAPI UploadFile backed by an in-memory BytesIO."""
@@ -65,8 +64,8 @@ _OVER_LIMIT = b"%PDF-1.4 " + b"x" * (MAX_FILE_SIZE_BYTES + 1)
 # _read_and_check_size
 # ---------------------------------------------------------------------------
 
-class TestReadAndCheckSize:
 
+class TestReadAndCheckSize:
     @pytest.mark.asyncio
     async def test_returns_bytes_within_limit(self):
         upload = _make_upload(_VALID_PDF)
@@ -100,8 +99,8 @@ class TestReadAndCheckSize:
 # _check_mime
 # ---------------------------------------------------------------------------
 
-class TestCheckMime:
 
+class TestCheckMime:
     def test_pdf_accepted(self):
         _check_mime(_VALID_PDF)  # no exception
 
@@ -133,8 +132,8 @@ class TestCheckMime:
 # _check_magic_bytes
 # ---------------------------------------------------------------------------
 
-class TestCheckMagicBytes:
 
+class TestCheckMagicBytes:
     def test_valid_pdf_passes(self):
         _check_magic_bytes(_VALID_PDF)  # no exception
 
@@ -142,16 +141,15 @@ class TestCheckMagicBytes:
         # Construct bytes that libmagic calls application/pdf but lack %PDF.
         # In practice this is hard to trigger with real libmagic, so we test
         # the branch indirectly: patch just the magic.from_buffer call.
-        import unittest.mock as mock
+        from unittest import mock
 
         fake_pdf_body = b"NOTPDF fake content body"
 
         with mock.patch(
             "app.services.file_validation.magic.from_buffer",
             return_value="application/pdf",
-        ):
-            with pytest.raises(FileValidationError) as exc_info:
-                _check_magic_bytes(fake_pdf_body)
+        ), pytest.raises(FileValidationError) as exc_info:
+            _check_magic_bytes(fake_pdf_body)
 
         assert exc_info.value.reason == "invalid_magic_bytes"
 
@@ -167,8 +165,8 @@ class TestCheckMagicBytes:
 # validate_upload (integration — all three checks in sequence)
 # ---------------------------------------------------------------------------
 
-class TestValidateUpload:
 
+class TestValidateUpload:
     @pytest.mark.asyncio
     async def test_valid_pdf_returns_bytes(self):
         upload = _make_upload(_VALID_PDF)
@@ -198,7 +196,7 @@ class TestValidateUpload:
 
     @pytest.mark.asyncio
     async def test_invalid_pdf_magic_raises(self):
-        import unittest.mock as mock
+        from unittest import mock
 
         fake_pdf = b"NOTPDF fake pdf body"
         upload = _make_upload(fake_pdf)
@@ -206,9 +204,8 @@ class TestValidateUpload:
         with mock.patch(
             "app.services.file_validation.magic.from_buffer",
             return_value="application/pdf",
-        ):
-            with pytest.raises(FileValidationError) as exc_info:
-                await validate_upload(upload)
+        ), pytest.raises(FileValidationError) as exc_info:
+            await validate_upload(upload)
 
         assert exc_info.value.reason == "invalid_magic_bytes"
 

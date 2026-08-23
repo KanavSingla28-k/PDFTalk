@@ -11,11 +11,11 @@ Internal-only routes.
 
 # import asyncio
 import secrets
-import structlog
 from datetime import date
 from typing import Any, cast
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status, BackgroundTasks
+import structlog
+from fastapi import APIRouter, BackgroundTasks, Cookie, Depends, HTTPException, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
 from rq.registry import FailedJobRegistry
@@ -42,6 +42,7 @@ _COOKIE_MAX_AGE = 60 * 60 * 8  # 8 hours
 # ---------------------------------------------------------------------------
 # Auth dependencies — two separate ones for the two auth surfaces
 # ---------------------------------------------------------------------------
+
 
 async def _require_admin_cookie(
     admin_session: str | None = Cookie(default=None),
@@ -90,6 +91,7 @@ def _require_admin_bearer(
 # Login / logout
 # ---------------------------------------------------------------------------
 
+
 class AdminLoginRequest(BaseModel):
     token: str
 
@@ -135,8 +137,7 @@ async def admin_login(
 
 @router.post("/admin/logout")
 async def admin_logout(
-    response: Response,
-    admin_session: str | None = Cookie(default=None)
+    response: Response, admin_session: str | None = Cookie(default=None)
 ) -> dict[str, str]:
     """Clear the admin session cookie and invalidate it in Redis."""
     if admin_session:
@@ -156,10 +157,12 @@ async def admin_logout(
 # Alertmanager webhook — Bearer auth (server-to-server only)
 # ---------------------------------------------------------------------------
 
+
 class AlertPayload(BaseModel):
     status: str
     labels: dict[str, str]
     annotations: dict[str, str]
+
 
 class AlertmanagerWebhookPayload(BaseModel):
     alerts: list[AlertPayload]
@@ -185,6 +188,7 @@ async def alertmanager_webhook(
 # Admin stats — cookie auth
 # ---------------------------------------------------------------------------
 
+
 @router.get(
     "/admin/stats",
     dependencies=[Depends(_require_admin_cookie)],
@@ -207,34 +211,23 @@ async def admin_stats(
     signups_by_day = [{"day": str(r.day), "count": r.count} for r in signups_result]
 
     # ── User counts ───────────────────────────────────────────────────────
-    total_users = (
-        await db.execute(select(func.count()).select_from(User))
-    ).scalar() or 0
+    total_users = (await db.execute(select(func.count()).select_from(User))).scalar() or 0
 
     verified_users = (
-        await db.execute(
-            select(func.count()).select_from(User).where(User.is_verified)
-        )
+        await db.execute(select(func.count()).select_from(User).where(User.is_verified))
     ).scalar() or 0
 
     # ── Document counts ───────────────────────────────────────────────────
-    total_documents = (
-        await db.execute(select(func.count()).select_from(Document))
-    ).scalar() or 0
+    total_documents = (await db.execute(select(func.count()).select_from(Document))).scalar() or 0
 
     documents_by_status_rows = (
-        await db.execute(
-            select(Document.status, func.count()).group_by(Document.status)
-        )
+        await db.execute(select(Document.status, func.count()).group_by(Document.status))
     ).all()
 
     # ── Failed jobs last 7 days ───────────────────────────────────────────
     failed_jobs_7d = (
         await db.execute(
-            text(
-                "SELECT COUNT(*) FROM job_logs "
-                "WHERE created_at >= NOW() - INTERVAL '7 days'"
-            )
+            text("SELECT COUNT(*) FROM job_logs WHERE created_at >= NOW() - INTERVAL '7 days'")
         )
     ).scalar() or 0
 
@@ -247,10 +240,14 @@ async def admin_stats(
     redis = get_redis()
     today_str = date.today().strftime("%Y%m%d")
     stats_key = f"admin:stats:tokens:{today_str}"
-    
+
     # Get top 20 users by token usage today
-    zset_results = cast(list[tuple[Any, float]], await redis.zrevrange(stats_key, 0, 19, withscores=True))
-    token_data = [{"user_id": str(user_id), "tokens_today": int(score)} for user_id, score in zset_results]
+    zset_results = cast(
+        list[tuple[Any, float]], await redis.zrevrange(stats_key, 0, 19, withscores=True)
+    )
+    token_data = [
+        {"user_id": str(user_id), "tokens_today": int(score)} for user_id, score in zset_results
+    ]
 
     # ── Dead-letter queue ─────────────────────────────────────────────────
     sync_redis = get_sync_redis()

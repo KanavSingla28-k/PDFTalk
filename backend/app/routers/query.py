@@ -8,15 +8,15 @@ from __future__ import annotations
 
 import asyncio
 import json
-import structlog
 import uuid
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
+import structlog
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import StreamingResponse
 from openai import APITimeoutError
 from openai.types.chat import ChatCompletionMessageParam
-from sqlalchemy import update, func
+from sqlalchemy import func, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_verified_user
@@ -25,21 +25,21 @@ from app.core.config import settings
 from app.core.sentinel import query_guard
 from app.db.session import get_db
 from app.models.chat import Chat
+from app.models.message import Message, MessageRole, MessageStatus
 from app.models.query import QueryRequest
 from app.models.user import User
-from app.models.message import Message, MessageRole, MessageStatus
-from app.services.query_validation import validate_chat_for_query
-from app.services.retrieval import retrieve_similar_chunks, RetrievedChunk
-from app.services.prompt import build_messages, _count_tokens
 from app.services.llm import stream_llm_response
+from app.services.prompt import _count_tokens, build_messages
+from app.services.query_validation import validate_chat_for_query
+from app.services.retrieval import RetrievedChunk, retrieve_similar_chunks
+from app.utils.metrics import messages_total, queries_total, stream_errors_total
 from app.utils.openai_client import (
     CircuitBreakerOpenError,
-    DailyQuotaExceededError,
     DailyQueryQuotaExceededError,
+    DailyQuotaExceededError,
     OpenAIRetryExhaustedError,
     check_and_increment_query_usage,
 )
-from app.utils.metrics import queries_total, stream_errors_total, messages_total
 
 logger = structlog.get_logger(__name__)
 
@@ -76,17 +76,18 @@ async def ask(
 
     # Sort chat messages to pass to prompt builder
     chat.messages.sort(key=lambda m: m.created_at)
-    
-    messages, _included_chunks = build_messages(chunks, body.question, history_messages=chat.messages)
+
+    messages, _included_chunks = build_messages(
+        chunks, body.question, history_messages=chat.messages
+    )
 
     # Detect whether the LLM is going to use its graceful Rule-5 fallback.
     # Two signals indicate a low/no-relevance response:
     #   1. No chunks fit the token budget (included_chunks is empty).
     #   2. Every retrieved chunk exceeded the configured distance ceiling,
     #      meaning retrieval returned its "full-list fallback" (all irrelevant).
-    _is_fallback = (
-        not _included_chunks
-        or (bool(chunks) and all(c.distance > settings.RETRIEVAL_MAX_DISTANCE for c in chunks))
+    _is_fallback = not _included_chunks or (
+        bool(chunks) and all(c.distance > settings.RETRIEVAL_MAX_DISTANCE for c in chunks)
     )
 
     # Pre-stream message save
@@ -99,10 +100,10 @@ async def ask(
     )
     db.add(user_msg)
     messages_total.labels(role="user").inc()
-    
+
     if chat.title == "New Chat":
         chat.title = body.question[:50].strip()
-        
+
     await db.commit()
 
     # Increment here — after all pre-stream validation passes, before the
@@ -170,7 +171,7 @@ async def _sse_generator(
                     "chunk_index": c.chunk_index,
                 }
                 for c in included_chunks
-            ]
+            ],
         }
         yield f"data: {json.dumps(sources_data)}\n\n"
 
@@ -181,7 +182,7 @@ async def _sse_generator(
 
         yield "data: [DONE]\n\n"
 
-    except asyncio.TimeoutError:
+    except TimeoutError:
         if generation_completed:
             logger.warning(
                 "sse.post_completion_cleanup_timeout",
@@ -309,11 +310,9 @@ async def _sse_generator(
             )
             db.add(assistant_msg)
             messages_total.labels(role="assistant").inc()
-            
+
             # Use execute(update(...)) to bump updated_at without needing to load the chat
             await db.execute(
-                update(Chat)
-                .where(Chat.id == uuid.UUID(chat_id))
-                .values(updated_at=func.now())
+                update(Chat).where(Chat.id == uuid.UUID(chat_id)).values(updated_at=func.now())
             )
             await db.commit()

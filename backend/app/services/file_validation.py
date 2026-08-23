@@ -52,6 +52,7 @@ _READ_CHUNK: int = 64 * 1024
 # Public API
 # ---------------------------------------------------------------------------
 
+
 async def validate_upload(file: UploadFile) -> bytes:
     """
     Validate *file* and return its raw bytes.
@@ -132,6 +133,7 @@ def validate_upload_metadata(
 # Internal helpers
 # ---------------------------------------------------------------------------
 
+
 async def _read_and_check_size(file: UploadFile) -> bytes:
     """
     Stream-read *file* in 64 KB chunks, enforcing the 50 MB limit.
@@ -168,7 +170,7 @@ def _check_mime(data: bytes) -> None:
     Raises FileValidationError(reason="unsupported_mime") if the detected
     type is not in ALLOWED_MIME_TYPES.
     """
-    detected: str = magic.from_buffer(data, mime=True)
+    detected: str = magic.from_buffer(data, mime=True)  # type: ignore[no-untyped-call]
 
     if detected not in ALLOWED_MIME_TYPES:
         raise FileValidationError(
@@ -194,7 +196,7 @@ def _check_magic_bytes(data: bytes) -> None:
 
     Raises FileValidationError(reason="invalid_magic_bytes") on mismatch.
     """
-    mime: str = magic.from_buffer(data, mime=True)
+    mime: str = magic.from_buffer(data, mime=True)  # type: ignore[no-untyped-call]
 
     if mime == "application/pdf":
         if not data[:4] == b"%PDF":

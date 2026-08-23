@@ -1,36 +1,28 @@
-import pytest
-import boto3
-from moto import mock_aws
 from io import BytesIO
+
+import boto3
+import pytest
+from moto import mock_aws
 
 BUCKET = "test-bucket"
 REGION = "ap-south-1"
+
 
 @pytest.fixture
 def s3(monkeypatch):
     from app.utils import s3_client
 
-    monkeypatch.setattr(
-        s3_client.settings,
-        "S3_BUCKET_NAME",
-        BUCKET
-    )
+    monkeypatch.setattr(s3_client.settings, "S3_BUCKET_NAME", BUCKET)
 
-    monkeypatch.setattr(
-        s3_client.settings,
-        "AWS_REGION",
-        REGION
-    )
+    monkeypatch.setattr(s3_client.settings, "AWS_REGION", REGION)
 
     with mock_aws():
         boto3.client("s3", region_name=REGION).create_bucket(
-            Bucket=BUCKET,
-            CreateBucketConfiguration={
-                "LocationConstraint": REGION
-            }
+            Bucket=BUCKET, CreateBucketConfiguration={"LocationConstraint": REGION}
         )
 
         yield s3_client.S3Client()
+
 
 def test_upload_and_download(s3):
     content = b"hello world"
@@ -43,7 +35,7 @@ def test_delete_object(s3):
     s3.upload_file(BytesIO(b"data"), "user1/doc2/file.txt", "text/plain")
     s3.delete_object("user1/doc2/file.txt")
     # Downloading after delete should raise
-    with pytest.raises(Exception):
+    with pytest.raises(Exception):  # noqa: B017
         s3.download_file("user1/doc2/file.txt")
 
 

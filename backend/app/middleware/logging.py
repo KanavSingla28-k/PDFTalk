@@ -28,7 +28,7 @@ Execution order in the middleware stack (last added = outermost):
 
 import time
 import uuid
-from typing import Callable, Awaitable
+from collections.abc import Awaitable, Callable
 
 import structlog
 from fastapi import Request
@@ -41,7 +41,9 @@ log = structlog.get_logger(__name__)
 
 
 class RequestLoggingMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next: Callable[[Request], Awaitable[Response]]) -> Response:
+    async def dispatch(
+        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
         request_id = str(uuid.uuid4())
         start = time.perf_counter()
 
@@ -60,15 +62,27 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             response: Response = await call_next(request)
         except Exception as exc:
             duration_ms = _elapsed_ms(start)
-            log.error(
-                "request.error",
-                method=request.method,
-                path=request.url.path,           # query string intentionally excluded
-                client_ip=_get_client_ip(request),
-                duration_ms=duration_ms,
-                error=type(exc).__name__,
-                exc_info=True,                   # includes traceback in JSON output
-            )
+            try:
+                log.error(
+                    "request.error",
+                    method=request.method,
+                    path=request.url.path,  # query string intentionally excluded
+                    client_ip=_get_client_ip(request),
+                    duration_ms=duration_ms,
+                    error=type(exc).__name__,
+                    exc_info=True,  # includes traceback in JSON output
+                )
+            except UnicodeEncodeError:
+                # Fallback for Windows console encoding issues
+                log.error(
+                    "request.error",
+                    method=request.method,
+                    path=request.url.path,
+                    client_ip=_get_client_ip(request),
+                    duration_ms=duration_ms,
+                    error=type(exc).__name__,
+                    error_detail=str(exc)[:200],
+                )
             raise  # existing exception handlers in exceptions.py form the response
 
         duration_ms = _elapsed_ms(start)
@@ -92,6 +106,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _elapsed_ms(start: float) -> int:
     return int((time.perf_counter() - start) * 1000)

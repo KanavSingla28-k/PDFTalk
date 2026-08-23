@@ -9,13 +9,15 @@ because Settings() is instantiated at module-level in config.py the moment
 any app module is imported.
 """
 
+import atexit
 import os
+import shutil
+import tempfile
 import uuid
+
 import pytest
 import pytest_asyncio
-import tempfile
-import shutil
-import atexit
+from fastapi import Request, Response
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
@@ -24,10 +26,12 @@ from sqlalchemy.orm import sessionmaker
 # Environment setup — MUST be first, before any app.* import
 # ---------------------------------------------------------------------------
 os.environ.setdefault("ENVIRONMENT", "development")
-os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://pdftalk:test@localhost/pdftalk_test")
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test_user:test_password@localhost:5432/test_db")     # pragma: allowlist secret
 os.environ.setdefault("REDIS_URL", "redis://:test@localhost:6379")
 
-os.environ.setdefault("JWT_SECRET_KEY", "00000000000000000000000000000000000000000000000000000000000000ff")
+os.environ.setdefault(
+    "JWT_SECRET_KEY", "00000000000000000000000000000000000000000000000000000000000000ff"
+)
 
 os.environ.setdefault("RESEND_API_KEY", "re_test_000000000000000000000000000000000000")
 os.environ.setdefault("FROM_EMAIL", "noreply@test.example.com")
@@ -44,7 +48,10 @@ atexit.register(lambda: shutil.rmtree(_temp_dir, ignore_errors=True))
 
 # Sentinel rate limiter settings (required before app.core.sentinel import)
 os.environ.setdefault("SENTINEL_REDIS_URL", "redis://:test@localhost:6379/1")
-os.environ.setdefault("ANONYMOUS_COOKIE_SECRET", "pdftalk-anon-test-secret-00000000000000000000000000000000")
+os.environ.setdefault("SENTINEL_REDIS_PASSWORD", "test-sentinel-password")
+os.environ.setdefault(
+    "ANONYMOUS_COOKIE_SECRET", "pdftalk-anon-test-secret-00000000000000000000000000000000"
+)
 os.environ.setdefault("ANONYMOUS_COOKIE_NAME", "pdftalk_anon_id")
 os.environ.setdefault("ANONYMOUS_COOKIE_TTL_SECONDS", "2592000")
 os.environ.setdefault("ANONYMOUS_COOKIE_SECURE", "false")
@@ -56,9 +63,7 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 
-
 TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
-
 
 
 @pytest.fixture(autouse=True)
@@ -68,21 +73,22 @@ def mock_sentinel_guards():
     Unit tests don't run FastAPI lifespan, so Sentinel scripts aren't loaded.
     Overriding the guards prevents RuntimeError about unloaded scripts.
     """
+
     from app.core.sentinel import (
+        chat_create_guard,
+        login_guard,
+        query_guard,
         register_guard,
         resend_guard,
-        login_guard,
         reset_guard,
         upload_guard,
-        query_guard,
-        chat_create_guard,
     )
     from app.main import app
 
-    async def noop(request):
+    async def noop(request: Request, response: Response) -> None:
         return None
 
-    for guard_dep in [
+    guard_deps = [
         register_guard,
         resend_guard,
         login_guard,
@@ -90,22 +96,15 @@ def mock_sentinel_guards():
         upload_guard,
         query_guard,
         chat_create_guard,
-    ]:
+    ]
+
+    for guard_dep in guard_deps:
         app.dependency_overrides[guard_dep] = noop
 
     yield
 
-    for guard_dep in [
-        register_guard,
-        resend_guard,
-        login_guard,
-        reset_guard,
-        upload_guard,
-        query_guard,
-        chat_create_guard,
-    ]:
+    for guard_dep in guard_deps:
         app.dependency_overrides.pop(guard_dep, None)
-
 
 @pytest.fixture(autouse=True)
 def mock_email(monkeypatch):
@@ -117,6 +116,7 @@ def mock_email(monkeypatch):
     any test which invokes it directly doesn't hit Resend.
     """
     from unittest.mock import MagicMock
+
     fake_queue = MagicMock()
     monkeypatch.setattr("app.services.email_verification.default_queue", fake_queue)
     monkeypatch.setattr("app.workers.queues.default_queue", fake_queue)
@@ -127,6 +127,7 @@ def mock_email(monkeypatch):
 # ---------------------------------------------------------------------------
 # Shared async engine + session factory
 # ---------------------------------------------------------------------------
+
 
 @pytest_asyncio.fixture
 async def db() -> AsyncSession:
@@ -150,6 +151,7 @@ async def db() -> AsyncSession:
 # ---------------------------------------------------------------------------
 # HTTP client with DB override
 # ---------------------------------------------------------------------------
+
 
 @pytest_asyncio.fixture
 async def async_client(db: AsyncSession) -> AsyncClient:
@@ -179,6 +181,7 @@ async def async_client(db: AsyncSession) -> AsyncClient:
 # ---------------------------------------------------------------------------
 # Auth fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest_asyncio.fixture
 async def verified_user(db: AsyncSession):

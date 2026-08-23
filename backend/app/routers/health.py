@@ -1,14 +1,14 @@
 import asyncio
-import time
 import importlib.metadata
-from datetime import datetime, timezone
+import time
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
-from app.db.session import engine          # async engine, not get_db()
+from app.db.session import engine  # async engine, not get_db()
 from app.utils.redis_client import get_redis
 from app.utils.s3_client import s3_client
 
@@ -33,7 +33,7 @@ async def _check_redis() -> dict[str, Any]:
     start = time.monotonic()
     try:
         r = get_redis()
-        await asyncio.wait_for(r.ping(), timeout=TIMEOUT)
+        await asyncio.wait_for(r.ping(), timeout=TIMEOUT)  # type: ignore[arg-type]
         latency_ms = round((time.monotonic() - start) * 1000)
         return {"status": "ok", "latency_ms": latency_ms}
     except Exception as e:
@@ -70,9 +70,7 @@ async def readiness_check() -> JSONResponse:
         return_exceptions=False,  # each helper catches its own exceptions
     )
 
-    all_ok = all(
-        r["status"] == "ok" for r in (db_result, redis_result, s3_result)
-    )
+    all_ok = all(r["status"] == "ok" for r in (db_result, redis_result, s3_result))
 
     try:
         version = importlib.metadata.version("pdftalk-backend")
@@ -82,7 +80,7 @@ async def readiness_check() -> JSONResponse:
     body = {
         "status": "ok" if all_ok else "degraded",
         "version": version,
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "checks": {
             "db": db_result,
             "redis": redis_result,

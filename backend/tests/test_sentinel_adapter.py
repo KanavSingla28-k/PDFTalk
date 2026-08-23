@@ -10,17 +10,17 @@ These tests verify that the PDFTalk/Sentinel integration correctly:
 - Routes anonymous and tenant guards to correct Sentinel factories
 """
 
+from unittest.mock import MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException, Request, Response
-from starlette.responses import Response as StarletteResponse
 
 from app.core.sentinel import (
-    _make_tenant_guard,
-    _make_anonymous_guard,
     _adapt_sentinel_error,
+    _make_anonymous_guard,
+    _make_tenant_guard,
 )
-from app.exceptions import RateLimitExceededError, RateLimiterUnavailableError
+from app.exceptions import RateLimiterUnavailableError, RateLimitExceededError
 
 
 class TestSentinelAdapter:
@@ -109,7 +109,7 @@ class TestGuardFactories:
     """Tests that guard factories route to correct Sentinel methods."""
 
     @pytest.mark.asyncio
-    async def test_make_tenant_guard_calls_guard_for(self):
+    async def test_make_tenant_guard_calls_guard_for(self, monkeypatch):
         """Tenant guard should call guard.guard_for."""
         from app.core import sentinel
 
@@ -119,7 +119,7 @@ class TestGuardFactories:
 
         mock_guard = MagicMock()  # Use MagicMock, not AsyncMock
         mock_guard.guard_for.return_value = mock_guard_func
-        sentinel.guard = mock_guard
+        monkeypatch.setattr(sentinel, "guard", mock_guard)
 
         dep = _make_tenant_guard("test.endpoint")
         mock_request = MagicMock(spec=Request)
@@ -129,7 +129,7 @@ class TestGuardFactories:
         mock_guard.guard_for.assert_called_once_with("test.endpoint")
 
     @pytest.mark.asyncio
-    async def test_make_anonymous_guard_calls_anonymous_guard_for(self):
+    async def test_make_anonymous_guard_calls_anonymous_guard_for(self, monkeypatch):
         """Anonymous guard should call guard.anonymous_guard_for."""
         from app.core import sentinel
 
@@ -138,7 +138,7 @@ class TestGuardFactories:
 
         mock_guard = MagicMock()  # Use MagicMock, not AsyncMock
         mock_guard.anonymous_guard_for.return_value = mock_anon_guard_func
-        sentinel.guard = mock_guard
+        monkeypatch.setattr(sentinel, "guard", mock_guard)
 
         dep = _make_anonymous_guard("test.anon")
         mock_request = MagicMock(spec=Request)
@@ -149,7 +149,7 @@ class TestGuardFactories:
         mock_guard.anonymous_guard_for.assert_called_once_with("test.anon")
 
     @pytest.mark.asyncio
-    async def test_tenant_guard_converts_429(self):
+    async def test_tenant_guard_converts_429(self, monkeypatch):
         """Tenant guard should adapt 429 to RateLimitExceededError."""
         from app.core import sentinel
 
@@ -162,7 +162,7 @@ class TestGuardFactories:
 
         mock_guard = MagicMock()  # Use MagicMock, not AsyncMock
         mock_guard.guard_for.return_value = mock_guard_func
-        sentinel.guard = mock_guard
+        monkeypatch.setattr(sentinel, "guard", mock_guard)
 
         dep = _make_tenant_guard("test.endpoint")
         mock_request = MagicMock(spec=Request)
@@ -173,7 +173,7 @@ class TestGuardFactories:
         assert exc_info.value.retry_after == 45
 
     @pytest.mark.asyncio
-    async def test_anonymous_guard_converts_503(self):
+    async def test_anonymous_guard_converts_503(self, monkeypatch):
         """Anonymous guard should adapt 503 to RateLimiterUnavailableError."""
         from app.core import sentinel
 
@@ -185,7 +185,7 @@ class TestGuardFactories:
 
         mock_guard = MagicMock()  # Use MagicMock, not AsyncMock
         mock_guard.anonymous_guard_for.return_value = mock_anon_guard_func
-        sentinel.guard = mock_guard
+        monkeypatch.setattr(sentinel, "guard", mock_guard)
 
         dep = _make_anonymous_guard("test.anon")
         mock_request = MagicMock(spec=Request)
@@ -200,13 +200,13 @@ class TestExportedGuards:
 
     def test_all_guards_exported(self):
         from app.core.sentinel import (
+            chat_create_guard,
+            login_guard,
+            query_guard,
             register_guard,
             resend_guard,
-            login_guard,
             reset_guard,
             upload_guard,
-            query_guard,
-            chat_create_guard,
         )
 
         guards = [
@@ -244,8 +244,9 @@ class TestPolicyConfiguration:
         assert set(config.policies.keys()) == expected_ids
 
     def test_anonymous_policies_use_token_bucket(self):
-        from app.core.sentinel import config
         from sentinel.models import AlgorithmType
+
+        from app.core.sentinel import config
 
         for policy_id in [
             "pdftalk.auth.register",
@@ -259,8 +260,9 @@ class TestPolicyConfiguration:
             assert policy.fail_mode.value == "fail_open"
 
     def test_tenant_policies_use_sliding_window(self):
-        from app.core.sentinel import config
         from sentinel.models import AlgorithmType
+
+        from app.core.sentinel import config
 
         for policy_id in [
             "pdftalk.documents.upload",

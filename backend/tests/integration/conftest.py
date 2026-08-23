@@ -1,7 +1,8 @@
+from unittest.mock import AsyncMock, patch
+
 import boto3
 import pytest
 from moto import mock_aws
-from unittest.mock import patch, AsyncMock
 
 # Single source of truth for the test bucket name.
 # Must match what s3_client._bucket will be set to.
@@ -22,14 +23,15 @@ def s3_mock(monkeypatch):
         moto_client.create_bucket(Bucket=_TEST_BUCKET)
 
         original_client = s3_client._client
-        original_bucket = s3_client.bucket          # ← was _bucket
+        original_bucket = s3_client.bucket  # ← was _bucket
         s3_client._client = moto_client
-        s3_client.bucket = _TEST_BUCKET             # ← was _bucket
+        s3_client.bucket = _TEST_BUCKET  # ← was _bucket
 
         yield s3_client
 
         s3_client._client = original_client
-        s3_client.bucket = original_bucket          # ← was _bucket
+        s3_client.bucket = original_bucket  # ← was _bucket
+
 
 @pytest.fixture(autouse=True)
 def mock_ingest_enqueue():

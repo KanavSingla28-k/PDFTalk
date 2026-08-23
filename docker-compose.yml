@@ -107,7 +107,7 @@ services:
     restart: unless-stopped
     command: >
       redis-server
-      --requirepass ${SENTINEL_REDIS_PASSWORD}
+      --requirepass ${SENTINEL_REDIS_PASSWORD:-sentinel-default-secret-change-me}
       --maxmemory 64mb
       --maxmemory-policy noeviction
     networks:
@@ -115,7 +115,7 @@ services:
     mem_limit: 96m
     mem_reservation: 64m
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${SENTINEL_REDIS_PASSWORD}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${SENTINEL_REDIS_PASSWORD:-sentinel-default-secret-change-me}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -137,6 +137,8 @@ services:
       - .env
     environment:
       PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc
+      SENTINEL_REDIS_PASSWORD: ${SENTINEL_REDIS_PASSWORD:-sentinel-default-secret-change-me}
+      ANONYMOUS_COOKIE_SECRET: ${ANONYMOUS_COOKIE_SECRET:-anonymous-cookie-default-secret-change-me}
     volumes:
       - prometheus_multiproc:/tmp/prometheus_multiproc
     networks:
@@ -169,6 +171,8 @@ services:
       - .env
     environment:
       PROMETHEUS_MULTIPROC_DIR: /tmp/prometheus_multiproc
+      SENTINEL_REDIS_PASSWORD: ${SENTINEL_REDIS_PASSWORD:-sentinel-default-secret-change-me}
+      ANONYMOUS_COOKIE_SECRET: ${ANONYMOUS_COOKIE_SECRET:-anonymous-cookie-default-secret-change-me}
       # OCR parallelism kept at 1 (sequential) on this instance class.
       # 2 vCPU / 2GB total cannot safely absorb 2+ concurrent Tesseract
       # subprocesses without risking OOM kills hitting Postgres/API mid-job.

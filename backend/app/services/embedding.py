@@ -17,9 +17,10 @@ The caller (workers/ingest.py) is responsible for:
 from __future__ import annotations
 
 import asyncio
-import structlog
 import math
 from typing import TypeVar
+
+import structlog
 
 from app.utils.openai_client import create_embeddings
 
@@ -31,6 +32,7 @@ _BATCH_SIZE = 100  # OpenAI recommends <= 2048 inputs, 100 is a safe conservativ
 # ---------------------------------------------------------------------------
 # Public sync entry point (called from the RQ worker — sync context)
 # ---------------------------------------------------------------------------
+
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
     """
@@ -66,6 +68,7 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
 # Async implementation
 # ---------------------------------------------------------------------------
 
+
 async def _embed_texts_async(texts: list[str]) -> list[list[float]]:
     """
     Async core — batches texts, calls create_embeddings(), normalises results.
@@ -96,6 +99,7 @@ async def _embed_texts_async(texts: list[str]) -> list[list[float]]:
 # ---------------------------------------------------------------------------
 
 T = TypeVar("T")
+
 
 def _make_batches(items: list[T], size: int) -> list[list[T]]:
     """Split a list into consecutive sublists of at most `size` elements."""

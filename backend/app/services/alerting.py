@@ -8,11 +8,11 @@ Called from POST /internal/alerts/webhook via asyncio.create_task()
 so the webhook response is immediate and dispatch is fire-and-forget.
 """
 
-import structlog
 from typing import Any
 
 import httpx
 import resend
+import structlog
 
 from app.core.config import settings
 
@@ -31,15 +31,15 @@ async def dispatch_alert(payload: dict[str, Any]) -> None:
         return
 
     for alert in alerts:
-        name        = alert["labels"].get("alertname", "UnknownAlert")
-        severity    = alert["labels"].get("severity", "unknown")
-        summary     = alert["annotations"].get("summary", name)
+        name = alert["labels"].get("alertname", "UnknownAlert")
+        severity = alert["labels"].get("severity", "unknown")
+        summary = alert["annotations"].get("summary", name)
         description = alert["annotations"].get("description", "")
-        status      = alert["status"]  # "firing" | "resolved"
-        emoji       = "🔴" if status == "firing" else "✅"
+        status = alert["status"]  # "firing" | "resolved"
+        emoji = "🔴" if status == "firing" else "✅"
 
         subject = f"{emoji} [{severity.upper()}] {summary}"
-        body    = f"{description}\n\nStatus: {status}\nAlert: {name}"
+        body = f"{description}\n\nStatus: {status}\nAlert: {name}"
 
         await _send_email(subject, body, name)
         await _send_slack(emoji, subject, description, name)
@@ -50,17 +50,23 @@ async def _send_email(subject: str, body: str, alert_name: str) -> None:
         return
     try:
         resend.api_key = settings.RESEND_API_KEY
-        if settings.EMAIL_FROM_DOMAIN and "<" in settings.EMAIL_FROM_DOMAIN and ">" in settings.EMAIL_FROM_DOMAIN:
+        if (
+            settings.EMAIL_FROM_DOMAIN
+            and "<" in settings.EMAIL_FROM_DOMAIN
+            and ">" in settings.EMAIL_FROM_DOMAIN
+        ):
             alert_sender = settings.EMAIL_FROM_DOMAIN
         else:
             alert_sender = f"PDFTalk Alerts <alerts@{settings.EMAIL_FROM_DOMAIN}>"
-            
-        resend.Emails.send({
-            "from":    alert_sender,
-            "to":      [settings.ALERT_EMAIL_TO],
-            "subject": subject,
-            "text":    body,
-        })
+
+        resend.Emails.send(
+            {
+                "from": alert_sender,
+                "to": [settings.ALERT_EMAIL_TO],
+                "subject": subject,
+                "text": body,
+            }
+        )
     except Exception as e:
         log.warning("alert_email_failed", error=str(e), alert=alert_name)
 

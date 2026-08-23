@@ -1,9 +1,10 @@
 # tests/conftest_integration.py
 import os
+from typing import cast
+
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from typing import cast
 
 # ---------------------------------------------------------------------------
 # Real PostgreSQL engine — points at your dev Docker container
@@ -37,6 +38,7 @@ def run_migrations(pg_engine):
     Idempotent — safe to run on an already-migrated DB.
     """
     from alembic.config import Config
+
     from alembic import command
 
     alembic_cfg = Config("alembic.ini")
