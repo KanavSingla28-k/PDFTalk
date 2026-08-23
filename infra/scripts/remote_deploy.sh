@@ -67,8 +67,8 @@ docker compose run -T --rm --no-deps --user root api chown -R appuser:appuser /t
   || { echo "ERROR: prometheus_multiproc permission fix failed — aborting deploy"; exit 1; }
 echo "MARKER:PERMFIX_DONE"
 
-echo "==> Restarting API, worker, and frontend"
-docker compose up -d --no-deps --force-recreate api worker frontend \
+echo "==> Restarting API, worker, frontend, and sentinel-redis"
+docker compose up -d --no-deps --force-recreate api worker frontend sentinel-redis \
   || { echo "ERROR: container recreate failed — aborting deploy"; exit 1; }
 echo "MARKER:RECREATE_DONE"
 
